@@ -9,7 +9,7 @@ import type { ActionResult } from "@/lib/shared/types";
 import { z } from "zod";
 import { firstZodError } from "@/lib/shared/validations";
 
-export const NOTIFICATION_CATEGORIES = [
+const NOTIFICATION_CATEGORIES = [
   "leave",
   "recruitment",
   "performance",

@@ -49,6 +49,7 @@ const employeeCommands: CommandEntry[] = [
   { group: "Self-service", label: "My Attendance", href: "/employee/attendance" },
   { group: "Self-service", label: "My Leave", href: "/employee/leave" },
   { group: "Self-service", label: "My Payroll", href: "/employee/payroll" },
+  { group: "Self-service", label: "My Performance", href: "/employee/performance" },
   { group: "Account", label: "Notifications", href: "/employee/notifications" },
   { group: "Account", label: "Settings", href: "/employee/settings" },
 ];

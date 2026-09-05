@@ -21,6 +21,9 @@ const STATUS_MAP: Record<string, StatusTone> = {
   Interview: "warning",
   Technical: "warning",
   Screening: "neutral",
+  Draft: "neutral",
+  Submitted: "warning",
+  Acknowledged: "success",
 
   Offer: "info",
   Applied: "neutral",

@@ -24,6 +24,11 @@ export type InternalSnapshot = {
     net: number | null;
     warningPct: number;
   };
+  performance?: {
+    avgRating: number | null;
+    pending: number;
+    submitted: number;
+  };
 };
 
 export type ModelFlightRisk = {
@@ -38,5 +43,6 @@ export type ModelSnapshot = {
   departments: InternalSnapshot["departments"];
   leave?: InternalSnapshot["leave"];
   payroll?: InternalSnapshot["payroll"];
+  performance?: InternalSnapshot["performance"];
   flightRisk: ModelFlightRisk[];
 };

@@ -10,6 +10,7 @@ export function toModelSnapshot(input: InternalSnapshot): ModelSnapshot {
     payroll: input.payroll
       ? { net: input.payroll.net, warningPct: input.payroll.warningPct }
       : undefined,
+    performance: input.performance,
     flightRisk: input.employees.map((employee) => ({
       department: employee.department,
       flightRisk: employee.flightRisk,

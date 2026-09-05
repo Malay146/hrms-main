@@ -50,3 +50,20 @@ describe("AI analytics access", () => {
     assert.equal(canAccessAdminPath("employee", "/admin/analytics"), false);
   });
 });
+
+describe("Performance access", () => {
+  it("grants managePerformance to admin and hr_manager only", () => {
+    assert.equal(hasPermission("admin", "managePerformance"), true);
+    assert.equal(hasPermission("hr_manager", "managePerformance"), true);
+    assert.equal(hasPermission("hr_payroll_user", "managePerformance"), false);
+    assert.equal(hasPermission("hr_payroll_manager", "managePerformance"), false);
+    assert.equal(hasPermission("employee", "managePerformance"), false);
+  });
+
+  it("blocks payroll roles and employees from /admin/hr/performance", () => {
+    assert.equal(canAccessAdminPath("admin", "/admin/hr/performance"), true);
+    assert.equal(canAccessAdminPath("hr_manager", "/admin/hr/performance"), true);
+    assert.equal(canAccessAdminPath("hr_payroll_user", "/admin/hr/performance"), false);
+    assert.equal(canAccessAdminPath("employee", "/admin/hr/performance"), false);
+  });
+});

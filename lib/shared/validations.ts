@@ -162,7 +162,55 @@ export const decideLeaveSchema = z.object({
 });
 
 export const copilotQuestionSchema = z.object({
-  question: z.string().trim().min(3, "Enter a question.").max(500, "Keep questions under 500 characters."),
+  question: z.string().trim().min(2, "Enter a message.").max(800, "Keep messages under 800 characters."),
+  conversationId: z.string().min(1).optional().nullable(),
+});
+
+export const copilotConversationIdSchema = z.object({
+  conversationId: z.string().min(1),
+});
+
+export const performanceCycleSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().trim().min(2, "Cycle name is required.").max(80),
+  periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date is required."),
+  periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date is required."),
+  seedEmployees: z.boolean().optional(),
+});
+
+export const performanceGoalInputSchema = z.object({
+  id: z.string().optional(),
+  title: z.string().trim().min(2, "Goal title is required.").max(120),
+  description: z.string().trim().max(500).optional().default(""),
+  progress: z.number().int().min(0).max(100).optional().default(0),
+  status: z.enum(["not_started", "in_progress", "completed"]).optional().default("not_started"),
+});
+
+export const createPerformanceReviewSchema = z.object({
+  cycleId: z.string().min(1),
+  employeeId: z.string().min(1),
+  goals: z.array(performanceGoalInputSchema).max(12).optional().default([]),
+});
+
+export const savePerformanceReviewSchema = z.object({
+  reviewId: z.string().min(1),
+  overallRating: z.number().min(1).max(5),
+  summary: z.string().trim().max(2000).optional().default(""),
+  goals: z.array(performanceGoalInputSchema).max(12),
+});
+
+export const performanceIdSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const updateMyGoalSchema = z.object({
+  goalId: z.string().min(1),
+  progress: z.number().int().min(0).max(100),
+});
+
+export const acknowledgeReviewSchema = z.object({
+  reviewId: z.string().min(1),
+  employeeComments: z.string().trim().max(1000).optional().default(""),
 });
 
 export const upsertPayrollSchema = z.object({

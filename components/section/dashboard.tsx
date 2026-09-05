@@ -296,6 +296,36 @@ export default function Dashboard({
         </div>
       </div>
 
+      {stats.performance ? (
+        <div className="grid grid-cols-12 gap-6 mt-6">
+          <div className="col-span-12 border border-border rounded-2xl p-6 bg-surface">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-h3 font-semibold text-zinc-900">Performance</h2>
+              <Link href={stats.performance.href} className="text-sm font-semibold text-zinc-500 hover:text-zinc-900 flex items-center gap-1">
+                View all
+                <ChevronRight className="size-4" />
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="border border-border rounded-xl p-4">
+                <p className="text-sm font-medium text-zinc-500">Average rating</p>
+                <p className="text-h1 font-semibold mt-2">
+                  {stats.performance.avgRating == null ? "—" : stats.performance.avgRating.toFixed(1)}
+                </p>
+              </div>
+              <div className="border border-border rounded-xl p-4">
+                <p className="text-sm font-medium text-zinc-500">Draft reviews</p>
+                <p className="text-h1 font-semibold mt-2">{stats.performance.pendingReviews}</p>
+              </div>
+              <div className="border border-border rounded-xl p-4">
+                <p className="text-sm font-medium text-zinc-500">Awaiting acknowledgement</p>
+                <p className="text-h1 font-semibold mt-2">{stats.performance.submittedReviews}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-12 gap-6 mt-6">
         <div className="col-span-12 lg:col-span-6 border border-border rounded-2xl p-6 bg-surface">
           <h2 className="text-h3 font-semibold text-zinc-900 mb-4">Salary cost by department</h2>

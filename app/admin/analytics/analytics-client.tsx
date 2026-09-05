@@ -23,7 +23,7 @@ import PendingApprovalIcon from "@/components/icons/pending-approval";
 import TotalPayrollIcon from "@/components/icons/total-payroll";
 import AiIcon from "@/components/icons/sidebar/ai";
 import { cn } from "@/utils/cn";
-import { generateAiInsights, askHrCopilot } from "@/lib/actions/ai";
+import { generateAiInsights } from "@/lib/actions/ai";
 import type { AiAnalyticsData, AiInsightCard } from "@/lib/shared/types";
 
 const HEALTH_BADGE = {
@@ -63,11 +63,7 @@ function AttendanceTooltip({
 export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
   const [mounted, setMounted] = useState(false);
   const [insights, setInsights] = useState<AiInsightCard[]>(data.insights);
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<string | null>(null);
-  const [source, setSource] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [asking, setAsking] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -94,8 +90,8 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
     {
       icon: PresentTodayIcon,
       value: `${data.attendancePct}%`,
-      subtext: "Last 30 days",
-      subtextColor: "text-[#16A34A]",
+      subtext: `${data.latePct}% late`,
+      subtextColor: data.latePct > 15 ? "text-[#D97706]" : "text-[#16A34A]",
       label: "Attendance rate",
     },
     {
@@ -135,18 +131,6 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
     }
     setInsights(result.data);
     toast("Insights refreshed.");
-  }
-
-  async function onAsk() {
-    setAsking(true);
-    const result = await askHrCopilot(question);
-    setAsking(false);
-    if (!result.ok) {
-      toast(result.error);
-      return;
-    }
-    setAnswer(result.data.answer);
-    setSource(result.data.source);
   }
 
   return (
@@ -197,9 +181,19 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
         })}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-zinc-500">Health band</span>
         <Badge variant={healthBadge.variant}>{healthBadge.label}</Badge>
+        <span className="text-sm font-medium text-zinc-500">
+          Avg review {data.performance.avgRating == null ? "—" : `${data.performance.avgRating}/5`}
+          {" · "}
+          {data.performance.pendingReviews} drafts
+          {" · "}
+          {data.performance.submittedReviews} awaiting ack
+        </span>
+        <Link href="/admin/hr/performance" className="text-sm font-semibold text-zinc-900 hover:underline">
+          Open performance
+        </Link>
       </div>
 
       <div className="grid grid-cols-12 gap-6">
@@ -259,6 +253,35 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="border border-border rounded-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-border">
+          <h2 className="text-h3 font-semibold text-zinc-900">Attendance by department</h2>
+          <p className="text-sm text-zinc-500 font-medium">Present rate for the current 30-day window.</p>
+        </div>
+        {data.departmentAttendance.length === 0 ? (
+          <p className="px-6 py-8 text-sm font-medium text-zinc-400">No department attendance yet.</p>
+        ) : (
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="bg-zinc-50/80 border-b text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                <th className="py-3.5 px-6">Department</th>
+                <th className="py-3.5 px-6">Headcount</th>
+                <th className="py-3.5 px-6">Attendance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {data.departmentAttendance.map((row) => (
+                <tr key={row.name}>
+                  <td className="py-3.5 px-6 font-semibold text-zinc-900">{row.name}</td>
+                  <td className="py-3.5 px-6 text-zinc-500">{row.headcount}</td>
+                  <td className="py-3.5 px-6 font-semibold">{row.attendancePct}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <div className="border border-border rounded-2xl p-6 bg-surface flex flex-col gap-4">
@@ -335,33 +358,6 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
           </div>
         </div>
       ) : null}
-
-      <div className="border border-border rounded-2xl p-6 bg-surface flex flex-col gap-4">
-        <h2 className="text-h3 font-semibold text-zinc-900">HR copilot</h2>
-        <p className="text-sm text-zinc-500 font-medium">Ask about this period. Answers stay inside attendance, leave, headcount, and payroll totals you can already see.</p>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Who is on leave today?"
-            className="h-10 flex-1 px-3 border border-border rounded-lg text-sm"
-          />
-          <button
-            type="button"
-            onClick={onAsk}
-            disabled={asking || !question.trim()}
-            className="cursor-pointer h-10 px-4 rounded-lg border border-border bg-surface hover:bg-surface-hover text-sm font-semibold disabled:opacity-50"
-          >
-            {asking ? "Asking…" : "Ask"}
-          </button>
-        </div>
-        {answer ? (
-          <div className="rounded-xl border border-border p-4 text-sm">
-            <p className="font-medium text-zinc-900">{answer}</p>
-            {source ? <p className="mt-2 text-xs text-zinc-500">Used: {source}</p> : null}
-          </div>
-        ) : null}
-      </div>
     </div>
   );
 }

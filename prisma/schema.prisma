@@ -113,6 +113,23 @@ enum PayslipStatus {
   paid
 }
 
+enum CycleStatus {
+  open
+  closed
+}
+
+enum ReviewStatus {
+  draft
+  submitted
+  acknowledged
+}
+
+enum GoalStatus {
+  not_started
+  in_progress
+  completed
+}
+
 model User {
   id                 String           @id
   name               String
@@ -131,6 +148,8 @@ model User {
   payrolls           Payroll[]
   notifications      Notification[]
   notificationPreference NotificationPreference?
+  copilotConversations CopilotConversation[]
+  copilotMessages    CopilotMessage[]
 
   @@unique([email])
   @@map("user")
@@ -199,9 +218,10 @@ model Organization {
   timeOffTypes     TimeOffType[]
   salaryStructures SalaryStructure[]
   payruns          Payrun[]
-  aiInsights       AiInsight[]
-  jobOpenings      JobOpening[]
-  candidates       Candidate[]
+  aiInsights         AiInsight[]
+  jobOpenings        JobOpening[]
+  candidates         Candidate[]
+  performanceCycles  PerformanceCycle[]
 
   @@map("organization")
 }
@@ -232,6 +252,35 @@ model NotificationPreference {
   sounds           Boolean @default(false)
 
   @@map("notification_preference")
+}
+
+model CopilotConversation {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  messages  CopilotMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("copilot_conversation")
+}
+
+model CopilotMessage {
+  id             String              @id @default(cuid())
+  userId         String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   CopilotConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  body           String
+  source         String?
+  createdAt      DateTime            @default(now())
+
+  @@index([userId, createdAt])
+  @@index([conversationId, createdAt])
+  @@map("copilot_message")
 }
 
 model Department {
@@ -315,6 +364,8 @@ model EmployeeProfile {
   contracts        Contract[]
   allocations      TimeOffAllocation[]
   payslips         Payslip[]
+  reviews          PerformanceReview[] @relation("ReviewEmployee")
+  reviewsGiven     PerformanceReview[] @relation("ReviewReviewer")
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
@@ -531,6 +582,61 @@ model PayslipLine {
 
   @@index([payslipId])
   @@map("payslip_line")
+}
+
+model PerformanceCycle {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  periodStart    DateTime             @db.Date
+  periodEnd      DateTime             @db.Date
+  status         CycleStatus          @default(open)
+  reviews        PerformanceReview[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([organizationId])
+  @@map("performance_cycle")
+}
+
+model PerformanceReview {
+  id                String             @id @default(cuid())
+  cycleId           String
+  cycle             PerformanceCycle   @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  employeeId        String
+  employee          EmployeeProfile    @relation("ReviewEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+  reviewerId        String?
+  reviewer          EmployeeProfile?   @relation("ReviewReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  status            ReviewStatus       @default(draft)
+  overallRating     Decimal?           @db.Decimal(3, 1)
+  summary           String             @default("")
+  employeeComments  String             @default("")
+  submittedAt       DateTime?
+  acknowledgedAt    DateTime?
+  goals             PerformanceGoal[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@unique([cycleId, employeeId])
+  @@index([employeeId])
+  @@index([reviewerId])
+  @@map("performance_review")
+}
+
+model PerformanceGoal {
+  id          String             @id @default(cuid())
+  reviewId    String
+  review      PerformanceReview  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  title       String
+  description String             @default("")
+  progress    Int                @default(0)
+  status      GoalStatus         @default(not_started)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@index([reviewId])
+  @@map("performance_goal")
 }
 
 model AiInsight {

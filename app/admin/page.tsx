@@ -16,6 +16,7 @@ const emptyStats = {
   recentLeaves: [],
   distribution: [],
   activities: [],
+  performance: null,
 };
 
 export default async function AdminPage({

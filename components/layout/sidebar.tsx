@@ -174,6 +174,11 @@ const employeeNavItems: SidebarItemType[] = [
     href: "/employee/payroll",
   },
   {
+    label: "My Performance",
+    icon: HRIcon,
+    href: "/employee/performance",
+  },
+  {
     label: "divider",
     icon: () => null,
     isDivider: true,

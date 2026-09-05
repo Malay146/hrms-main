@@ -5,6 +5,7 @@ import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/s
 import { mapLeave } from "@/lib/shared/mappers";
 import { PIE_COLORS } from "@/lib/shared/mappers";
 import { weeklyAttendanceCounts } from "@/lib/actions/people/attendance";
+import { hasPermission } from "@/lib/auth/permissions";
 import {
   dateFromKey,
   formatDisplayDate,
@@ -31,6 +32,7 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
       weeklyAttendance,
       recentLeaves,
       profiles,
+      reviewRows,
     ] = await Promise.all([
       prisma.employeeProfile.count(),
       prisma.attendance.count({
@@ -61,6 +63,11 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
       prisma.employeeProfile.findMany({
         select: { department: { select: { name: true } } },
       }),
+      hasPermission(admin.role, "managePerformance")
+        ? prisma.performanceReview.findMany({
+            select: { overallRating: true, status: true },
+          })
+        : Promise.resolve([]),
     ]);
 
     const counts = new Map<string, number>();
@@ -74,6 +81,21 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
       color: PIE_COLORS[index % PIE_COLORS.length],
       percentage: totalEmployees === 0 ? "0%" : `${Math.round((value / totalEmployees) * 100)}%`,
     }));
+
+    const rated = reviewRows.filter((row) => row.overallRating != null && row.status !== "draft");
+    const performance = hasPermission(admin.role, "managePerformance")
+      ? {
+          avgRating:
+            rated.length === 0
+              ? null
+              : Math.round(
+                  (rated.reduce((sum, row) => sum + Number(row.overallRating), 0) / rated.length) * 10,
+                ) / 10,
+          pendingReviews: reviewRows.filter((row) => row.status === "draft").length,
+          submittedReviews: reviewRows.filter((row) => row.status === "submitted").length,
+          href: "/admin/hr/performance",
+        }
+      : null;
 
     return {
       ok: true,
@@ -92,6 +114,7 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
           text: `${row.user.profile?.fullName ?? "Employee"} ${row.status} ${row.type.name} leave`,
           time: formatDisplayDate(row.createdAt),
         })),
+        performance,
       },
     };
   } catch (error) {
@@ -104,7 +127,7 @@ export async function getEmployeeDashboard(): Promise<ActionResult<EmployeeDashb
     const user = await requireUser();
     const today = kolkataTodayKey();
     const keys = weekDayKeys();
-    const [todayRow, weekRows, profile, nextLeave] = await Promise.all([
+    const [todayRow, weekRows, profile, nextLeave, latestReview] = await Promise.all([
       prisma.attendance.findUnique({
         where: { userId_date: { userId: user.id, date: dateFromKey(today) } },
         select: { checkIn: true, checkOut: true },
@@ -128,6 +151,14 @@ export async function getEmployeeDashboard(): Promise<ActionResult<EmployeeDashb
         },
         orderBy: { startDate: "asc" },
         include: { type: { select: { name: true } } },
+      }),
+      prisma.performanceReview.findFirst({
+        where: {
+          employee: { userId: user.id },
+          status: { in: ["submitted", "acknowledged"] },
+        },
+        orderBy: { submittedAt: "desc" },
+        select: { overallRating: true },
       }),
     ]);
 
@@ -171,6 +202,7 @@ export async function getEmployeeDashboard(): Promise<ActionResult<EmployeeDashb
         ),
         remainingLeave: profile?.paidLeaveBalance ?? 0,
         upcomingLabel,
+        latestRating: latestReview?.overallRating == null ? null : Number(latestReview.overallRating),
         weeklyHours,
       },
     };

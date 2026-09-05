@@ -5,6 +5,7 @@ export const ALLOWED_INSIGHT_HREFS = [
   "/admin/people/attendance",
   "/admin/people/employees",
   "/admin/hr/payroll",
+  "/admin/hr/performance",
   "/admin/analytics",
 ] as const;
 

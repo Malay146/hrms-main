@@ -64,11 +64,12 @@ export function EmployeeDashboardClient({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { label: "Today's Work Status", value: data.isClockedIn ? "Clocked In" : "Clocked Out", color: data.isClockedIn ? "text-emerald-600" : "text-red-500" },
           { label: "Remaining Leave Balance", value: `${data.remainingLeave} Days` },
           { label: "Hours today", value: data.workedHours },
+          { label: "Latest rating", value: data.latestRating == null ? "—" : `${data.latestRating.toFixed(1)} / 5` },
           { label: "Upcoming leave", value: data.upcomingLabel },
         ].map((stat) => (
           <div key={stat.label} className="border border-border rounded-xl p-5 bg-surface">

@@ -10,6 +10,7 @@ const empty = {
   workedHours: "0.0 hrs",
   remainingLeave: 0,
   upcomingLabel: "No upcoming leave",
+  latestRating: null,
   weeklyHours: [],
 };
 

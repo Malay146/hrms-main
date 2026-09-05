@@ -118,6 +118,12 @@ export type DashboardStats = {
   recentLeaves: LeaveListItem[];
   distribution: { name: string; value: number; color: string; percentage: string }[];
   activities: { text: string; time: string }[];
+  performance: {
+    avgRating: number | null;
+    pendingReviews: number;
+    submittedReviews: number;
+    href: string;
+  } | null;
 };
 
 export type EmployeeDashboardData = {
@@ -129,6 +135,7 @@ export type EmployeeDashboardData = {
   workedHours: string;
   remainingLeave: number;
   upcomingLabel: string;
+  latestRating: number | null;
   weeklyHours: { day: string; hours: number }[];
 };
 
@@ -165,12 +172,36 @@ export type AiAnalyticsData = {
   leaveByType: { name: string; value: number; color: string; percentage: string }[];
   insights: AiInsightCard[];
   flightRisk: AiFlightRiskRow[];
+  latePct: number;
+  departmentAttendance: { name: string; attendancePct: number; headcount: number }[];
+  performance: {
+    avgRating: number | null;
+    pendingReviews: number;
+    submittedReviews: number;
+  };
   aiEnabled: boolean;
 };
 
 export type AiCopilotResult = {
   answer: string;
   source: string;
+  conversationId: string;
+  acted: boolean;
+};
+
+export type CopilotHistoryItem = {
+  id: string;
+  role: "user" | "assistant";
+  body: string;
+  source: string | null;
+  createdAt: string;
+};
+
+export type CopilotConversationSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
+  preview: string;
 };
 
 export type AiLeaveBrief = {

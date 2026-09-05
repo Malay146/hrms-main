@@ -2,8 +2,24 @@
 
 import { prisma } from "@/lib/db";
 import { buildAiSnapshot } from "@/lib/ai/build-snapshot";
-import { generateInsightCards, generateLeaveBrief, isAiConfigured, phraseCopilotAnswer } from "@/lib/ai/client";
-import { classifyCopilotQuestion, COPILOT_NO_PAYROLL, COPILOT_REFUSAL } from "@/lib/ai/copilot";
+import {
+  generateInsightCards,
+  generateLeaveBrief,
+  isAiConfigured,
+  phraseAssistantChat,
+  phraseCopilotAnswer,
+  planCopilotTurn,
+} from "@/lib/ai/client";
+import { executeAssistantPlan } from "@/lib/ai/assistant-execute";
+import {
+  chatReply,
+  classifyCopilotQuestion,
+  conversationTitleFromQuestion,
+  COPILOT_NO_PAYROLL,
+  COPILOT_REFUSAL,
+  isCopilotRefuse,
+  planAssistantTurn,
+} from "@/lib/ai/copilot";
 import { mapInsightCards } from "@/lib/ai/insights";
 import { addDaysToKey, leaveClashCount } from "@/lib/ai/metrics";
 import { toModelSnapshot } from "@/lib/ai/sanitize";
@@ -11,8 +27,16 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
 import { dateFromKey, inclusiveDayCount, kolkataTodayKey, toDateKey, weekDayKeys } from "@/lib/shared/dates";
 import { leaveTypeFromCode } from "@/lib/shared/mappers";
-import { copilotQuestionSchema, firstZodError } from "@/lib/shared/validations";
-import type { ActionResult, AiAnalyticsData, AiCopilotResult, AiInsightCard, AiLeaveBrief } from "@/lib/shared/types";
+import { copilotConversationIdSchema, copilotQuestionSchema, firstZodError } from "@/lib/shared/validations";
+import type {
+  ActionResult,
+  AiAnalyticsData,
+  AiCopilotResult,
+  AiInsightCard,
+  AiLeaveBrief,
+  CopilotConversationSummary,
+  CopilotHistoryItem,
+} from "@/lib/shared/types";
 
 const PERIOD_DAYS = 30;
 const INSIGHT_TTL_MS = 6 * 60 * 60 * 1000;
@@ -79,7 +103,7 @@ export async function assembleAiSnapshot(periodDays = PERIOD_DAYS, insights?: Ai
   const userIds = employees.map((row) => row.userId);
   const departmentByUser = new Map(employees.map((row) => [row.userId, row.department.name]));
 
-  const [attendanceRows, leaveRows, paidPayrun, warningPayslips, paidCount] = await Promise.all([
+  const [attendanceRows, leaveRows, paidPayrun, warningPayslips, paidCount, reviewRows] = await Promise.all([
     userIds.length === 0
       ? Promise.resolve([])
       : prisma.attendance.findMany({
@@ -121,6 +145,10 @@ export async function assembleAiSnapshot(periodDays = PERIOD_DAYS, insights?: Ai
           where: { employee: { organizationId: orgId } },
         })
       : Promise.resolve(0),
+    prisma.performanceReview.findMany({
+      where: { cycle: { organizationId: orgId } },
+      select: { overallRating: true, status: true },
+    }),
   ]);
 
   let payrollNet: number | null = null;
@@ -137,6 +165,16 @@ export async function assembleAiSnapshot(periodDays = PERIOD_DAYS, insights?: Ai
   }
 
   const payrunWarningPct = paidCount === 0 ? 0 : (warningPayslips / paidCount) * 100;
+
+  const rated = reviewRows.filter((row) => row.overallRating != null && row.status !== "draft");
+  const performance = {
+    avgRating:
+      rated.length === 0
+        ? null
+        : Math.round((rated.reduce((sum, row) => sum + Number(row.overallRating), 0) / rated.length) * 10) / 10,
+    pendingReviews: reviewRows.filter((row) => row.status === "draft").length,
+    submittedReviews: reviewRows.filter((row) => row.status === "submitted").length,
+  };
 
   const weekKeys = weekDayKeys();
   const weekLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -189,6 +227,7 @@ export async function assembleAiSnapshot(periodDays = PERIOD_DAYS, insights?: Ai
       canPayroll,
       aiEnabled: Boolean(process.env.OPENAI_API_KEY),
       insights: insights ?? (await loadCachedInsights(orgId)),
+      performance,
     }),
   };
 }
@@ -223,15 +262,115 @@ export async function generateAiInsights(): Promise<ActionResult<AiInsightCard[]
   }
 }
 
-export async function askHrCopilot(question: string): Promise<ActionResult<AiCopilotResult>> {
+async function persistCopilotTurn(
+  userId: string,
+  conversationId: string,
+  question: string,
+  result: Pick<AiCopilotResult, "answer" | "source">,
+) {
+  await prisma.copilotMessage.createMany({
+    data: [
+      { userId, conversationId, role: "user", body: question },
+      { userId, conversationId, role: "assistant", body: result.answer, source: result.source },
+    ],
+  });
+  await prisma.copilotConversation.update({
+    where: { id: conversationId },
+    data: { updatedAt: new Date() },
+  });
+}
+
+async function resolveConversation(userId: string, conversationId: string | null | undefined, question: string) {
+  if (conversationId) {
+    const existing = await prisma.copilotConversation.findFirst({
+      where: { id: conversationId, userId },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+  }
+  const created = await prisma.copilotConversation.create({
+    data: {
+      userId,
+      title: conversationTitleFromQuestion(question),
+    },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+function mapHistoryItem(row: { id: string; role: string; body: string; source: string | null; createdAt: Date }): CopilotHistoryItem {
+  return {
+    id: row.id,
+    role: row.role === "assistant" ? "assistant" : "user",
+    body: row.body,
+    source: row.source,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export async function askHrCopilot(
+  question: string,
+  conversationId?: string | null,
+): Promise<ActionResult<AiCopilotResult>> {
   try {
-    const parsed = copilotQuestionSchema.safeParse({ question });
+    const user = await requirePermission("viewAiAnalytics");
+    const parsed = copilotQuestionSchema.safeParse({ question, conversationId });
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
     }
+
+    const threadId = await resolveConversation(user.id, parsed.data.conversationId, parsed.data.question);
+    const recent = await prisma.copilotMessage.findMany({
+      where: { conversationId: threadId, userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 12,
+      select: { role: true, body: true },
+    });
+    const history = recent.reverse().map((row) => ({
+      role: row.role === "assistant" ? ("assistant" as const) : ("user" as const),
+      body: row.body,
+    }));
+
+    const finish = async (payload: Omit<AiCopilotResult, "conversationId">) => {
+      const data = { ...payload, conversationId: threadId };
+      await persistCopilotTurn(user.id, threadId, parsed.data.question, data);
+      return { ok: true as const, data };
+    };
+
+    if (isCopilotRefuse(parsed.data.question)) {
+      return finish({ answer: COPILOT_REFUSAL, source: "Refused out-of-scope request", acted: false });
+    }
+
+    const plan = isAiConfigured()
+      ? await planCopilotTurn({ question: parsed.data.question, history })
+      : planAssistantTurn(parsed.data.question);
+
+    if (plan.kind === "refuse") {
+      return finish({ answer: plan.answer, source: "Refused out-of-scope request", acted: false });
+    }
+    if (plan.kind === "clarify") {
+      return finish({ answer: plan.answer, source: "Need more detail", acted: false });
+    }
+    if (plan.kind === "act") {
+      const executed = await executeAssistantPlan(user, plan);
+      const acted = /^(Created|Updated|Deleted|Renamed|Attendance|approved|rejected)/i.test(executed.source);
+      return finish({ answer: executed.answer, source: executed.source, acted });
+    }
+
+    const firstName = user.fullName.split(" ")[0] || "there";
     const intent = classifyCopilotQuestion(parsed.data.question);
     if (intent === "refuse") {
-      return { ok: true, data: { answer: COPILOT_REFUSAL, source: "Refused out-of-scope request" } };
+      return finish({ answer: COPILOT_REFUSAL, source: "Refused out-of-scope request", acted: false });
+    }
+    if (plan.kind === "chat" || intent === "chat") {
+      const answer = isAiConfigured()
+        ? await phraseAssistantChat({
+            question: parsed.data.question,
+            firstName,
+            history,
+          })
+        : chatReply(firstName, parsed.data.question);
+      return finish({ answer, source: "HR assistant", acted: false });
     }
 
     const assembled = await assembleAiSnapshot();
@@ -275,7 +414,7 @@ export async function askHrCopilot(question: string): Promise<ActionResult<AiCop
 
     if (intent === "payroll") {
       if (!assembled.canPayroll) {
-        return { ok: true, data: { answer: COPILOT_NO_PAYROLL, source: "Permission check" } };
+        return finish({ answer: COPILOT_NO_PAYROLL, source: "Permission check", acted: false });
       }
       facts.push(
         assembled.data.payrollNet == null
@@ -285,24 +424,135 @@ export async function askHrCopilot(question: string): Promise<ActionResult<AiCop
       source = "Latest paid payrun net total";
     }
 
+    if (intent === "performance") {
+      const avg = assembled.data.performance.avgRating;
+      facts.push(
+        avg == null
+          ? "No submitted performance ratings yet."
+          : `Average submitted rating is ${avg} out of 5.`,
+      );
+      facts.push(
+        `${assembled.data.performance.pendingReviews} draft review(s) and ${assembled.data.performance.submittedReviews} waiting for employee acknowledgement.`,
+      );
+      source = "Performance review aggregates";
+    }
+
     if (intent === "general") {
       facts.push(
-        `Health score ${assembled.data.health.score} (${assembled.data.health.band}). Attendance ${assembled.data.attendancePct}%. Pending leave ${assembled.data.pendingApprovals}. Approved leave days ${assembled.data.leaveDaysApproved}.`,
+        `Health score ${assembled.data.health.score} (${assembled.data.health.band}). Attendance ${assembled.data.attendancePct}%. Late ${assembled.data.latePct}%. Pending leave ${assembled.data.pendingApprovals}. Approved leave days ${assembled.data.leaveDaysApproved}.`,
       );
     }
 
     const factText = facts.join(" ");
-    if (isAiConfigured()) {
-      const answer = await phraseCopilotAnswer({
-        question: parsed.data.question,
-        facts: factText,
-        snapshotJson: toModelSnapshot(assembled.modelInput),
-      });
-      return { ok: true, data: { answer, source } };
-    }
-    return { ok: true, data: { answer: factText || COPILOT_REFUSAL, source } };
+    const fallbackAnswer =
+      intent === "general"
+        ? `Hi ${firstName}. Team health is ${assembled.data.health.score} (${assembled.data.health.band}). Attendance is ${assembled.data.attendancePct}%, with ${assembled.data.pendingApprovals} pending leave request(s). What would you like to look at first?`
+        : factText || chatReply(firstName, parsed.data.question);
+    const payload: Omit<AiCopilotResult, "conversationId"> = isAiConfigured()
+      ? {
+          answer: await phraseCopilotAnswer({
+            question: parsed.data.question,
+            facts: factText,
+            firstName,
+          }),
+          source,
+          acted: false,
+        }
+      : { answer: fallbackAnswer, source, acted: false };
+    return finish(payload);
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not answer.") };
+  }
+}
+
+export async function listCopilotConversations(): Promise<ActionResult<CopilotConversationSummary[]>> {
+  try {
+    const user = await requirePermission("viewAiAnalytics");
+    const rows = await prisma.copilotConversation.findMany({
+      where: { userId: user.id },
+      orderBy: { updatedAt: "desc" },
+      take: 40,
+      include: {
+        messages: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { body: true },
+        },
+      },
+    });
+    return {
+      ok: true,
+      data: rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        updatedAt: row.updatedAt.toISOString(),
+        preview: row.messages[0]?.body ?? "",
+      })),
+    };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not load chat history.") };
+  }
+}
+
+export async function listCopilotHistory(conversationId?: string | null): Promise<
+  ActionResult<{ conversationId: string | null; messages: CopilotHistoryItem[] }>
+> {
+  try {
+    const user = await requirePermission("viewAiAnalytics");
+    let threadId = conversationId ?? null;
+    if (!threadId) {
+      const latest = await prisma.copilotConversation.findFirst({
+        where: { userId: user.id },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true },
+      });
+      threadId = latest?.id ?? null;
+    }
+    if (!threadId) return { ok: true, data: { conversationId: null, messages: [] } };
+    const owned = await prisma.copilotConversation.findFirst({
+      where: { id: threadId, userId: user.id },
+      select: { id: true },
+    });
+    if (!owned) return { ok: false, error: "Chat not found." };
+    const rows = await prisma.copilotMessage.findMany({
+      where: { conversationId: threadId, userId: user.id },
+      orderBy: { createdAt: "asc" },
+      take: 200,
+    });
+    return { ok: true, data: { conversationId: threadId, messages: rows.map(mapHistoryItem) } };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not load chat history.") };
+  }
+}
+
+export async function deleteCopilotConversationAction(
+  conversationId: string,
+): Promise<ActionResult<{ conversationId: string }>> {
+  try {
+    const user = await requirePermission("viewAiAnalytics");
+    const parsed = copilotConversationIdSchema.safeParse({ conversationId });
+    if (!parsed.success) {
+      return { ok: false, error: firstZodError(parsed.error) };
+    }
+    const owned = await prisma.copilotConversation.findFirst({
+      where: { id: parsed.data.conversationId, userId: user.id },
+      select: { id: true },
+    });
+    if (!owned) return { ok: false, error: "Chat not found." };
+    await prisma.copilotConversation.delete({ where: { id: owned.id } });
+    return { ok: true, data: { conversationId: owned.id } };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not delete chat.") };
+  }
+}
+
+export async function clearCopilotHistoryAction(): Promise<ActionResult<{ count: number }>> {
+  try {
+    const user = await requirePermission("viewAiAnalytics");
+    const result = await prisma.copilotConversation.deleteMany({ where: { userId: user.id } });
+    return { ok: true, data: { count: result.count } };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not clear chat history.") };
   }
 }
 

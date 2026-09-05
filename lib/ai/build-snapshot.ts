@@ -6,10 +6,12 @@ import {
   attendanceRate,
   departmentAttendance,
   flightRiskScore,
+  lateRate,
   leaveClashCount,
   weekdayCount,
   workforceHealthScore,
 } from "./metrics";
+import { LATE_AFTER_MINUTES, minutesSinceMidnightKolkata } from "@/lib/shared/dates";
 import type { InternalSnapshot } from "./snapshot";
 
 export type SnapshotEmployee = {
@@ -56,6 +58,11 @@ export type BuildAiSnapshotInput = {
   canPayroll: boolean;
   aiEnabled: boolean;
   insights: AiInsightCard[];
+  performance?: {
+    avgRating: number | null;
+    pendingReviews: number;
+    submittedReviews: number;
+  };
 };
 
 function inRange(dateKey: string, start: string, end: string) {
@@ -248,7 +255,23 @@ export function buildAiSnapshot(input: BuildAiSnapshotInput): {
       net: input.canPayroll ? input.payrollNet : null,
       warningPct: input.canPayroll ? input.payrunWarningPct : 0,
     },
+    performance: input.performance
+      ? {
+          avgRating: input.performance.avgRating,
+          pending: input.performance.pendingReviews,
+          submitted: input.performance.submittedReviews,
+        }
+      : undefined,
   };
+
+  const lateFlags = input.attendance
+    .filter(
+      (row) =>
+        Boolean(row.checkIn) &&
+        inRange(row.date, input.periodStart, input.periodEnd) &&
+        (row.status === "present" || row.status === "half_day"),
+    )
+    .map((row) => minutesSinceMidnightKolkata(row.checkIn!) > LATE_AFTER_MINUTES);
 
   const data: AiAnalyticsData = {
     periodLabel: `${input.periodStart} → ${input.periodEnd}`,
@@ -261,6 +284,13 @@ export function buildAiSnapshot(input: BuildAiSnapshotInput): {
     leaveByType,
     insights: input.insights,
     flightRisk: input.canPeople ? flightRisk : [],
+    latePct: lateRate(lateFlags),
+    departmentAttendance: departments,
+    performance: input.performance ?? {
+      avgRating: null,
+      pendingReviews: 0,
+      submittedReviews: 0,
+    },
     aiEnabled: input.aiEnabled,
   };
 
