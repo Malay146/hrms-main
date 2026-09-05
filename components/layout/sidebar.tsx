@@ -102,7 +102,10 @@ const adminNavItems: SidebarItemType[] = [
     icon: HRIcon,
     children: [
       { label: "Recruitment", href: "/admin/hr/recruitment" },
-      { label: "Payroll", href: "/admin/hr/payroll" },
+      { label: "Payruns", href: "/admin/hr/payroll" },
+      { label: "Payslips", href: "/admin/hr/payroll/payslips" },
+      { label: "Structures", href: "/admin/hr/payroll/structures" },
+      { label: "Rules", href: "/admin/hr/payroll/rules" },
       { label: "Performance", href: "/admin/hr/performance" },
     ],
   },
@@ -120,6 +123,11 @@ const adminNavItems: SidebarItemType[] = [
     label: "Notification",
     icon: NotificationIcon,
     href: "/admin/notifications",
+  },
+  {
+    label: "Users",
+    icon: PeopleIcon,
+    href: "/admin/users",
   },
   {
     label: "Settings",

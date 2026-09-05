@@ -153,7 +153,7 @@ class FormulaParser {
     private readonly env: FormulaEnv,
   ) {}
 
-  parseExpression() {
+  parseExpression(): number {
     return this.parseAdd();
   }
 
@@ -164,7 +164,7 @@ class FormulaParser {
     }
   }
 
-  private parseAdd() {
+  private parseAdd(): number {
     let value = this.parseMul();
     while (true) {
       this.skipSpaces();
@@ -177,7 +177,7 @@ class FormulaParser {
     return value;
   }
 
-  private parseMul() {
+  private parseMul(): number {
     let value = this.parseUnary();
     while (true) {
       this.skipSpaces();
@@ -191,7 +191,7 @@ class FormulaParser {
     return value;
   }
 
-  private parseUnary() {
+  private parseUnary(): number {
     this.skipSpaces();
     if (this.source[this.index] === "+") {
       this.index += 1;
@@ -204,7 +204,7 @@ class FormulaParser {
     return this.parsePrimary();
   }
 
-  private parsePrimary() {
+  private parsePrimary(): number {
     this.skipSpaces();
     const ch = this.source[this.index];
     if (ch === "(") {
@@ -224,7 +224,7 @@ class FormulaParser {
     throw new Error("Unexpected formula token.");
   }
 
-  private parseNumber() {
+  private parseNumber(): number {
     const start = this.index;
     while (this.index < this.source.length && /[0-9.]/.test(this.source[this.index] ?? "")) {
       this.index += 1;
@@ -234,7 +234,7 @@ class FormulaParser {
     return value;
   }
 
-  private parseReference() {
+  private parseReference(): number {
     const name = this.parseIdent();
     if (name === "wage") return this.env.wage;
     if (name === "workedDays") return this.env.workedDays;
