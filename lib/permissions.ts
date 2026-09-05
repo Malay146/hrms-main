@@ -19,25 +19,56 @@ export const ASSIGNABLE_ROLES: Role[] = [
 export type Permission =
   | "viewAdminDashboard"
   | "managePeople"
-  | "createUsers"
   | "approveLeave"
+  | "manageTimeOffTypes"
   | "viewPayrollAll"
   | "editPayroll"
+  | "finalizePayroll"
+  | "viewSalaryConfig"
+  | "manageSalaryConfig"
+  | "createUsers"
   | "adminExtras";
 
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   admin: [
     "viewAdminDashboard",
     "managePeople",
-    "createUsers",
     "approveLeave",
+    "manageTimeOffTypes",
     "viewPayrollAll",
     "editPayroll",
+    "finalizePayroll",
+    "viewSalaryConfig",
+    "manageSalaryConfig",
+    "createUsers",
     "adminExtras",
   ],
-  hr_manager: ["viewAdminDashboard", "managePeople", "approveLeave"],
-  hr_payroll_manager: ["viewAdminDashboard", "viewPayrollAll", "editPayroll"],
-  hr_payroll_user: ["viewAdminDashboard", "viewPayrollAll"],
+  hr_manager: [
+    "viewAdminDashboard",
+    "managePeople",
+    "approveLeave",
+    "manageTimeOffTypes",
+  ],
+  hr_payroll_manager: [
+    "viewAdminDashboard",
+    "managePeople",
+    "approveLeave",
+    "manageTimeOffTypes",
+    "viewPayrollAll",
+    "editPayroll",
+    "finalizePayroll",
+    "viewSalaryConfig",
+    "manageSalaryConfig",
+  ],
+  hr_payroll_user: [
+    "viewAdminDashboard",
+    "managePeople",
+    "approveLeave",
+    "manageTimeOffTypes",
+    "viewPayrollAll",
+    "editPayroll",
+    "viewSalaryConfig",
+  ],
   employee: [],
 };
 
@@ -61,29 +92,61 @@ export function canAccessAdminPath(role: Role | string | undefined, pathname: st
   if (pathname === "/admin" || pathname === "/admin/") {
     return hasPermission(current, "viewAdminDashboard");
   }
-  if (pathname.startsWith("/admin/people/employees")) {
+
+  if (
+    pathname.startsWith("/admin/people/employees") ||
+    pathname.startsWith("/admin/people/department") ||
+    pathname.startsWith("/admin/people/schedules") ||
+    pathname.startsWith("/admin/people/contracts") ||
+    pathname.startsWith("/admin/people/attendance")
+  ) {
     return hasPermission(current, "managePeople");
   }
-  if (pathname.startsWith("/admin/people/attendance")) {
-    return hasPermission(current, "managePeople");
+
+  if (
+    pathname.startsWith("/admin/people/leave/types") ||
+    pathname.startsWith("/admin/people/leave/allocations")
+  ) {
+    return (
+      hasPermission(current, "approveLeave") || hasPermission(current, "manageTimeOffTypes")
+    );
   }
+
   if (pathname.startsWith("/admin/people/leave")) {
     return hasPermission(current, "approveLeave");
   }
-  if (pathname.startsWith("/admin/hr/payroll")) {
+
+  if (
+    pathname.startsWith("/admin/hr/payroll/structures") ||
+    pathname.startsWith("/admin/hr/payroll/rules")
+  ) {
+    return hasPermission(current, "viewSalaryConfig");
+  }
+
+  if (
+    pathname.startsWith("/admin/hr/payroll") ||
+    pathname.startsWith("/admin/hr/payroll/payslips") ||
+    pathname.startsWith("/admin/hr/payroll/dashboard")
+  ) {
     return hasPermission(current, "viewPayrollAll");
   }
+
+  if (pathname.startsWith("/admin/users")) {
+    return hasPermission(current, "createUsers");
+  }
+
   if (pathname.startsWith("/admin/notifications") || pathname.startsWith("/admin/settings")) {
     return true;
   }
+
   if (
-    pathname.startsWith("/admin/people/department") ||
     pathname.startsWith("/admin/hr/recruitment") ||
     pathname.startsWith("/admin/hr/performance") ||
     pathname.startsWith("/admin/analytics")
   ) {
-    return true;
+    return hasPermission(current, "adminExtras");
   }
+
   return hasPermission(current, "adminExtras");
 }
 
