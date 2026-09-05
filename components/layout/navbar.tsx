@@ -337,6 +337,7 @@ export default function Navbar() {
               <div className="p-1.5">
                 <Link
                   href="/logout"
+                  prefetch={false}
                   onClick={() => setIsProfileOpen(false)}
                   className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold rounded-lg text-error hover:bg-error-soft/30 transition-all duration-150"
                 >

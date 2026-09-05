@@ -18,6 +18,12 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
+  // Sign-out is its own action; skip the session DB round-trip so /logout
+  // is not gated on getSession before the page can revoke the cookie.
+  if (pathname === "/logout") {
+    return NextResponse.next();
+  }
+
   const session = await auth.api.getSession({ headers: request.headers });
   const role = session?.user?.role as string | undefined;
   const mustChangePassword = Boolean(

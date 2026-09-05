@@ -54,6 +54,7 @@ export function AuthShell({
           {footerText}{" "}
           <Link
             href={footerLinkHref}
+            prefetch={footerLinkHref !== "/logout"}
             className="font-semibold text-zinc-950 dark:text-white hover:underline underline-offset-4"
           >
             {footerLinkLabel}

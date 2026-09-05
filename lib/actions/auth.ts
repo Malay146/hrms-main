@@ -1,6 +1,7 @@
 "use server";
 
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/server";
 import { logger } from "@/lib/shared/logger";
 import { firstZodError, loginSchema, changePasswordSchema } from "@/lib/shared/validations";
@@ -87,14 +88,14 @@ export async function changePasswordAction(input: {
   }
 }
 
-export async function signOutAction(): Promise<ActionResult> {
+export async function signOutAction(): Promise<never> {
   try {
     await auth.api.signOut({
       headers: await headers(),
     });
     logger.info("auth.logout", {});
-    return { ok: true, data: undefined };
   } catch {
-    return { ok: false, error: "Could not sign out." };
+    // Session may already be gone; still send the user to login.
   }
+  redirect("/login");
 }

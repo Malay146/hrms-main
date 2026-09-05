@@ -439,6 +439,7 @@ export default function Sidebar() {
         {/* Logout Link */}
         <Link
           href="/logout"
+          prefetch={false}
           className={cn(
             "flex items-center rounded-lg text-body font-medium text-error hover:bg-error-soft/30 transition-all duration-150 group",
             isCollapsed ? "justify-center p-2.5" : "px-3 py-2 gap-3",
