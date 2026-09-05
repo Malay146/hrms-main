@@ -61,6 +61,28 @@ export const renameDepartmentSchema = z.object({
   name: z.string().min(2, "Department name is required.").max(80),
 });
 
+export const updateEmployeeSchema = z.object({
+  employeeId: z.string().min(1),
+  fullName: z.string().min(2, "Full name is required."),
+  departmentId: z.string().min(1, "Department is required."),
+  managerId: z.string().optional().nullable(),
+  scheduleId: z.string().optional().nullable(),
+  jobTitle: z.string().min(1, "Job title is required."),
+  companyName: z.string().optional().nullable(),
+  workLocation: z.string().optional().nullable(),
+  employeeType: z.enum(["full_time", "intern", "contractor"]),
+  status: z.enum(["active", "inactive", "on_leave"]),
+  phone: z.string().optional().nullable(),
+  personalEmail: z
+    .union([z.string().email("Enter a valid personal email."), z.literal(""), z.null()])
+    .optional(),
+  address: z.string().optional().nullable(),
+  bankAccount: z.string().optional().nullable(),
+  joinDate: z
+    .union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Join date must be YYYY-MM-DD."), z.literal(""), z.null()])
+    .optional(),
+});
+
 export const scheduleLineSchema = z.object({
   weekday: z.number().int().min(1).max(7),
   startMin: z.number().int().min(0).max(24 * 60 - 1),

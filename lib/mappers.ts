@@ -49,10 +49,18 @@ export function mapEmployee(
     phone: string | null;
     status: string;
     createdAt: Date;
+    employeeType?: string | null;
+    joinDate?: Date | null;
     user: { email: string };
   },
   onLeaveToday: boolean,
 ): EmployeeListItem {
+  const typeLabel =
+    row.employeeType === "intern"
+      ? "Intern"
+      : row.employeeType === "contractor"
+        ? "Contractor"
+        : "Full-time";
   return {
     id: row.employeeId,
     userId: row.userId,
@@ -62,8 +70,8 @@ export function mapEmployee(
     avatar: initialsFromName(row.fullName),
     department: departmentName(row.department),
     designation: row.jobTitle,
-    type: "Full-time",
-    joinDate: formatDisplayDate(row.createdAt),
+    type: typeLabel,
+    joinDate: formatDisplayDate(row.joinDate ?? row.createdAt),
     status: mapEmployeeStatus(row.status, onLeaveToday),
     phone: row.phone,
   };
