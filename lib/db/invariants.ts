@@ -1,6 +1,6 @@
-/** Exact SQL later tasks copy verbatim into Prisma migrations. Do not apply here. */
+/** Exact SQL later tasks copy verbatim into Prisma migrations. */
 export const INVARIANT_SQL = {
-  /** Task 2 — CHECK constraints only. Do not include exclusion or uniques. */
+  /** Task 2 — CHECK constraints applied by prisma/migrations/20260906010000_check_constraints. */
   checks: {
     leaveDatesOrdered: `ALTER TABLE "leave_request"
   ADD CONSTRAINT "leave_request_dates_ordered"

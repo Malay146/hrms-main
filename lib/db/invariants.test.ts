@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { INVARIANT_SQL } from "./invariants";
+
+const CHECK_MIGRATION_PATH = join(
+  process.cwd(),
+  "prisma/migrations/20260906010000_check_constraints/migration.sql",
+);
 
 describe("db invariants catalog", () => {
   it("includes a leave date order check", () => {
@@ -78,6 +85,20 @@ describe("db invariants catalog", () => {
     assert.match(sql, /"employeeId" WITH =/);
     assert.match(sql, /daterange\("startDate", "endDate", '\[\]'\)/);
     assert.match(sql, /status = 'approved'/);
+  });
+
+  it("check-constraints migration includes every INVARIANT_SQL.checks snippet verbatim", () => {
+    assert.ok(
+      existsSync(CHECK_MIGRATION_PATH),
+      `expected migration at ${CHECK_MIGRATION_PATH}`,
+    );
+    const sql = readFileSync(CHECK_MIGRATION_PATH, "utf8").replace(/\r\n/g, "\n");
+    for (const [name, snippet] of Object.entries(INVARIANT_SQL.checks)) {
+      assert.ok(
+        sql.includes(snippet),
+        `migration must include INVARIANT_SQL.checks.${name} verbatim`,
+      );
+    }
   });
 
   it.skip(

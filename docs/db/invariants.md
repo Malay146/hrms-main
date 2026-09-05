@@ -1,6 +1,6 @@
 # Database invariants
 
-Catalog of PeoplePay360 facts that PostgreSQL must eventually enforce. Status is as of Task 1 (catalog only). Later tasks copy `INVARIANT_SQL` from `lib/db/invariants.ts` **verbatim** into Prisma migrations.
+Catalog of PeoplePay360 facts that PostgreSQL must eventually enforce. Status is as of Task 2 (CHECK constraints applied). Later tasks copy `INVARIANT_SQL` from `lib/db/invariants.ts` **verbatim** into Prisma migrations.
 
 **Status values**
 
@@ -8,11 +8,11 @@ Catalog of PeoplePay360 facts that PostgreSQL must eventually enforce. Status is
 | --- | --- |
 | `missing` | Not enforced in Postgres and not a dedicated app rule |
 | `app-only` | TypeScript / Zod / action checks; a crash or race can persist a violation |
-| `enforced` | Already a UNIQUE / PK / FK in `prisma/schema.prisma` |
+| `enforced` | Already a UNIQUE / PK / FK / CHECK in Postgres (`prisma/schema.prisma` or a Task 2+ migration) |
 
-Nothing below is a CHECK, EXCLUDE, or RLS constraint in Postgres yet. Existing UNIQUE indexes in the schema stay `enforced`.
+Task 2 applied `INVARIANT_SQL.checks` in `prisma/migrations/20260906010000_check_constraints`. Uniques, EXCLUDE, and RLS are still not in Postgres. Existing UNIQUE indexes in the schema stay `enforced`.
 
-Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariants.ts) (`INVARIANT_SQL.checks` / `.uniques` / `.exclusion`). Task 2 copies **`.checks` only**.
+Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariants.ts) (`INVARIANT_SQL.checks` / `.uniques` / `.exclusion`). Task 2 copied **`.checks` only**.
 
 ---
 
@@ -21,26 +21,26 @@ Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariant
 ### `leave_dates_ordered`
 
 - **SQL:** `CHECK ("endDate" >= "startDate")` on `leave_request` (`leave_request_dates_ordered`)
-- **Status:** `app-only`
-- **Notes:** `validateLeaveDates` in `lib/people/leave-rules.ts` rejects inverted ranges. Postgres will still accept `endDate < startDate`.
+- **Status:** `enforced`
+- **Notes:** Applied by Task 2. `validateLeaveDates` in `lib/people/leave-rules.ts` still rejects inverted ranges in app code.
 
 ### `leave_duration_nonneg`
 
 - **SQL:** `CHECK ("duration" >= 0)` on `leave_request` (`leave_request_duration_nonneg`)
-- **Status:** `missing`
-- **Notes:** Duration is written by actions; there is no CHECK.
+- **Status:** `enforced`
+- **Notes:** Applied by Task 2. Duration is also written by actions.
 
 ### `contract_dates_ordered`
 
 - **SQL:** `CHECK ("endDate" IS NULL OR "endDate" >= "startDate")` on `contract` (`contract_dates_ordered`)
-- **Status:** `missing`
+- **Status:** `enforced`
 - **Notes:** `lib/people/contract-period.ts` compares windows in app code. Open-ended contracts (`endDate` NULL) are valid.
 
 ### `attendance_checkout_needs_checkin`
 
 - **SQL:** `CHECK ("checkOut" IS NULL OR "checkIn" IS NOT NULL)` on `attendance` (`attendance_checkout_needs_checkin`)
-- **Status:** `app-only`
-- **Notes:** Clock-out and admin edits in `lib/actions/people/attendance.ts` require check-in first. A raw insert can store checkout without check-in.
+- **Status:** `enforced`
+- **Notes:** Applied by Task 2. Clock-out and admin edits in `lib/actions/people/attendance.ts` also require check-in first.
 
 ---
 
@@ -55,19 +55,19 @@ Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariant
 ### `contract_wage_nonneg`
 
 - **SQL:** `CHECK ("wage" >= 0)` on `contract` (`contract_wage_nonneg`)
-- **Status:** `app-only`
-- **Notes:** Zod requires a positive wage on some forms. Postgres has no CHECK.
+- **Status:** `enforced`
+- **Notes:** Applied by Task 2. Zod still requires a positive wage on some forms.
 
 ### `payslip_amounts_nonneg`
 
 - **SQL:** `CHECK ("wage" >= 0 AND "gross" >= 0)` on `payslip` (`payslip_amounts_nonneg`)
-- **Status:** `missing`
+- **Status:** `enforced`
 
 ### `performance_goal_progress`
 
 - **SQL:** `CHECK ("progress" >= 0 AND "progress" <= 100)` on `performance_goal` (`performance_goal_progress`)
-- **Status:** `app-only`
-- **Notes:** Performance actions clamp / interpret progress in TypeScript. Postgres has no CHECK.
+- **Status:** `enforced`
+- **Notes:** Applied by Task 2. Performance actions still clamp / interpret progress in TypeScript.
 
 ---
 
@@ -82,18 +82,18 @@ Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariant
 ### `schedule_line_weekday`
 
 - **SQL:** `CHECK ("weekday" >= 1 AND "weekday" <= 7)` on `working_schedule_line` (`working_schedule_line_weekday`)
-- **Status:** `missing`
+- **Status:** `enforced`
 
 ### `schedule_line_range`
 
 - **SQL:** `CHECK ("endMin" > "startMin" AND "startMin" >= 0 AND "endMin" <= 24 * 60)` on `working_schedule_line` (`working_schedule_line_range`)
-- **Status:** `missing`
-- **Notes:** `lineHours` assumes `endMin > startMin` but does not reject inverted ranges.
+- **Status:** `enforced`
+- **Notes:** Applied by Task 2. `lineHours` still assumes `endMin > startMin` in app code.
 
 ### `schedule_hours_positive`
 
 - **SQL:** `CHECK ("hoursPerWeek" > 0 AND "daysPerWeek" BETWEEN 1 AND 7)` on `working_schedule` (`working_schedule_hours_positive`)
-- **Status:** `missing`
+- **Status:** `enforced`
 
 ---
 
@@ -108,8 +108,8 @@ Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariant
 ### `allocation_amounts`
 
 - **SQL:** `CHECK ("allocated" >= 0 AND "taken" >= 0 AND "taken" <= "allocated" + 0.01)` on `time_off_allocation` (`time_off_allocation_amounts`)
-- **Status:** `app-only`
-- **Notes:** `remaining()` in `lib/people/time-off-balance.ts` is TypeScript only. The `+ 0.01` slack covers decimal rounding.
+- **Status:** `enforced`
+- **Notes:** Applied by Task 2. `remaining()` in `lib/people/time-off-balance.ts` is still TypeScript. The `+ 0.01` slack covers decimal rounding.
 
 ### `leave_balance_only_on_allocation`
 
@@ -143,9 +143,9 @@ These are UNIQUE indexes already in `prisma/schema.prisma`. They are **not** mis
 
 ---
 
-## Task 2 CHECK SQL (copy from `INVARIANT_SQL.checks`)
+## Task 2 CHECK SQL (copied from `INVARIANT_SQL.checks`)
 
-Applied later. Do not run in this task.
+Applied by `prisma/migrations/20260906010000_check_constraints`. Status `enforced`.
 
 ```sql
 ALTER TABLE "leave_request"
