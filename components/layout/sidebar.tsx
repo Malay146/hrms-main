@@ -141,6 +141,11 @@ const adminNavItems: SidebarItemType[] = [
     href: "/admin/notifications",
   },
   {
+    label: "Users",
+    icon: PeopleIcon,
+    href: "/admin/users",
+  },
+  {
     label: "Settings",
     icon: SettingsIcon,
     href: "/admin/settings",

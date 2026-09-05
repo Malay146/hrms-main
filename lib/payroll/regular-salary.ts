@@ -1,0 +1,60 @@
+import type { ComputeRule } from "./compute";
+
+export const REGULAR_SALARY_RULES: ComputeRule[] = [
+  {
+    name: "Basic Salary",
+    code: "BASIC",
+    category: "basic",
+    sequence: 1,
+    computation: "percent_of_wage",
+    percentage: 100,
+  },
+  {
+    name: "House Rent Allowance",
+    code: "HRA",
+    category: "allowance",
+    sequence: 10,
+    computation: "percent_of_basic",
+    percentage: 40,
+  },
+  {
+    name: "Standard Allowance",
+    code: "STD",
+    category: "allowance",
+    sequence: 20,
+    computation: "fixed",
+    amount: 10000,
+  },
+  {
+    name: "Gross Salary",
+    code: "GROSS",
+    category: "gross",
+    sequence: 50,
+    computation: "formula",
+    formula: "categories.basic + categories.allowance",
+  },
+  {
+    name: "Provident Fund",
+    code: "PF",
+    category: "deduction",
+    sequence: 60,
+    computation: "fixed",
+    amount: 3000,
+  },
+  {
+    name: "Professional Tax",
+    code: "PT",
+    category: "deduction",
+    sequence: 70,
+    computation: "fixed",
+    amount: 2000,
+  },
+  {
+    name: "Net Salary",
+    code: "NET",
+    category: "net",
+    sequence: 100,
+    computation: "formula",
+    formula: "categories.gross - categories.deduction",
+  },
+];

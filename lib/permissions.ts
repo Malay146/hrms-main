@@ -93,6 +93,10 @@ export function canAccessAdminPath(role: Role | string | undefined, pathname: st
     return hasPermission(current, "viewAdminDashboard");
   }
 
+  if (pathname.startsWith("/admin/users")) {
+    return hasPermission(current, "createUsers");
+  }
+
   if (
     pathname.startsWith("/admin/people/employees") ||
     pathname.startsWith("/admin/people/department") ||
@@ -123,16 +127,8 @@ export function canAccessAdminPath(role: Role | string | undefined, pathname: st
     return hasPermission(current, "viewSalaryConfig");
   }
 
-  if (
-    pathname.startsWith("/admin/hr/payroll") ||
-    pathname.startsWith("/admin/hr/payroll/payslips") ||
-    pathname.startsWith("/admin/hr/payroll/dashboard")
-  ) {
+  if (pathname.startsWith("/admin/hr/payroll")) {
     return hasPermission(current, "viewPayrollAll");
-  }
-
-  if (pathname.startsWith("/admin/users")) {
-    return hasPermission(current, "createUsers");
   }
 
   if (pathname.startsWith("/admin/notifications") || pathname.startsWith("/admin/settings")) {

@@ -256,6 +256,7 @@ model EmployeeProfile {
   workLocation     String?
   companyName      String?
   bankAccount      String?
+  wage             Decimal?            @db.Decimal(12, 2)
   personalEmail    String?
   address          String?
   joinDate         DateTime?           @db.Date
@@ -456,9 +457,11 @@ model Payslip {
   workedDays Decimal         @db.Decimal(6, 2)
   status     PayslipStatus   @default(draft)
   warning    String?
+  wage       Decimal         @default(0) @db.Decimal(12, 2)
   gross      Decimal         @default(0) @db.Decimal(12, 2)
   net        Decimal         @default(0) @db.Decimal(12, 2)
   lines      PayslipLine[]
+  sentAt     DateTime?
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
@@ -482,7 +485,7 @@ model PayslipLine {
   @@map("payslip_line")
 }
 
-/// Legacy payroll rows — keep until Krishil retires in payrun Phase 3.
+/// Legacy payroll rows ΓÇö keep until Krishil retires in payrun Phase 3.
 model Payroll {
   id           String   @id @default(cuid())
   userId       String
