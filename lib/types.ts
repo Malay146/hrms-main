@@ -123,6 +123,54 @@ export type EmployeeDashboardData = {
   weeklyHours: { day: string; hours: number }[];
 };
 
+export type AiInsightCard = {
+  id: string;
+  severity: "info" | "watch" | "alert";
+  title: string;
+  body: string;
+  action: string;
+  href?: string;
+  metricKey?: string;
+};
+
+export type AiFlightRiskRow = {
+  employeeId: string;
+  name: string;
+  department: string;
+  score: number;
+  reasons: string[];
+};
+
+export type AiAnalyticsData = {
+  periodLabel: string;
+  health: {
+    score: number;
+    band: "healthy" | "watch" | "at_risk";
+    parts: { key: string; value: number }[];
+  };
+  attendancePct: number;
+  leaveDaysApproved: number;
+  pendingApprovals: number;
+  payrollNet: number | null;
+  weeklyAttendance: { day: string; attendance: number }[];
+  leaveByType: { name: string; value: number; color: string; percentage: string }[];
+  insights: AiInsightCard[];
+  flightRisk: AiFlightRiskRow[];
+  aiEnabled: boolean;
+};
+
+export type AiCopilotResult = {
+  answer: string;
+  source: string;
+};
+
+export type AiLeaveBrief = {
+  leaveId: string;
+  bullets: string[];
+  suggestion: "approve" | "review" | "reject";
+  clashCount: number;
+};
+
 export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   paid: "Paid Leave",
   sick: "Sick Leave",
