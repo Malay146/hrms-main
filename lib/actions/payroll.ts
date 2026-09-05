@@ -15,6 +15,7 @@ export async function listPayroll(): Promise<ActionResult<PayrollListItem[]>> {
     const month = currentPayrollMonth();
     const profiles = await prisma.employeeProfile.findMany({
       include: {
+        department: { select: { name: true } },
         user: {
           include: {
             payrolls: { where: { month } },
@@ -53,7 +54,7 @@ export async function listPayroll(): Promise<ActionResult<PayrollListItem[]>> {
           .slice(0, 2)
           .toUpperCase(),
         role: profile.jobTitle,
-        department: profile.department,
+        department: profile.department.name,
         month,
         monthLabel: month,
         basic: 0,
@@ -80,7 +81,7 @@ export async function getMyPayroll(): Promise<ActionResult<PayrollListItem[]>> {
           select: {
             email: true,
             profile: {
-              select: { employeeId: true, fullName: true, department: true, jobTitle: true },
+              select: { employeeId: true, fullName: true, department: { select: { name: true } }, jobTitle: true },
             },
           },
         },
@@ -131,7 +132,7 @@ export async function upsertPayrollAction(input: {
           select: {
             email: true,
             profile: {
-              select: { employeeId: true, fullName: true, department: true, jobTitle: true },
+              select: { employeeId: true, fullName: true, department: { select: { name: true } }, jobTitle: true },
             },
           },
         },

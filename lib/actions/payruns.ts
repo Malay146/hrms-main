@@ -115,7 +115,12 @@ function mapPayslip(row: {
   net: unknown;
   warning: string | null;
   status: PayslipStatus;
-  employee: { fullName: string; employeeId: string; department: string; user: { email: string } };
+  employee: {
+    fullName: string;
+    employeeId: string;
+    department: { name: string };
+    user: { email: string };
+  };
   payrun: {
     name: string;
     periodStart: Date;
@@ -131,7 +136,7 @@ function mapPayslip(row: {
     payrunName: row.payrun.name,
     employeeName: row.employee.fullName,
     employeeCode: row.employee.employeeId,
-    department: row.employee.department,
+    department: row.employee.department.name,
     email: row.employee.user.email,
     periodStart: toDateKey(row.payrun.periodStart),
     periodEnd: toDateKey(row.payrun.periodEnd),
@@ -159,6 +164,7 @@ export async function listEligibleEmployees(input: {
         ...(input.employeeType ? { employeeType: input.employeeType } : {}),
       },
       include: {
+        department: { select: { name: true } },
         user: {
           select: {
             email: true,
@@ -178,7 +184,7 @@ export async function listEligibleEmployees(input: {
           name: profile.fullName,
           email: profile.user.email,
           employeeId: profile.employeeId,
-          department: profile.department,
+          department: profile.department.name,
           employeeType: profile.employeeType,
           wage,
           bankAccount: profile.bankAccount,
@@ -229,7 +235,12 @@ export async function getPayrun(id: string): Promise<ActionResult<PayrunDetail>>
         payslips: {
           include: {
             lines: true,
-            employee: { include: { user: { select: { email: true } } } },
+            employee: {
+              include: {
+                user: { select: { email: true } },
+                department: { select: { name: true } },
+              },
+            },
             payrun: { include: { structure: { select: { name: true } } } },
           },
           orderBy: { createdAt: "asc" },
@@ -320,7 +331,12 @@ export async function computePayrunAction(payrunId: string): Promise<ActionResul
                     id: true,
                     payrolls: { orderBy: { month: "desc" }, take: 1, select: { basic: true } },
                     leaveRequests: {
-                      select: { type: true, status: true, startDate: true, endDate: true },
+                      select: {
+                        type: { select: { code: true } },
+                        status: true,
+                        startDate: true,
+                        endDate: true,
+                      },
                     },
                   },
                 },
@@ -343,7 +359,7 @@ export async function computePayrunAction(payrunId: string): Promise<ActionResul
         periodStart,
         periodEnd,
         slip.employee.user.leaveRequests.map((leave) => ({
-          type: leave.type,
+          type: leave.type.code,
           status: leave.status,
           startDate: toDateKey(leave.startDate),
           endDate: toDateKey(leave.endDate),
@@ -478,7 +494,12 @@ export async function listPayslips(): Promise<ActionResult<PayslipListItem[]>> {
     const rows = await prisma.payslip.findMany({
       include: {
         lines: true,
-        employee: { include: { user: { select: { email: true } } } },
+        employee: {
+          include: {
+            user: { select: { email: true } },
+            department: { select: { name: true } },
+          },
+        },
         payrun: { include: { structure: { select: { name: true } } } },
       },
       orderBy: { createdAt: "desc" },
@@ -496,7 +517,12 @@ export async function getPayslip(id: string): Promise<ActionResult<PayslipDetail
       where: { id },
       include: {
         lines: { orderBy: { code: "asc" } },
-        employee: { include: { user: { select: { email: true, id: true } } } },
+        employee: {
+          include: {
+            user: { select: { email: true, id: true } },
+            department: { select: { name: true } },
+          },
+        },
         payrun: { include: { structure: { select: { name: true } } } },
       },
     });
@@ -532,7 +558,12 @@ export async function listMyPayslips(): Promise<ActionResult<PayslipListItem[]>>
       where: { employeeId: profile.id, status: { in: ["validated", "paid"] } },
       include: {
         lines: true,
-        employee: { include: { user: { select: { email: true } } } },
+        employee: {
+          include: {
+            user: { select: { email: true } },
+            department: { select: { name: true } },
+          },
+        },
         payrun: { include: { structure: { select: { name: true } } } },
       },
       orderBy: { createdAt: "desc" },
@@ -553,7 +584,12 @@ export async function sendPayslipsAction(payrunId: string): Promise<ActionResult
         payslips: {
           include: {
             lines: true,
-            employee: { include: { user: { select: { email: true } } } },
+            employee: {
+              include: {
+                user: { select: { email: true } },
+                department: { select: { name: true } },
+              },
+            },
             payrun: { include: { structure: { select: { name: true } } } },
           },
         },
