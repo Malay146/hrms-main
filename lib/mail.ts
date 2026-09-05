@@ -48,6 +48,42 @@ export async function sendAccountCredentialsEmail(input: {
   logger.info("mail.credentials_sent", { to: input.to });
 }
 
+export async function sendPayslipEmail(input: {
+  to: string;
+  fullName: string;
+  periodLabel: string;
+  net: number;
+  lines: { name: string; amount: number }[];
+}) {
+  const from = process.env.SMTP_FROM ?? process.env.SMTP_USER;
+  if (!from) {
+    throw new Error("SMTP_FROM or SMTP_USER is required.");
+  }
+
+  const lineText = input.lines
+    .map((line) => `${line.name}: ₹${line.amount.toLocaleString("en-IN")}`)
+    .join("\n");
+
+  await transporter().sendMail({
+    from,
+    to: input.to,
+    subject: `Your payslip for ${input.periodLabel}`,
+    text: [
+      `Hi ${input.fullName},`,
+      "",
+      `Please find your payslip summary for ${input.periodLabel}.`,
+      "",
+      lineText,
+      "",
+      `Net salary: ₹${input.net.toLocaleString("en-IN")}`,
+      "",
+      "This is a system-generated message from HRMS.",
+    ].join("\n"),
+  });
+
+  logger.info("mail.payslip_sent", { to: input.to });
+}
+
 export function generateTemporaryPassword() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
   const bytes = crypto.getRandomValues(new Uint8Array(12));
