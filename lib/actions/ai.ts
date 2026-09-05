@@ -384,7 +384,7 @@ export async function askHrCopilot(
     if (pending && isConfirm(asked)) {
       await clearPending(threadId);
       const executed = await executeAssistantPlan(user, { kind: "act", tool: pending.tool, args: pending.args });
-      const acted = /^(Created|Updated|Deleted|Renamed|Attendance|approved|rejected)/i.test(executed.source);
+      const acted = /^(Created|Updated|Deleted|Renamed|Attendance|approved|rejected|Applied|Clock)/i.test(executed.source);
       return finish({ answer: executed.answer, source: executed.source, acted });
     }
 
@@ -402,7 +402,7 @@ export async function askHrCopilot(
       if (plan.kind === "act") {
         if (isConfirm(asked)) {
           const executed = await executeAssistantPlan(user, plan);
-          const acted = /^(Created|Updated|Deleted|Renamed|Attendance|approved|rejected)/i.test(executed.source);
+          const acted = /^(Created|Updated|Deleted|Renamed|Attendance|approved|rejected|Applied|Clock)/i.test(executed.source);
           return finish({ answer: executed.answer, source: executed.source, acted });
         }
         const summary = summarizePendingAction(plan.tool, plan.args);

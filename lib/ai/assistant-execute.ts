@@ -8,11 +8,11 @@ import {
   renameDepartmentAction,
 } from "@/lib/actions/people/departments";
 import { createEmployeeAction, getEmployeeHub, updateEmployeeAction } from "@/lib/actions/people/employees";
-import { decideLeaveAction } from "@/lib/actions/people/leave";
-import { kolkataTodayKey } from "@/lib/shared/dates";
-import type { Role, SessionUser } from "@/lib/shared/types";
+import { applyLeaveForEmployeeAction, decideLeaveAction } from "@/lib/actions/people/leave";
+import { dateFromKey, isLateCheckIn, kolkataTodayKey } from "@/lib/shared/dates";
+import type { LeaveType, Role, SessionUser } from "@/lib/shared/types";
 import type { AssistantPlan } from "@/lib/ai/copilot";
-import { sqlDepartmentHeadcount, sqlOrgHeadcount, sqlPeopleInDepartment } from "@/lib/ai/copilot-query";
+import { sqlDepartmentHeadcount, sqlFindPeople, sqlOrgHeadcount, sqlPeopleInDepartment } from "@/lib/ai/copilot-query";
 
 export type AssistantExecuteResult = {
   answer: string;
@@ -330,6 +330,97 @@ async function executeAttendance(user: SessionUser, orgId: string, args: Record<
   };
 }
 
+async function executeApplyLeave(user: SessionUser, orgId: string, args: Record<string, string>) {
+  if (!hasPermission(user.role, "managePeople")) {
+    return { answer: "You do not have permission to apply leave for someone else.", source: "Permission check" };
+  }
+  const lookup = await findEmployee(orgId, arg(args, "employee") || arg(args, "name"));
+  if ("error" in lookup || !lookup.employee) {
+    return { answer: lookup.error ?? "Employee not found.", source: "Employee lookup" };
+  }
+  const typeRaw = arg(args, "type").toLowerCase();
+  const type: LeaveType = typeRaw === "sick" || typeRaw === "unpaid" || typeRaw === "paid" ? typeRaw : "paid";
+  const result = await applyLeaveForEmployeeAction({
+    userId: lookup.employee.userId,
+    type,
+    startDate: arg(args, "startDate"),
+    endDate: arg(args, "endDate"),
+    remarks: arg(args, "remarks") || "Requested via HR assistant",
+  });
+  if (!result.ok) return { answer: result.error, source: "Apply leave" };
+  revalidatePath("/admin");
+  return {
+    answer: `Submitted ${type} leave for ${lookup.employee.fullName} from ${arg(args, "startDate")} to ${arg(args, "endDate")}. It is pending approval.`,
+    source: `Applied leave for ${lookup.employee.employeeId}`,
+  };
+}
+
+async function executeClock(user: SessionUser, orgId: string, tool: "clock_in" | "clock_out", args: Record<string, string>) {
+  if (!hasPermission(user.role, "managePeople")) {
+    return { answer: "You do not have permission to change attendance.", source: "Permission check" };
+  }
+  const lookup = await findEmployee(orgId, arg(args, "employee") || arg(args, "name"));
+  if ("error" in lookup || !lookup.employee) {
+    return { answer: lookup.error ?? "Employee not found.", source: "Employee lookup" };
+  }
+  const dateRaw = arg(args, "date").toLowerCase();
+  const date = !dateRaw || dateRaw === "today" ? kolkataTodayKey() : dateRaw;
+  const now = new Date().toISOString();
+  const existing = await prisma.attendance.findUnique({
+    where: { userId_date: { userId: lookup.employee.userId, date: dateFromKey(date) } },
+    select: { checkIn: true, checkOut: true, status: true },
+  });
+
+  if (tool === "clock_in") {
+    if (existing?.checkIn) {
+      return {
+        answer: `${lookup.employee.fullName} is already clocked in today.`,
+        source: `Clock in ${lookup.employee.employeeId}`,
+      };
+    }
+    const result = await upsertAttendanceAction({
+      userId: lookup.employee.userId,
+      date,
+      status: "present",
+      checkIn: now,
+      notes: "Clocked in via HR assistant",
+    });
+    if (!result.ok) return { answer: result.error, source: "Clock in" };
+    revalidatePath("/admin");
+    return {
+      answer: `Clocked in ${lookup.employee.fullName} for ${date}.`,
+      source: `Clock in ${lookup.employee.employeeId}`,
+    };
+  }
+
+  if (!existing?.checkIn) {
+    return {
+      answer: `${lookup.employee.fullName} has no check-in today, so I cannot clock them out.`,
+      source: `Clock out ${lookup.employee.employeeId}`,
+    };
+  }
+  if (existing.checkOut) {
+    return {
+      answer: `${lookup.employee.fullName} is already clocked out today.`,
+      source: `Clock out ${lookup.employee.employeeId}`,
+    };
+  }
+  const result = await upsertAttendanceAction({
+    userId: lookup.employee.userId,
+    date,
+    status: existing.status === "half_day" ? "half_day" : "present",
+    checkIn: existing.checkIn.toISOString(),
+    checkOut: now,
+    notes: "Clocked out via HR assistant",
+  });
+  if (!result.ok) return { answer: result.error, source: "Clock out" };
+  revalidatePath("/admin");
+  return {
+    answer: `Clocked out ${lookup.employee.fullName} for ${date}.`,
+    source: `Clock out ${lookup.employee.employeeId}`,
+  };
+}
+
 export async function executeAssistantLookup(
   user: SessionUser,
   plan: Extract<AssistantPlan, { kind: "lookup" }>,
@@ -354,6 +445,17 @@ export async function executeAssistantLookup(
 
   if (plan.tool === "lookup_headcount") {
     const department = arg(plan.args, "department");
+    const other = arg(plan.args, "other");
+    if (other) {
+      const left = await sqlDepartmentHeadcount(orgId, department);
+      const right = await sqlDepartmentHeadcount(orgId, other);
+      const leftLine = left[0] ? `${left[0].name}: ${left[0].headcount}` : `No department matching “${department}”.`;
+      const rightLine = right[0] ? `${right[0].name}: ${right[0].headcount}` : `No department matching “${other}”.`;
+      return {
+        answer: `Headcount comparison — ${leftLine}; ${rightLine}.`,
+        source: "Compared department headcount",
+      };
+    }
     const rows = await sqlDepartmentHeadcount(orgId, department);
     if (rows.length === 0) {
       return {
@@ -372,6 +474,113 @@ export async function executeAssistantLookup(
     return {
       answer: `Several departments match “${department}”: ${lines}.`,
       source: "Department query",
+    };
+  }
+
+  if (plan.tool === "lookup_person") {
+    const query = arg(plan.args, "query") || arg(plan.args, "employee") || arg(plan.args, "name");
+    if (!query) return { answer: "Who should I look up?", source: "Missing fields" };
+    const people = await sqlFindPeople(orgId, query);
+    if (people.length === 0) {
+      return { answer: `I could not find anyone matching “${query}”.`, source: "People query" };
+    }
+    const names = people
+      .map((row) => `${row.fullName} (${row.employeeId}, ${row.department}, ${row.jobTitle})`)
+      .join("; ");
+    return { answer: names, source: `Looked up ${people.length} people` };
+  }
+
+  if (plan.tool === "lookup_leave_balance") {
+    const lookup = await findEmployee(orgId, arg(plan.args, "employee") || arg(plan.args, "query"));
+    if ("error" in lookup || !lookup.employee) {
+      return { answer: lookup.error ?? "Employee not found.", source: "Employee lookup" };
+    }
+    const profile = await prisma.employeeProfile.findFirst({
+      where: { organizationId: orgId, employeeId: lookup.employee.employeeId },
+      select: { fullName: true, employeeId: true, paidLeaveBalance: true },
+    });
+    if (!profile) return { answer: "Employee profile is missing.", source: "Employee lookup" };
+    return {
+      answer: `${profile.fullName} (${profile.employeeId}) has ${profile.paidLeaveBalance} paid leave day(s) remaining on their profile.`,
+      source: `Leave balance for ${profile.employeeId}`,
+    };
+  }
+
+  if (plan.tool === "lookup_reports") {
+    const lookup = await findEmployee(orgId, arg(plan.args, "employee") || arg(plan.args, "query"));
+    if ("error" in lookup || !lookup.employee) {
+      return { answer: lookup.error ?? "Employee not found.", source: "Employee lookup" };
+    }
+    const profile = await prisma.employeeProfile.findFirst({
+      where: { organizationId: orgId, employeeId: lookup.employee.employeeId },
+      select: {
+        fullName: true,
+        employeeId: true,
+        manager: { select: { fullName: true, employeeId: true } },
+        reports: { where: { status: { not: "inactive" } }, select: { fullName: true, employeeId: true }, take: 40 },
+      },
+    });
+    if (!profile) return { answer: "Employee profile is missing.", source: "Employee lookup" };
+    const direction = arg(plan.args, "direction");
+    if (direction === "manager") {
+      if (!profile.manager) {
+        return {
+          answer: `${profile.fullName} has no manager on file.`,
+          source: `Manager for ${profile.employeeId}`,
+        };
+      }
+      return {
+        answer: `${profile.fullName} reports to ${profile.manager.fullName} (${profile.manager.employeeId}).`,
+        source: `Manager for ${profile.employeeId}`,
+      };
+    }
+    if (profile.reports.length === 0) {
+      return {
+        answer: `Nobody is listed as reporting to ${profile.fullName}.`,
+        source: `Reports for ${profile.employeeId}`,
+      };
+    }
+    const names = profile.reports.map((row) => `${row.fullName} (${row.employeeId})`).join("; ");
+    return {
+      answer: `${profile.reports.length} ${profile.reports.length === 1 ? "person reports" : "people report"} to ${profile.fullName}: ${names}.`,
+      source: `Reports for ${profile.employeeId}`,
+    };
+  }
+
+  if (plan.tool === "lookup_attendance_exceptions") {
+    const today = kolkataTodayKey();
+    const rows = await prisma.attendance.findMany({
+      where: {
+        date: dateFromKey(today),
+        user: { profile: { organizationId: orgId, status: { not: "inactive" } } },
+      },
+      select: {
+        checkIn: true,
+        checkOut: true,
+        status: true,
+        user: { select: { profile: { select: { fullName: true, employeeId: true } } } },
+      },
+    });
+    const kind = arg(plan.args, "kind");
+    const matches =
+      kind === "missing_checkout"
+        ? rows.filter((row) => row.checkIn && !row.checkOut && row.status === "present")
+        : rows.filter((row) => row.checkIn && isLateCheckIn(row.checkIn));
+    if (matches.length === 0) {
+      return {
+        answer:
+          kind === "missing_checkout"
+            ? "Nobody who checked in today is missing a checkout."
+            : "Nobody is flagged late today.",
+        source: "Attendance exceptions",
+      };
+    }
+    const names = matches
+      .map((row) => row.user.profile?.fullName ?? row.user.profile?.employeeId ?? "Employee")
+      .join("; ");
+    return {
+      answer: `${matches.length} ${kind === "missing_checkout" ? "missing checkout" : "late"}: ${names}.`,
+      source: "Attendance exceptions",
     };
   }
 
@@ -429,6 +638,12 @@ export async function executeAssistantPlan(
       return executeLeave(user, orgId, "reject_leave", args);
     case "mark_attendance":
       return executeAttendance(user, orgId, args);
+    case "apply_leave":
+      return executeApplyLeave(user, orgId, args);
+    case "clock_in":
+      return executeClock(user, orgId, "clock_in", args);
+    case "clock_out":
+      return executeClock(user, orgId, "clock_out", args);
     default:
       return { answer: "I do not know how to do that yet.", source: "Unknown action" };
   }

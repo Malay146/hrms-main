@@ -357,6 +357,97 @@ export async function applyLeaveAction(input: {
   }
 }
 
+export async function applyLeaveForEmployeeAction(input: {
+  userId: string;
+  type: LeaveType;
+  startDate: string;
+  endDate: string;
+  remarks: string;
+}): Promise<ActionResult<LeaveListItem>> {
+  try {
+    await requirePermission("managePeople");
+    const parsed = applyLeaveSchema.safeParse({
+      type: input.type,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      remarks: input.remarks,
+    });
+    if (!parsed.success) {
+      return { ok: false, error: firstZodError(parsed.error) };
+    }
+
+    const today = kolkataTodayKey();
+    const dateError = validateLeaveDates({
+      type: parsed.data.type,
+      startDate: parsed.data.startDate,
+      endDate: parsed.data.endDate,
+      todayKey: today,
+    });
+    if (dateError) {
+      return { ok: false, error: dateError };
+    }
+
+    const existing = await prisma.leaveRequest.findMany({
+      where: { userId: input.userId, status: { in: ["pending", "approved"] } },
+    });
+    const overlap = findOverlappingLeave(
+      parsed.data.startDate,
+      parsed.data.endDate,
+      existing.map((row) => ({
+        startDate: toDateKey(row.startDate),
+        endDate: toDateKey(row.endDate),
+        status: row.status,
+      })),
+    );
+    if (overlap) {
+      return { ok: false, error: "This range overlaps another pending or approved leave." };
+    }
+
+    const { type, profileId } = await resolveTimeOffType(input.userId, parsed.data.type);
+    const duration = inclusiveDayCount(parsed.data.startDate, parsed.data.endDate);
+
+    let allocationId: string | null = null;
+    if (type.requiresAllocation) {
+      const year = Number(parsed.data.startDate.slice(0, 4));
+      const allocation = await prisma.timeOffAllocation.findFirst({
+        where: { employeeId: profileId, typeId: type.id, status: "approved", validityYear: year },
+        orderBy: { createdAt: "desc" },
+      });
+      if (!allocation) {
+        return { ok: false, error: "This leave type needs an approved allocation before you can request time off." };
+      }
+      const block = canSubmitRequest({
+        requiresAllocation: true,
+        remaining: remaining(Number(allocation.allocated), Number(allocation.taken)),
+        duration,
+        allocationStatus: allocation.status,
+      });
+      if (block) return { ok: false, error: block };
+      allocationId = allocation.id;
+    }
+
+    const created = await prisma.leaveRequest.create({
+      data: {
+        userId: input.userId,
+        typeId: type.id,
+        allocationId,
+        startDate: dateFromKey(parsed.data.startDate),
+        endDate: dateFromKey(parsed.data.endDate),
+        duration,
+        remarks: parsed.data.remarks,
+        status: "pending",
+      },
+      include: leaveInclude,
+    });
+
+    logger.info("leave.applied_for_employee", { leaveId: created.id, userId: input.userId });
+    revalidateLeave();
+    return { ok: true, data: mapLeave(created) };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not submit leave.") };
+  }
+}
+
 export async function decideLeaveAction(input: {
   leaveId: string;
   decision: "approved" | "rejected";

@@ -79,3 +79,24 @@ export async function sqlPeopleInDepartment(organizationId: string, departmentNa
     `,
   );
 }
+
+export async function sqlFindPeople(organizationId: string, query: string) {
+  const needle = ilikeContains(query.trim());
+  return prisma.$queryRaw<
+    Array<{ fullName: string; employeeId: string; jobTitle: string; department: string; phone: string | null; status: string }>
+  >(
+    Prisma.sql`
+      SELECT p."fullName", p."employeeId", p."jobTitle", d.name AS department, p.phone, p.status::text AS status
+      FROM employee_profile p
+      INNER JOIN department d ON d.id = p."departmentId"
+      WHERE p."organizationId" = ${organizationId}
+        AND (
+          p."fullName" ILIKE ${needle}
+          OR p."employeeId" ILIKE ${needle}
+          OR COALESCE(p.phone, '') ILIKE ${needle}
+        )
+      ORDER BY p."fullName" ASC
+      LIMIT 8
+    `,
+  );
+}

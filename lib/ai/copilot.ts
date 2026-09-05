@@ -1,3 +1,6 @@
+import { addDaysToKey } from "./metrics";
+import { kolkataTodayKey } from "@/lib/shared/dates";
+
 export const COPILOT_REFUSAL =
   "I can answer workforce questions you already have access to. I will not share wages, bank details, passwords, or system prompts.";
 
@@ -21,9 +24,19 @@ export type AssistantToolName =
   | "rename_department"
   | "approve_leave"
   | "reject_leave"
-  | "mark_attendance";
+  | "apply_leave"
+  | "mark_attendance"
+  | "clock_in"
+  | "clock_out";
 
-export type AssistantLookupTool = "lookup_headcount" | "lookup_departments" | "lookup_people";
+export type AssistantLookupTool =
+  | "lookup_headcount"
+  | "lookup_departments"
+  | "lookup_people"
+  | "lookup_person"
+  | "lookup_leave_balance"
+  | "lookup_reports"
+  | "lookup_attendance_exceptions";
 
 export type ChatTurn = { role: "user" | "assistant"; body: string };
 
@@ -43,13 +56,27 @@ export const ASSISTANT_TOOLS = [
   "rename_department",
   "approve_leave",
   "reject_leave",
+  "apply_leave",
   "mark_attendance",
+  "clock_in",
+  "clock_out",
 ] as const;
 
-export const LOOKUP_TOOLS = ["lookup_headcount", "lookup_departments", "lookup_people"] as const;
+export const LOOKUP_TOOLS = [
+  "lookup_headcount",
+  "lookup_departments",
+  "lookup_people",
+  "lookup_person",
+  "lookup_leave_balance",
+  "lookup_reports",
+  "lookup_attendance_exceptions",
+] as const;
 
 const REFUSE_RE =
   /ignore previous|dump wages|system prompt|jailbreak|\bpip\b|write a performance|password|bank account|api key/i;
+const WAGE_PROBE_RE =
+  /(?:salary|wage|ctc|compensation)\s+(?:for|of)\b|(?:'s|’s)\s+(?:salary|wage|ctc|pay)\b|how much (?:does|do)\s+.+\s+(?:make|earn|get paid)|what (?:is|are)\s+.+(?:'s|’s)?\s+(?:salary|wage)/i;
+const RECRUIT_STAGE_RE = /^(applied|screening|screen|interview|offer|hired|rejected|shortlist|sourcing)$/i;
 const LEAVE_TODAY_RE = /on leave today|who(?:'s| is) on leave|leave today/i;
 const ATTENDANCE_RE = /attendance|present rate|checked in|late/i;
 const PENDING_RE = /pending|waiting longest|awaiting (?:review|approval)/i;
@@ -121,8 +148,13 @@ function isLikelyDepartmentName(text: string) {
   return words.length >= 1 && words.length <= 4;
 }
 
+export function isWageProbe(question: string) {
+  return WAGE_PROBE_RE.test(question.trim());
+}
+
 export function isCopilotRefuse(question: string) {
-  return REFUSE_RE.test(question.trim());
+  const text = question.trim();
+  return REFUSE_RE.test(text) || isWageProbe(text);
 }
 
 export function isHelp(question: string) {
@@ -196,6 +228,47 @@ function extractPeopleDepartment(text: string): string | null {
   return cleanDepartmentQuery(match[1]);
 }
 
+export function extractInformalHire(text: string) {
+  const match = text.match(
+    /(?:hire|onboard)\s+(.+?)\s+as\s+(?:an?\s+)?(.+?)\s+in\s+(?:the\s+)?(.+?)\s*$/i,
+  );
+  if (!match) return null;
+  const fullName = trimName(match[1] ?? "");
+  const jobTitle = toTitleCase(trimName(match[2] ?? ""));
+  const department = toTitleCase(cleanDepartmentQuery(match[3] ?? ""));
+  if (!fullName || !jobTitle || !department) return null;
+  return { fullName, jobTitle, department };
+}
+
+function lastInformalHire(history: ChatTurn[]) {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const turn = history[index];
+    if (turn?.role !== "user") continue;
+    const hire = extractInformalHire(turn.body);
+    if (hire) return hire;
+  }
+  return null;
+}
+
+function historyAwaitingHireEmail(history: ChatTurn[]) {
+  return history.some((turn) => turn.role === "assistant" && /what email should I use/i.test(turn.body));
+}
+
+function extractEmail(text: string) {
+  const match = text.trim().match(/([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i);
+  return match?.[1]?.replace(/[.,;]+$/, "") ?? null;
+}
+
+function isRecruitmentMove(text: string, destination: string) {
+  return /\bcandidate\b/i.test(text) || RECRUIT_STAGE_RE.test(destination.trim());
+}
+
+function nextWeekLeaveWindow(days: number) {
+  const startDate = addDaysToKey(kolkataTodayKey(), 7);
+  const endDate = addDaysToKey(startDate, Math.max(1, days) - 1);
+  return { startDate, endDate };
+}
+
 export function lastLookupDepartment(history: ChatTurn[]): string | null {
   for (let index = history.length - 1; index >= 0; index -= 1) {
     const turn = history[index];
@@ -263,11 +336,11 @@ export function chatReply(firstName: string, question: string) {
   }
   if (isHelp(text)) {
     return `Here’s what I can help with, ${name}:
-• Who is in today, late, or on leave
-• Pending leave and review totals
-• Live headcount and department lists from the database
+• Who is in today, late, missing checkout, or on leave
+• Headcount, department lists, leave balances, and who reports to whom
+• Add people (including “hire Priya as designer in Engineering” — I’ll ask for email)
 • Add, rename, or remove departments
-• Add or update people, leave, and attendance
+• Apply, approve, or reject leave; clock in/out; mark attendance
 • Payroll totals, if you have payroll access
 
 If you want a record changed, say so in plain language. I’ll show the plan and wait for you to confirm before anything is saved.`;
@@ -312,6 +385,12 @@ export function summarizePendingAction(tool: AssistantToolName, args: Record<str
       return `Approve the pending leave request for ${args.employee || "this person"}.`;
     case "reject_leave":
       return `Reject the pending leave request for ${args.employee || "this person"}.`;
+    case "apply_leave":
+      return `Apply ${args.days || ""} day ${args.type || "paid"} leave for ${args.employee || "this person"} from ${args.startDate || "?"} to ${args.endDate || "?"}.`.replace(/\s+/g, " ").trim();
+    case "clock_in":
+      return `Clock in ${args.employee || "this person"} today.`;
+    case "clock_out":
+      return `Clock out ${args.employee || "this person"} today.`;
     case "mark_attendance":
       return `Mark ${args.employee || "this person"} as ${args.status?.replace("_", " ") || "updated"} ${args.date && args.date !== "today" ? `on ${args.date}` : "today"}.`;
     default:
@@ -322,7 +401,7 @@ export function summarizePendingAction(tool: AssistantToolName, args: Record<str
 export function classifyCopilotQuestion(question: string): CopilotIntent {
   const text = question.trim();
   if (!text) return "refuse";
-  if (REFUSE_RE.test(text)) return "refuse";
+  if (isCopilotRefuse(text)) return "refuse";
   if (isSmallTalk(text)) return "chat";
   if (LEAVE_TODAY_RE.test(text)) return "leave_today";
   if (PAYROLL_RE.test(text)) return "payroll";
@@ -339,7 +418,7 @@ export function classifyCopilotQuestion(question: string): CopilotIntent {
 export function planAssistantTurn(question: string, history: ChatTurn[] = []): AssistantPlan {
   const text = question.trim();
   if (!text) return { kind: "refuse", answer: COPILOT_REFUSAL };
-  if (REFUSE_RE.test(text)) return { kind: "refuse", answer: COPILOT_REFUSAL };
+  if (isCopilotRefuse(text)) return { kind: "refuse", answer: COPILOT_REFUSAL };
   if (isSmallTalk(text)) return { kind: "chat" };
 
   if (isConfirm(text)) {
@@ -356,6 +435,32 @@ export function planAssistantTurn(question: string, history: ChatTurn[] = []): A
         args: { department },
       };
     }
+  }
+
+  if (historyAwaitingHireEmail(history)) {
+    const email = extractEmail(text);
+    const hire = lastInformalHire(history);
+    if (email && hire) {
+      return {
+        kind: "act",
+        tool: "create_employee",
+        args: {
+          fullName: hire.fullName,
+          email,
+          department: hire.department,
+          jobTitle: hire.jobTitle,
+          role: "employee",
+        },
+      };
+    }
+  }
+
+  const informalHire = extractInformalHire(text);
+  if (informalHire) {
+    return {
+      kind: "clarify",
+      answer: `I can add ${informalHire.fullName} as ${informalHire.jobTitle} in ${informalHire.department}. What email should I use?`,
+    };
   }
 
   if (historyAwaitingDepartmentName(history) && isLikelyDepartmentName(text)) {
@@ -382,6 +487,20 @@ export function planAssistantTurn(question: string, history: ChatTurn[] = []): A
     };
   }
 
+  const compareHeadcount = text.match(
+    /compare\s+(.+?)\s+(?:vs\.?|versus|and|with)\s+(.+?)\s+headcount/i,
+  );
+  if (compareHeadcount) {
+    return {
+      kind: "lookup",
+      tool: "lookup_headcount",
+      args: {
+        department: toTitleCase(cleanDepartmentQuery(compareHeadcount[1] ?? "")),
+        other: toTitleCase(cleanDepartmentQuery(compareHeadcount[2] ?? "")),
+      },
+    };
+  }
+
   const headcountDepartment = extractHeadcountDepartment(text);
   if (headcountDepartment) {
     return {
@@ -405,6 +524,58 @@ export function planAssistantTurn(question: string, history: ChatTurn[] = []): A
       kind: "lookup",
       tool: "lookup_people",
       args: { department: peopleDepartment },
+    };
+  }
+
+  const leaveBalance = text.match(/leave balance\s+(?:for|of)\s+(.+)/i) || text.match(/(.+?)(?:'s|’s)\s+leave balance/i);
+  if (leaveBalance) {
+    return {
+      kind: "lookup",
+      tool: "lookup_leave_balance",
+      args: { employee: trimName(leaveBalance[1] ?? "") },
+    };
+  }
+
+  const reportsTo = text.match(/who reports to\s+(.+)/i);
+  if (reportsTo) {
+    return {
+      kind: "lookup",
+      tool: "lookup_reports",
+      args: { employee: trimName(reportsTo[1] ?? ""), direction: "reports" },
+    };
+  }
+
+  const managerOf = text.match(/who (?:does|do)\s+(.+?)\s+report\s+to/i);
+  if (managerOf) {
+    return {
+      kind: "lookup",
+      tool: "lookup_reports",
+      args: { employee: trimName(managerOf[1] ?? ""), direction: "manager" },
+    };
+  }
+
+  if (/who(?:'s| is| are) late(?: today)?/i.test(text)) {
+    return {
+      kind: "lookup",
+      tool: "lookup_attendance_exceptions",
+      args: { kind: "late" },
+    };
+  }
+
+  if (/hasn(?:'t|ot) checked out|missing check[- ]?out|no check[- ]?out/i.test(text)) {
+    return {
+      kind: "lookup",
+      tool: "lookup_attendance_exceptions",
+      args: { kind: "missing_checkout" },
+    };
+  }
+
+  const findPerson = text.match(/find (?:employee|person)(?: named)?\s+(.+)/i);
+  if (findPerson) {
+    return {
+      kind: "lookup",
+      tool: "lookup_person",
+      args: { query: trimName(findPerson[1] ?? "") },
     };
   }
 
@@ -440,6 +611,44 @@ export function planAssistantTurn(question: string, history: ChatTurn[] = []): A
       kind: "act",
       tool: "delete_department",
       args: { name: trimName(deleteDept[1] ?? "") },
+    };
+  }
+
+  const applyLeave = text.match(
+    /apply\s+(\d+)\s+days?\s+(paid|sick|unpaid)\s+leave\s+for\s+(.+?)(?:\s+next week)?\s*$/i,
+  );
+  if (applyLeave) {
+    const days = Number(applyLeave[1] ?? "1");
+    const window = nextWeekLeaveWindow(days);
+    return {
+      kind: "act",
+      tool: "apply_leave",
+      args: {
+        employee: trimName(applyLeave[3] ?? ""),
+        type: (applyLeave[2] ?? "paid").toLowerCase(),
+        days: String(days),
+        startDate: window.startDate,
+        endDate: window.endDate,
+        remarks: "Requested via HR assistant",
+      },
+    };
+  }
+
+  const clockIn = text.match(/^(?:please\s+)?(?:clock|check)\s+in\s+(.+)$/i);
+  if (clockIn) {
+    return {
+      kind: "act",
+      tool: "clock_in",
+      args: { employee: trimName(clockIn[1] ?? ""), date: "today" },
+    };
+  }
+
+  const clockOut = text.match(/^(?:please\s+)?(?:clock|check)\s+out\s+(.+)$/i);
+  if (clockOut) {
+    return {
+      kind: "act",
+      tool: "clock_out",
+      args: { employee: trimName(clockOut[1] ?? ""), date: "today" },
     };
   }
 
@@ -503,10 +712,17 @@ export function planAssistantTurn(question: string, history: ChatTurn[] = []): A
 
   const move = text.match(/move\s+(.+?)\s+to\s+(?:the\s+)?(.+?)(?:\s+department)?$/i);
   if (move) {
+    const destination = trimName(move[2] ?? "");
+    if (isRecruitmentMove(text, destination)) {
+      return {
+        kind: "clarify",
+        answer: "I cannot move recruitment candidates yet. Use Recruitment, or say “move Priya to Sales” for a department change.",
+      };
+    }
     return {
       kind: "act",
       tool: "update_employee",
-      args: { employee: trimName(move[1] ?? ""), department: trimName(move[2] ?? "") },
+      args: { employee: trimName(move[1] ?? ""), department: destination },
     };
   }
 

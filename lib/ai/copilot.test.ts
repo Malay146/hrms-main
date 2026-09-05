@@ -182,4 +182,98 @@ describe("planAssistantTurn", () => {
     assert.equal(isConfirm("yes"), true);
     assert.equal(isConfirm("Create department Design"), false);
   });
+
+  it("plans informal hire and waits for email", () => {
+    const hire = planAssistantTurn("hire Priya as a designer in Engineering");
+    assert.equal(hire.kind, "clarify");
+
+    const withEmail = planAssistantTurn("priya@acme.com", [
+      { role: "user", body: "hire Priya as a designer in Engineering" },
+      { role: "assistant", body: "I can add Priya as Designer in Engineering. What email should I use?" },
+    ]);
+    assert.equal(withEmail.kind, "act");
+    if (withEmail.kind === "act") {
+      assert.equal(withEmail.tool, "create_employee");
+      assert.equal(withEmail.args.fullName, "Priya");
+      assert.equal(withEmail.args.email, "priya@acme.com");
+      assert.equal(withEmail.args.department, "Engineering");
+      assert.equal(withEmail.args.jobTitle, "Designer");
+    }
+  });
+
+  it("plans apply leave, clock in/out, and named lookups", () => {
+    const leave = planAssistantTurn("apply 3 days paid leave for Rahul next week");
+    assert.equal(leave.kind, "act");
+    if (leave.kind === "act") {
+      assert.equal(leave.tool, "apply_leave");
+      assert.equal(leave.args.employee, "Rahul");
+      assert.equal(leave.args.type, "paid");
+      assert.equal(leave.args.days, "3");
+      assert.match(leave.args.startDate ?? "", /^\d{4}-\d{2}-\d{2}$/);
+      assert.match(leave.args.endDate ?? "", /^\d{4}-\d{2}-\d{2}$/);
+    }
+
+    const clockIn = planAssistantTurn("clock in Rahul");
+    assert.equal(clockIn.kind, "act");
+    if (clockIn.kind === "act") assert.equal(clockIn.tool, "clock_in");
+
+    const clockOut = planAssistantTurn("clock out Rahul");
+    assert.equal(clockOut.kind, "act");
+    if (clockOut.kind === "act") assert.equal(clockOut.tool, "clock_out");
+
+    const balance = planAssistantTurn("leave balance for Rahul");
+    assert.equal(balance.kind, "lookup");
+    if (balance.kind === "lookup") {
+      assert.equal(balance.tool, "lookup_leave_balance");
+      assert.equal(balance.args.employee, "Rahul");
+    }
+
+    const reports = planAssistantTurn("who reports to Priya");
+    assert.equal(reports.kind, "lookup");
+    if (reports.kind === "lookup") {
+      assert.equal(reports.tool, "lookup_reports");
+      assert.equal(reports.args.employee, "Priya");
+    }
+
+    const manager = planAssistantTurn("who does Rahul report to");
+    assert.equal(manager.kind, "lookup");
+    if (manager.kind === "lookup") assert.equal(manager.tool, "lookup_reports");
+
+    const late = planAssistantTurn("who is late today");
+    assert.equal(late.kind, "lookup");
+    if (late.kind === "lookup") {
+      assert.equal(late.tool, "lookup_attendance_exceptions");
+      assert.equal(late.args.kind, "late");
+    }
+
+    const missing = planAssistantTurn("who hasn't checked out");
+    assert.equal(missing.kind, "lookup");
+    if (missing.kind === "lookup") {
+      assert.equal(missing.tool, "lookup_attendance_exceptions");
+      assert.equal(missing.args.kind, "missing_checkout");
+    }
+
+    const compare = planAssistantTurn("compare Engineering vs Sales headcount");
+    assert.equal(compare.kind, "lookup");
+    if (compare.kind === "lookup") {
+      assert.equal(compare.tool, "lookup_headcount");
+      assert.equal(compare.args.department, "Engineering");
+      assert.equal(compare.args.other, "Sales");
+    }
+
+    const search = planAssistantTurn("find employee Priya Sharma");
+    assert.equal(search.kind, "lookup");
+    if (search.kind === "lookup") {
+      assert.equal(search.tool, "lookup_person");
+      assert.equal(search.args.query, "Priya Sharma");
+    }
+  });
+
+  it("refuses named salary and does not treat candidate moves as people moves", () => {
+    assert.equal(planAssistantTurn("what is Priya's salary").kind, "refuse");
+    assert.equal(planAssistantTurn("how much does Aarav earn").kind, "refuse");
+
+    const candidate = planAssistantTurn("move candidate Ananya to offer");
+    assert.notEqual(candidate.kind, "act");
+  });
 });
