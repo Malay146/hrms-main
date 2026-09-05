@@ -1,0 +1,28 @@
+---
+description: Follow the existing HRMS DESIGN.md for all frontend UI
+globs: app/**/*.tsx,components/**/*.tsx,app/**/*.css
+alwaysApply: true
+---
+
+# HRMS brand guidelines
+
+Read and follow [DESIGN.md](DESIGN.md) before adding or changing any UI. Do not invent a second visual language.
+
+## Must match
+
+- Zinc / near-black primary (`bg-zinc-900` / `text-zinc-950`). Status color only on badges and deltas (emerald / amber / red).
+- App pages live in `w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6`.
+- Page H1: `text-h1 font-medium`. Subtitle: `text-body-lg text-zinc-500 font-medium`.
+- Primary button: `rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98`.
+- Secondary: bordered `bg-surface hover:bg-surface-hover`.
+- Charts: grayscale zinc gradients only (`#E4E4E7` → `#18181B`). No rainbow series.
+- Font: Geist Sans. Icons: existing `components/icons` + Lucide. No new typeface or icon pack.
+- Dark mode: keep `zinc-*` classes that `app/globals.css` already remaps; prefer `surface` / `text-primary` / `border` tokens for new chrome.
+
+## Do not
+
+- Blue primary CTAs (`#1D4ED8` / `primary-hover`)
+- Heavy shadows on tables or KPI cards
+- Centered in-app page titles
+- Replacing sidebar custom icons with Lucide
+- New marketing motion on `/admin` or `/employee` routes

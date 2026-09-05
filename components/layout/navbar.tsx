@@ -10,6 +10,8 @@ import SettingsIcon from "@/components/icons/settings";
 import LogoutIcon from "@/components/icons/logout";
 import { cn } from "@/utils/cn";
 import Link from "next/link";
+import { useSessionUser } from "@/components/providers/session-context";
+import { firstAllowedAdminPath, isStaffRole, ROLE_LABELS } from "@/lib/permissions";
 
 // ChevronsUpDown Icon
 const ChevronsUpDownIcon = ({ className }: { className?: string }) => (
@@ -66,7 +68,13 @@ const initialNotifications = [
 
 export default function Navbar() {
   const pathname = usePathname();
-  const isAdmin = pathname.startsWith("/admin");
+  const user = useSessionUser();
+  const isStaff = isStaffRole(user.role);
+  const isAdminPortal = pathname.startsWith("/admin");
+  const notificationsHref = isAdminPortal ? "/admin/notifications" : "/employee/notifications";
+  const settingsHref = isAdminPortal ? "/admin/settings" : "/employee/settings";
+  const portalHref = isAdminPortal ? "/employee" : firstAllowedAdminPath(user.role);
+  const portalLabel = isAdminPortal ? "My self-service" : "Admin app";
 
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -142,6 +150,14 @@ export default function Navbar() {
 
       {/* Right Side Actions */}
       <div className="flex items-center gap-3">
+        {isStaff ? (
+          <Link
+            href={portalHref}
+            className="h-10 px-3 border border-border rounded-lg bg-surface hover:bg-surface-hover hover:border-border-strong text-sm font-semibold text-zinc-700 shadow-2xs active:scale-98 flex items-center transition-all"
+          >
+            {portalLabel}
+          </Link>
+        ) : null}
         {/* Notification Button & Dropdown */}
         <div className="relative" ref={popoverRef}>
           <button
@@ -248,7 +264,7 @@ export default function Navbar() {
               {/* Footer */}
               <div className="px-4 pt-1.5 border-t border-border flex justify-center">
                 <Link
-                  href="/notifications"
+                  href={notificationsHref}
                   onClick={() => setIsOpen(false)}
                   className="text-xs font-bold text-zinc-500 hover:text-zinc-950 transition-colors cursor-pointer w-full text-center py-1"
                 >
@@ -274,7 +290,7 @@ export default function Navbar() {
             <div className="relative w-8 h-8 rounded-md border border-border overflow-hidden shrink-0 bg-surface-secondary">
               <Image
                 src="/person.jpg"
-                alt="William Joseph Profile Avatar"
+                alt={`${user.fullName} profile avatar`}
                 fill
                 sizes="32px"
                 priority
@@ -283,10 +299,10 @@ export default function Navbar() {
             </div>
             <div className="flex flex-col leading-tight overflow-hidden">
               <span className="text-body-md font-semibold text-text-primary truncate">
-                William Joseph
+                {user.fullName}
               </span>
               <span className="text-caption text-text-tertiary truncate">
-                {isAdmin ? "HR Admin" : "Employee"}
+                {ROLE_LABELS[user.role]}
               </span>
             </div>
             <ChevronsUpDownIcon className="w-5 h-5 text-icon-secondary shrink-0 ml-1" />
@@ -297,20 +313,20 @@ export default function Navbar() {
               {/* Profile Card Header */}
               <div className="px-4 py-3 border-b border-border flex flex-col gap-0.5 select-none">
                 <span className="text-sm font-bold text-text-primary">
-                  William Joseph
+                  {user.fullName}
                 </span>
                 <span className="text-xs text-text-tertiary">
-                  william.joseph@company.com
+                  {user.email}
                 </span>
                 <span className="inline-flex items-center mt-1.5 px-2 py-0.5 rounded-sm text-[10px] font-bold bg-zinc-100 text-zinc-800 w-fit border border-zinc-200">
-                  {isAdmin ? "HR Admin" : "Employee"}
+                  {ROLE_LABELS[user.role]}
                 </span>
               </div>
 
               {/* Navigation Options */}
               <div className="p-1.5 flex flex-col gap-0.5">
                 <Link
-                  href={isAdmin ? "/admin/settings" : "/employee/settings"}
+                  href={settingsHref}
                   onClick={() => setIsProfileOpen(false)}
                   className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg text-text-secondary hover:text-text-primary hover:bg-surface-hover transition-colors"
                 >
