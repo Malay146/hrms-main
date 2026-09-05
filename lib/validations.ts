@@ -83,6 +83,33 @@ export const updateEmployeeSchema = z.object({
     .optional(),
 });
 
+export const upsertContractSchema = z
+  .object({
+    id: z.string().optional(),
+    employeeProfileId: z.string().min(1, "Employee is required."),
+    departmentId: z.string().optional().nullable(),
+    scheduleId: z.string().optional().nullable(),
+    salaryStructureId: z.string().optional().nullable(),
+    jobTitle: z.string().min(1, "Position is required."),
+    wage: z.number().positive("Wage must be greater than 0."),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date is required."),
+    endDate: z
+      .union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal(""), z.null()])
+      .optional(),
+    status: z.enum(["running", "expired"]),
+    notes: z.string().optional().nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const end = value.endDate && value.endDate.length > 0 ? value.endDate : null;
+    if (end && end < value.startDate) {
+      ctx.addIssue({
+        code: "custom",
+        message: "End date cannot be before start date.",
+        path: ["endDate"],
+      });
+    }
+  });
+
 export const scheduleLineSchema = z.object({
   weekday: z.number().int().min(1).max(7),
   startMin: z.number().int().min(0).max(24 * 60 - 1),

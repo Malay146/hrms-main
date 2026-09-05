@@ -21,3 +21,14 @@ export function initialsFromName(name: string) {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
 }
+
+/** Format: CON/YYYY/NNNN */
+export function nextContractCode(year: number, existingCodes: string[]) {
+  const prefix = `CON/${year}/`;
+  const max = existingCodes.reduce((highest, code) => {
+    if (!code.startsWith(prefix)) return highest;
+    const sequence = Number(code.slice(prefix.length));
+    return Number.isFinite(sequence) ? Math.max(highest, sequence) : highest;
+  }, 0);
+  return `${prefix}${String(max + 1).padStart(4, "0")}`;
+}
