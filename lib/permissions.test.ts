@@ -35,3 +35,20 @@ describe("PDF role matrix", () => {
     assert.equal(canAccessAdminPath("employee", "/admin/people/employees"), false);
   });
 });
+
+describe("AI analytics access", () => {
+  it("grants viewAiAnalytics to admin and hr_manager only", () => {
+    assert.equal(hasPermission("admin", "viewAiAnalytics"), true);
+    assert.equal(hasPermission("hr_manager", "viewAiAnalytics"), true);
+    assert.equal(hasPermission("hr_payroll_user", "viewAiAnalytics"), false);
+    assert.equal(hasPermission("hr_payroll_manager", "viewAiAnalytics"), false);
+    assert.equal(hasPermission("employee", "viewAiAnalytics"), false);
+  });
+
+  it("blocks payroll roles and employees from /admin/analytics", () => {
+    assert.equal(canAccessAdminPath("admin", "/admin/analytics"), true);
+    assert.equal(canAccessAdminPath("hr_manager", "/admin/analytics"), true);
+    assert.equal(canAccessAdminPath("hr_payroll_user", "/admin/analytics"), false);
+    assert.equal(canAccessAdminPath("employee", "/admin/analytics"), false);
+  });
+});

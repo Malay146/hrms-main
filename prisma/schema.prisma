@@ -182,6 +182,7 @@ model Organization {
   timeOffTypes     TimeOffType[]
   salaryStructures SalaryStructure[]
   payruns          Payrun[]
+  aiInsights       AiInsight[]
 
   @@map("organization")
 }
@@ -485,7 +486,24 @@ model PayslipLine {
   @@map("payslip_line")
 }
 
-/// Legacy payroll rows ΓÇö keep until Krishil retires in payrun Phase 3.
+model AiInsight {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  severity       String
+  title          String
+  body           String
+  action         String
+  href           String?
+  payload        Json?
+  generatedAt    DateTime     @default(now())
+  expiresAt      DateTime
+
+  @@index([organizationId, generatedAt])
+  @@map("ai_insight")
+}
+
+/// Legacy payroll rows — keep until Krishil retires in payrun Phase 3.
 model Payroll {
   id           String   @id @default(cuid())
   userId       String

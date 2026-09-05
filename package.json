@@ -7,7 +7,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test lib/leave-rules.test.ts lib/permissions.test.ts lib/payroll/compute.test.ts lib/payroll/warnings.test.ts lib/attendance-metrics.test.ts lib/contract-period.test.ts lib/schedule-hours.test.ts lib/time-off-balance.test.ts",
+    "test": "tsx --test lib/leave-rules.test.ts lib/permissions.test.ts lib/payroll/compute.test.ts lib/payroll/warnings.test.ts lib/attendance-metrics.test.ts lib/contract-period.test.ts lib/schedule-hours.test.ts lib/time-off-balance.test.ts lib/ai/metrics.test.ts lib/ai/sanitize.test.ts lib/ai/build-snapshot.test.ts lib/ai/insights.test.ts lib/ai/copilot.test.ts",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -15,6 +15,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.59",
     "@base-ui/react": "^1.6.0",
     "@dicebear/core": "^10.7.0",
     "@dicebear/styles": "^10.6.0",
@@ -23,6 +24,7 @@
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-query-devtools": "^5.102.8",
     "@vercel/analytics": "^2.0.1",
+    "ai": "^7.0.93",
     "better-auth": "^1.7.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

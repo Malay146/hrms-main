@@ -27,6 +27,7 @@ export type Permission =
   | "viewSalaryConfig"
   | "manageSalaryConfig"
   | "createUsers"
+  | "viewAiAnalytics"
   | "adminExtras";
 
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -41,6 +42,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "viewSalaryConfig",
     "manageSalaryConfig",
     "createUsers",
+    "viewAiAnalytics",
     "adminExtras",
   ],
   hr_manager: [
@@ -48,6 +50,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "managePeople",
     "approveLeave",
     "manageTimeOffTypes",
+    "viewAiAnalytics",
   ],
   hr_payroll_manager: [
     "viewAdminDashboard",
@@ -131,14 +134,17 @@ export function canAccessAdminPath(role: Role | string | undefined, pathname: st
     return hasPermission(current, "viewPayrollAll");
   }
 
+  if (pathname.startsWith("/admin/analytics")) {
+    return hasPermission(current, "viewAiAnalytics");
+  }
+
   if (pathname.startsWith("/admin/notifications") || pathname.startsWith("/admin/settings")) {
     return true;
   }
 
   if (
     pathname.startsWith("/admin/hr/recruitment") ||
-    pathname.startsWith("/admin/hr/performance") ||
-    pathname.startsWith("/admin/analytics")
+    pathname.startsWith("/admin/hr/performance")
   ) {
     return hasPermission(current, "adminExtras");
   }

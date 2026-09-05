@@ -111,6 +111,7 @@ async function main() {
   await prisma.salaryStructure.deleteMany();
   await prisma.contract.deleteMany();
   await prisma.leaveRequest.deleteMany();
+  await prisma.aiInsight.deleteMany();
   await prisma.timeOffAllocation.deleteMany();
   await prisma.timeOffType.deleteMany();
   await prisma.attendance.deleteMany();
@@ -341,6 +342,41 @@ async function main() {
   ];
 
   for (const leave of leaveSeeds) {
+    await prisma.leaveRequest.create({
+      data: {
+        userId: leave.userId,
+        typeId: timeOffTypes[leave.code],
+        startDate: dateFromKey(leave.start),
+        endDate: dateFromKey(leave.end),
+        duration: inclusiveDayCount(leave.start, leave.end),
+        remarks: leave.remarks,
+        status: leave.status,
+        adminComment: leave.adminComment ?? null,
+      },
+    });
+  }
+
+  const clashLeaves = [
+    {
+      userId: userIds["bruce.banner@oddo.com"],
+      code: "paid",
+      start: daysAgo(1),
+      end: daysAgo(-1),
+      remarks: "On-site workshop with the frontend team",
+      status: "approved" as const,
+      adminComment: "Approved",
+    },
+    {
+      userId: userIds["john.cena@oddo.com"],
+      code: "paid",
+      start: daysAgo(1),
+      end: daysAgo(-1),
+      remarks: "Family in town overlapping the workshop week",
+      status: "pending" as const,
+    },
+  ];
+
+  for (const leave of clashLeaves) {
     await prisma.leaveRequest.create({
       data: {
         userId: leave.userId,
