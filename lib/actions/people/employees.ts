@@ -323,7 +323,7 @@ export async function listEmployees(
 export async function getEmployeeByCode(employeeId: string): Promise<ActionResult<EmployeeListItem>> {
   try {
     await requirePermission("managePeople");
-    const profile = await prisma.employeeProfile.findUnique({
+    const profile = await prisma.employeeProfile.findFirst({
       where: { employeeId },
       include: {
         user: { select: { email: true } },
@@ -354,7 +354,7 @@ export async function getEmployeeHub(
   try {
     await requirePermission("managePeople");
     const today = kolkataTodayKey();
-    const profile = await prisma.employeeProfile.findUnique({
+    const profile = await prisma.employeeProfile.findFirst({
       where: { employeeId: employeeCode },
       include: {
         user: { select: { email: true } },
@@ -483,7 +483,7 @@ export async function updateEmployeeAction(input: {
       return { ok: false, error: firstZodError(parsed.error) };
     }
 
-    const existing = await prisma.employeeProfile.findUnique({
+    const existing = await prisma.employeeProfile.findFirst({
       where: { employeeId: parsed.data.employeeId },
       select: {
         id: true,

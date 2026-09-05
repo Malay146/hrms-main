@@ -99,6 +99,32 @@ describe("db invariants catalog", () => {
     assert.match(sql, /status = 'approved'/);
   });
 
+  it("bcnf-unique-keys payrun dedup aborts instead of deleting paid or validated payroll", () => {
+    const sql = readFileSync(UNIQUE_MIGRATION_PATH, "utf8").replace(/\r\n/g, "\n");
+    const payrunStart = sql.indexOf("-- One payrun per org");
+    assert.ok(payrunStart >= 0, "expected a payrun dedup section");
+    const payrunSql = sql.slice(
+      payrunStart,
+      sql.indexOf("-- Idempotent recreate") >= payrunStart
+        ? sql.indexOf("-- Idempotent recreate")
+        : sql.indexOf("-- Department names unique per org (case-insensitive) — SQL-only"),
+    );
+    assert.match(payrunSql, /RAISE EXCEPTION/i);
+    assert.match(payrunSql, /paid|validated/);
+    assert.match(payrunSql, /status\s+IN\s*\(\s*'paid'\s*,\s*'validated'\s*\)/i);
+  });
+
+  it("employees.ts does not findUnique EmployeeProfile by employeeId alone", () => {
+    const src = readFileSync(
+      join(process.cwd(), "lib/actions/people/employees.ts"),
+      "utf8",
+    );
+    assert.doesNotMatch(
+      src,
+      /employeeProfile\.findUnique\(\s*\{\s*where:\s*\{\s*employeeId\b/,
+    );
+  });
+
   it("bcnf-unique-keys migration includes every INVARIANT_SQL.uniques snippet verbatim", () => {
     assert.ok(
       existsSync(UNIQUE_MIGRATION_PATH),

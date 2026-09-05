@@ -820,10 +820,20 @@ async function main() {
   const structure = structureEarly;
 
   const aaravProfile = await prisma.employeeProfile.findUnique({
-    where: { employeeId: "ODDO-2026-008" },
+    where: {
+      organizationId_employeeId: {
+        organizationId: organization.id,
+        employeeId: "ODDO-2026-008",
+      },
+    },
   });
   const markProfile = await prisma.employeeProfile.findUnique({
-    where: { employeeId: "ODDO-2026-006" },
+    where: {
+      organizationId_employeeId: {
+        organizationId: organization.id,
+        employeeId: "ODDO-2026-006",
+      },
+    },
   });
   if (aaravProfile) {
     const computed = computePayslip(REGULAR_SALARY_RULES, {

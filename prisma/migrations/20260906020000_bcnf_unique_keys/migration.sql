@@ -138,7 +138,35 @@ WHERE w.id NOT IN (
   ORDER BY "scheduleId", "weekday", id ASC
 );
 
--- One allocation per employee / type / year. Repoint leave_request first.
+-- One allocation per employee / type / year. Fold balances onto the oldest row.
+WITH keepers AS (
+  SELECT DISTINCT ON ("employeeId", "typeId", "validityYear")
+    id,
+    "employeeId",
+    "typeId",
+    "validityYear"
+  FROM "time_off_allocation"
+  ORDER BY "employeeId", "typeId", "validityYear", "createdAt" ASC, id ASC
+),
+totals AS (
+  SELECT
+    k.id AS keep_id,
+    SUM(a.allocated) AS allocated,
+    SUM(a.taken) AS taken
+  FROM "time_off_allocation" a
+  JOIN keepers k
+    ON a."employeeId" = k."employeeId"
+   AND a."typeId" = k."typeId"
+   AND a."validityYear" = k."validityYear"
+  GROUP BY k.id
+)
+UPDATE "time_off_allocation" keeper
+SET
+  allocated = totals.allocated,
+  taken = LEAST(totals.taken, totals.allocated)
+FROM totals
+WHERE keeper.id = totals.keep_id;
+
 WITH keepers AS (
   SELECT DISTINCT ON ("employeeId", "typeId", "validityYear")
     id,
@@ -170,36 +198,30 @@ WHERE a.id NOT IN (
 );
 
 -- One payrun per org / period / employee type (NULL type coalesced).
--- Drop colliding payslips on the duplicate run, remappoint the rest, then delete.
-WITH keepers AS (
-  SELECT DISTINCT ON ("organizationId", "periodStart", "periodEnd", COALESCE("employeeType"::text, ''))
-    id,
-    "organizationId",
-    "periodStart",
-    "periodEnd",
-    COALESCE("employeeType"::text, '') AS typ
-  FROM "payrun"
-  ORDER BY "organizationId", "periodStart", "periodEnd", COALESCE("employeeType"::text, ''), "createdAt" ASC, id ASC
-),
-dups AS (
-  SELECT p.id AS dup_id, k.id AS keep_id
-  FROM "payrun" p
-  JOIN keepers k
-    ON p."organizationId" = k."organizationId"
-   AND p."periodStart" = k."periodStart"
-   AND p."periodEnd" = k."periodEnd"
-   AND COALESCE(p."employeeType"::text, '') = k.typ
-  WHERE p.id <> k.id
-)
-DELETE FROM "payslip" slip
-USING dups
-WHERE slip."payrunId" = dups.dup_id
-  AND EXISTS (
+-- Keeper is highest status (paid > validated > computed > draft), then oldest.
+-- Abort if a group has more than one paid/validated run, or if a collision
+-- would delete a paid/validated payslip.
+DO $$
+BEGIN
+  IF EXISTS (
     SELECT 1
-    FROM "payslip" kept
-    WHERE kept."payrunId" = dups.keep_id
-      AND kept."employeeId" = slip."employeeId"
-  );
+    FROM "payrun"
+    GROUP BY "organizationId", "periodStart", "periodEnd", COALESCE("employeeType"::text, '')
+    HAVING COUNT(*) FILTER (WHERE status IN ('paid', 'validated')) > 1
+  ) THEN
+    RAISE EXCEPTION 'cannot collapse payruns: more than one paid or validated run in the same org/period/type';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM "payslip" s
+    JOIN "payrun" p ON p.id = s."payrunId"
+    GROUP BY p."organizationId", p."periodStart", p."periodEnd", COALESCE(p."employeeType"::text, ''), s."employeeId"
+    HAVING COUNT(*) FILTER (WHERE s.status IN ('paid', 'validated')) > 1
+  ) THEN
+    RAISE EXCEPTION 'cannot collapse payruns: would delete a paid or validated payslip';
+  END IF;
+END $$;
 
 WITH keepers AS (
   SELECT DISTINCT ON ("organizationId", "periodStart", "periodEnd", COALESCE("employeeType"::text, ''))
@@ -209,7 +231,70 @@ WITH keepers AS (
     "periodEnd",
     COALESCE("employeeType"::text, '') AS typ
   FROM "payrun"
-  ORDER BY "organizationId", "periodStart", "periodEnd", COALESCE("employeeType"::text, ''), "createdAt" ASC, id ASC
+  ORDER BY
+    "organizationId",
+    "periodStart",
+    "periodEnd",
+    COALESCE("employeeType"::text, ''),
+    CASE status
+      WHEN 'paid' THEN 0
+      WHEN 'validated' THEN 1
+      WHEN 'computed' THEN 2
+      ELSE 3
+    END,
+    "createdAt" ASC,
+    id ASC
+),
+group_runs AS (
+  SELECT p.id AS run_id, k.id AS keep_id
+  FROM "payrun" p
+  JOIN keepers k
+    ON p."organizationId" = k."organizationId"
+   AND p."periodStart" = k."periodStart"
+   AND p."periodEnd" = k."periodEnd"
+   AND COALESCE(p."employeeType"::text, '') = k.typ
+),
+ranked AS (
+  SELECT
+    s.id,
+    ROW_NUMBER() OVER (
+      PARTITION BY g.keep_id, s."employeeId"
+      ORDER BY
+        CASE WHEN s.status IN ('paid', 'validated') THEN 0 ELSE 1 END,
+        CASE WHEN s."payrunId" = g.keep_id THEN 0 ELSE 1 END,
+        s."createdAt" ASC,
+        s.id ASC
+    ) AS rn
+  FROM "payslip" s
+  JOIN group_runs g ON g.run_id = s."payrunId"
+)
+DELETE FROM "payslip" s
+USING ranked r
+WHERE s.id = r.id
+  AND r.rn > 1
+  AND s.status NOT IN ('paid', 'validated');
+
+WITH keepers AS (
+  SELECT DISTINCT ON ("organizationId", "periodStart", "periodEnd", COALESCE("employeeType"::text, ''))
+    id,
+    "organizationId",
+    "periodStart",
+    "periodEnd",
+    COALESCE("employeeType"::text, '') AS typ
+  FROM "payrun"
+  ORDER BY
+    "organizationId",
+    "periodStart",
+    "periodEnd",
+    COALESCE("employeeType"::text, ''),
+    CASE status
+      WHEN 'paid' THEN 0
+      WHEN 'validated' THEN 1
+      WHEN 'computed' THEN 2
+      ELSE 3
+    END,
+    "createdAt" ASC,
+    id ASC
 ),
 dups AS (
   SELECT p.id AS dup_id, k.id AS keep_id
@@ -230,7 +315,19 @@ DELETE FROM "payrun" p
 WHERE p.id NOT IN (
   SELECT DISTINCT ON ("organizationId", "periodStart", "periodEnd", COALESCE("employeeType"::text, '')) id
   FROM "payrun"
-  ORDER BY "organizationId", "periodStart", "periodEnd", COALESCE("employeeType"::text, ''), "createdAt" ASC, id ASC
+  ORDER BY
+    "organizationId",
+    "periodStart",
+    "periodEnd",
+    COALESCE("employeeType"::text, ''),
+    CASE status
+      WHEN 'paid' THEN 0
+      WHEN 'validated' THEN 1
+      WHEN 'computed' THEN 2
+      ELSE 3
+    END,
+    "createdAt" ASC,
+    id ASC
 );
 
 -- Idempotent recreate after a partial deploy (enum→text unique is not IMMUTABLE).

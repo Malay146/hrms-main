@@ -398,7 +398,7 @@ export async function moveEmployeeDepartmentAction(input: {
       return { ok: false, error: firstZodError(parsed.error) };
     }
 
-    const profile = await prisma.employeeProfile.findUnique({
+    const profile = await prisma.employeeProfile.findFirst({
       where: { employeeId: parsed.data.employeeId },
       include: { user: { select: { email: true } } },
     });
