@@ -15,9 +15,11 @@ import {
   formatPayrollMonth,
   inclusiveDayCount,
   isLateCheckIn,
+  kolkataTodayKey,
   toDateKey,
   workingHours,
 } from "@/lib/dates";
+import { deriveAttendanceMetrics } from "@/lib/attendance-metrics";
 import { initialsFromName } from "@/lib/employee-id";
 
 export function departmentName(
@@ -84,29 +86,62 @@ export function mapAttendance(row: {
   checkIn: Date | null;
   checkOut: Date | null;
   status: AttendanceStatus;
+  workedHours?: { toString(): string } | number | null;
+  overtimeHours?: { toString(): string } | number | null;
+  manualEdit?: boolean;
   user: {
     email: string;
     profile: {
       fullName: string;
+      employeeId?: string | null;
       department?: string | { name: string } | null;
+      schedule?: {
+        lines: { weekday: number; startMin: number; endMin: number; breakMin: number }[];
+      } | null;
     } | null;
   };
 }): AttendanceLogItem {
-  const late = row.status === "present" && isLateCheckIn(row.checkIn);
+  const dateKey = toDateKey(row.date);
+  const todayKey = kolkataTodayKey();
+  const metrics = deriveAttendanceMetrics({
+    checkIn: row.checkIn,
+    checkOut: row.checkOut,
+    dateKey,
+    todayKey,
+    scheduleLines: row.user.profile?.schedule?.lines,
+  });
+  const storedWorked =
+    row.workedHours == null || row.workedHours === undefined
+      ? null
+      : Number(row.workedHours);
+  const workedHours = storedWorked ?? metrics.workedHours;
+  const overtimeHours =
+    row.overtimeHours == null || row.overtimeHours === undefined
+      ? metrics.overtimeHours
+      : Number(row.overtimeHours);
+  const late =
+    row.status === "present" &&
+    (metrics.late || isLateCheckIn(row.checkIn, metrics.line?.startMin));
   const name = row.user.profile?.fullName ?? row.user.email;
   return {
     id: row.id,
     userId: row.userId,
+    employeeCode: row.user.profile?.employeeId ?? null,
     name,
     email: row.user.email,
     avatar: initialsFromName(name),
     department: departmentName(row.user.profile?.department),
     date: formatDisplayDate(row.date),
+    dateKey,
     checkIn: formatDisplayTime(row.checkIn),
     checkOut: formatDisplayTime(row.checkOut),
-    workingHours: formatHours(workingHours(row.checkIn, row.checkOut)),
+    workingHours: workedHours == null ? formatHours(workingHours(row.checkIn, row.checkOut)) : formatHours(workedHours),
+    workedHours,
+    overtimeHours,
     status: late ? "Late" : ATTENDANCE_STATUS_LABELS[row.status],
     late,
+    manualEdit: Boolean(row.manualEdit),
+    missingCheckout: metrics.missingCheckout,
   };
 }
 
