@@ -141,7 +141,7 @@ export function canAccessAdminPath(role: Role | string | undefined, pathname: st
     return hasPermission(current, "managePerformance");
   }
 
-  if (pathname.startsWith("/admin/notifications") || pathname.startsWith("/admin/settings")) {
+  if (pathname.startsWith("/admin/notifications") || pathname.startsWith("/admin/settings") || pathname.startsWith("/admin/developers")) {
     return true;
   }
 

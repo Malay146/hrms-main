@@ -67,3 +67,12 @@ describe("Performance access", () => {
     assert.equal(canAccessAdminPath("employee", "/admin/hr/performance"), false);
   });
 });
+
+describe("API docs access", () => {
+  it("lets staff open /admin/developers and blocks employees", () => {
+    assert.equal(canAccessAdminPath("admin", "/admin/developers"), true);
+    assert.equal(canAccessAdminPath("hr_manager", "/admin/developers"), true);
+    assert.equal(canAccessAdminPath("hr_payroll_user", "/admin/developers"), true);
+    assert.equal(canAccessAdminPath("employee", "/admin/developers"), false);
+  });
+});

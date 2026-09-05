@@ -131,6 +131,11 @@ const adminNavItems: SidebarItemType[] = [
     href: "/admin/analytics",
   },
   {
+    label: "API",
+    icon: BookIcon,
+    href: "/admin/developers",
+  },
+  {
     label: "divider",
     icon: () => null,
     isDivider: true,
