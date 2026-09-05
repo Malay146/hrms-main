@@ -80,6 +80,12 @@ interface SidebarItemType {
   isDivider?: boolean;
 }
 
+function isActivePath(pathname: string, href: string) {
+  if (pathname === href || pathname === `${href}/`) return true;
+  if (href === "/admin" || href === "/employee") return false;
+  return pathname.startsWith(`${href}/`);
+}
+
 // Sidebar Navigation Configuration
 const adminNavItems: SidebarItemType[] = [
   {
@@ -109,7 +115,6 @@ const adminNavItems: SidebarItemType[] = [
       { label: "Payslips", href: "/admin/hr/payroll/payslips" },
       { label: "Structures", href: "/admin/hr/payroll/structures" },
       { label: "Rules", href: "/admin/hr/payroll/rules" },
-      { label: "Dashboard", href: "/admin" },
     ],
   },
   {
@@ -139,11 +144,6 @@ const adminNavItems: SidebarItemType[] = [
     label: "Notification",
     icon: NotificationIcon,
     href: "/admin/notifications",
-  },
-  {
-    label: "Users",
-    icon: PeopleIcon,
-    href: "/admin/users",
   },
   {
     label: "Settings",
@@ -301,20 +301,13 @@ export default function Sidebar() {
           const isExpandable = !!item.children;
           const isExpanded = expandedSections[item.label] && !isCollapsed;
           const isItemActive =
-            item.href === pathname ||
+            Boolean(item.href && isActivePath(pathname, item.href)) ||
             (item.children &&
-              item.children.some(
-                (child) =>
-                  pathname === child.href ||
-                  pathname.startsWith(child.href + "/"),
-              ));
+              item.children.some((child) => isActivePath(pathname, child.href)));
 
           const activeChildIndex = item.children
             ? item.children.reduce((best, child, index) => {
-                const match =
-                  pathname === child.href ||
-                  pathname.startsWith(child.href + "/");
-                if (!match) return best;
+                if (!isActivePath(pathname, child.href)) return best;
                 if (best < 0) return index;
                 return child.href.length > (item.children?.[best]?.href.length ?? 0)
                   ? index
@@ -372,7 +365,7 @@ export default function Sidebar() {
                       const isChildActive = childIndex === activeChildIndex;
                       return (
                         <Link
-                          key={child.label}
+                          key={child.href}
                           href={child.href}
                           className={cn(
                             "h-8 flex items-center pl-[32px] text-body rounded-md transition-colors duration-150",
@@ -394,7 +387,7 @@ export default function Sidebar() {
           // Single Link Top-level items
           return (
             <Link
-              key={item.label}
+              key={item.href || item.label}
               href={item.href || "#"}
               className={cn(baseItemClass, activeItemClass)}
             >

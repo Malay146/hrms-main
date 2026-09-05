@@ -3,7 +3,10 @@ import { PrismaClient } from "../generated/prisma/client";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
+  prismaGeneration?: string;
 };
+
+const PRISMA_GENERATION = "employee-profile-department-relation";
 
 function createPrismaClient() {
   const connectionString = process.env.DATABASE_URL;
@@ -17,6 +20,11 @@ function createPrismaClient() {
   });
 
   return new PrismaClient({ adapter });
+}
+
+if (globalForPrisma.prismaGeneration !== PRISMA_GENERATION) {
+  globalForPrisma.prisma = undefined;
+  globalForPrisma.prismaGeneration = PRISMA_GENERATION;
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
