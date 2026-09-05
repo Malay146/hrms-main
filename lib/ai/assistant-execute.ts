@@ -9,10 +9,10 @@ import {
 } from "@/lib/actions/people/departments";
 import { createEmployeeAction, getEmployeeHub, updateEmployeeAction } from "@/lib/actions/people/employees";
 import { applyLeaveForEmployeeAction, decideLeaveAction } from "@/lib/actions/people/leave";
-import { dateFromKey, isLateCheckIn, kolkataTodayKey } from "@/lib/shared/dates";
+import { dateFromKey, isLateCheckIn, kolkataTodayKey, toDateKey } from "@/lib/shared/dates";
 import type { LeaveType, Role, SessionUser } from "@/lib/shared/types";
-import type { AssistantPlan } from "@/lib/ai/copilot";
-import { sqlDepartmentHeadcount, sqlFindPeople, sqlOrgHeadcount, sqlPeopleInDepartment } from "@/lib/ai/copilot-query";
+import { COPILOT_NO_PAYROLL, type AssistantPlan } from "@/lib/ai/copilot";
+import { sqlAttendanceSummary, sqlDepartmentHeadcount, sqlFindPeople, sqlLatestPaidPayrollNet, sqlLeaveToday, sqlOrgHeadcount, sqlPendingLeave, sqlPeopleInDepartment, sqlPerformanceSummary } from "@/lib/ai/copilot-query";
 
 export type AssistantExecuteResult = {
   answer: string;
@@ -581,6 +581,77 @@ export async function executeAssistantLookup(
     return {
       answer: `${matches.length} ${kind === "missing_checkout" ? "missing checkout" : "late"}: ${names}.`,
       source: "Attendance exceptions",
+    };
+  }
+
+  if (plan.tool === "lookup_leave_today") {
+    const rows = await sqlLeaveToday(orgId);
+    if (rows.length === 0) {
+      return { answer: "Nobody is on approved leave today.", source: "Leave query" };
+    }
+    const names = rows.map((row) => `${row.fullName} (${row.employeeId}, ${row.department})`).join("; ");
+    return {
+      answer: `${rows.length} on approved leave today: ${names}.`,
+      source: `Queried ${rows.length} leave rows`,
+    };
+  }
+
+  if (plan.tool === "lookup_pending_leave") {
+    const rows = await sqlPendingLeave(orgId);
+    if (rows.length === 0) {
+      return { answer: "There are no pending leave requests.", source: "Leave query" };
+    }
+    const names = rows
+      .map((row) => `${row.fullName} (${row.employeeId}) ${toDateKey(row.startDate)}–${toDateKey(row.endDate)}`)
+      .join("; ");
+    return {
+      answer: `${rows.length} pending leave request(s): ${names}.`,
+      source: `Queried ${rows.length} pending leaves`,
+    };
+  }
+
+  if (plan.tool === "lookup_attendance_summary") {
+    const row = await sqlAttendanceSummary(orgId);
+    const pct = row.monthRows > 0 ? Math.round((row.monthPresent / row.monthRows) * 1000) / 10 : 0;
+    return {
+      answer: `This month ${row.monthPresent} of ${row.monthRows} attendance records are present or half-day (${pct}%). Today: ${row.todayPresent} present, ${row.todayAbsent} absent, ${row.todayLeave} on leave.`,
+      source: "Attendance query",
+    };
+  }
+
+  if (plan.tool === "lookup_payroll") {
+    if (!hasPermission(user.role, "viewPayrollAll")) {
+      return { answer: COPILOT_NO_PAYROLL, source: "Permission check" };
+    }
+    const row = await sqlLatestPaidPayrollNet(orgId);
+    if (!row) {
+      return { answer: "There is no paid payrun yet.", source: "Payroll query" };
+    }
+    return {
+      answer: `Latest paid payrun “${row.name}” has net total ${row.net} across ${row.slips} payslip(s). Individual wages are not shown.`,
+      source: "Payroll query",
+    };
+  }
+
+  if (plan.tool === "lookup_performance") {
+    const row = await sqlPerformanceSummary(orgId);
+    const avg = row.avgRating == null ? "no submitted ratings yet" : `${Math.round(row.avgRating * 10) / 10} out of 5`;
+    return {
+      answer: `Average review rating is ${avg}. ${row.draft} draft, ${row.submitted} submitted, ${row.acknowledged} acknowledged.`,
+      source: "Performance query",
+    };
+  }
+
+  if (plan.tool === "lookup_org_overview") {
+    const [headcount, pending, onLeave, attendance] = await Promise.all([
+      sqlOrgHeadcount(orgId),
+      sqlPendingLeave(orgId),
+      sqlLeaveToday(orgId),
+      sqlAttendanceSummary(orgId),
+    ]);
+    return {
+      answer: `${headcount} active people. Today ${attendance.todayPresent} present, ${onLeave.length} on leave, ${attendance.todayAbsent} absent. ${pending.length} leave request(s) pending.`,
+      source: "Organisation query",
     };
   }
 

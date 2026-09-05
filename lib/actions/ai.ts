@@ -9,7 +9,6 @@ import {
   generateLeaveBrief,
   isAiConfigured,
   phraseAssistantChat,
-  phraseCopilotAnswer,
   planCopilotTurn,
 } from "@/lib/ai/client";
 import { executeAssistantLookup, executeAssistantPlan } from "@/lib/ai/assistant-execute";
@@ -18,11 +17,11 @@ import {
   classifyCopilotQuestion,
   confirmationPrompt,
   conversationTitleFromQuestion,
-  COPILOT_NO_PAYROLL,
   COPILOT_REFUSAL,
   isCancel,
   isConfirm,
   isSmallTalk,
+  lookupForCopilotIntent,
   parsePendingAction,
   pendingReminder,
   planAssistantTurn,
@@ -536,6 +535,13 @@ export async function askHrCopilot(
     if (intent === "refuse") {
       return finish({ answer: COPILOT_REFUSAL, source: "Refused out-of-scope request", acted: false });
     }
+    if (plan.kind === "answer") {
+      const tool = lookupForCopilotIntent(intent);
+      if (tool) {
+        const fromSql = await applyPlan({ kind: "lookup", tool, args: {} });
+        if (fromSql) return fromSql;
+      }
+    }
     if (plan.kind === "chat" || intent === "chat") {
       const recentCreate = history.some((turn) => /(?:add|create|make).{0,40}departments?/i.test(turn.body));
       const alreadyCreated = history.some(
@@ -559,101 +565,16 @@ export async function askHrCopilot(
       return finish({ answer, source: "HR assistant", acted: false });
     }
 
-    const assembled = await assembleAiSnapshot();
-    const today = kolkataTodayKey();
-    const facts: string[] = [];
-    let source = "Workforce metrics for the current period";
-
-    if (intent === "leave_today") {
-      const onLeave = await prisma.leaveRequest.findMany({
-        where: {
-          status: "approved",
-          startDate: { lte: dateFromKey(today) },
-          endDate: { gte: dateFromKey(today) },
-          user: { profile: { organizationId: assembled.orgId } },
-        },
-        include: {
-          user: {
-            select: {
-              profile: { select: { fullName: true, department: { select: { name: true } } } },
-            },
-          },
-        },
-      });
-      const names = assembled.canPeople
-        ? onLeave.map((row) => row.user.profile?.fullName ?? "Employee")
-        : [];
-      facts.push(`${onLeave.length} approved leave(s) overlap today.`);
-      if (names.length) facts.push(`People: ${names.join(", ")}.`);
-      source = `${onLeave.length} approved leaves overlapping today`;
+    const fallbackLookup = lookupForCopilotIntent(intent);
+    if (fallbackLookup) {
+      const fromSql = await applyPlan({ kind: "lookup", tool: fallbackLookup, args: {} });
+      if (fromSql) return fromSql;
     }
 
-    if (intent === "attendance") {
-      facts.push(`Org attendance rate is ${assembled.data.attendancePct}% for ${assembled.data.periodLabel}.`);
-      source = `Attendance rate ${assembled.data.attendancePct}%`;
-    }
-
-    if (intent === "pending_leave") {
-      facts.push(`${assembled.data.pendingApprovals} leave request(s) are pending.`);
-      source = `${assembled.data.pendingApprovals} pending leave requests`;
-    }
-
-    if (intent === "payroll") {
-      if (!assembled.canPayroll) {
-        return finish({ answer: COPILOT_NO_PAYROLL, source: "Permission check", acted: false });
-      }
-      facts.push(
-        assembled.data.payrollNet == null
-          ? "No paid payrun total is available."
-          : `Latest paid net total is ${assembled.data.payrollNet}.`,
-      );
-      source = "Latest paid payrun net total";
-    }
-
-    if (intent === "performance") {
-      const avg = assembled.data.performance.avgRating;
-      facts.push(
-        avg == null
-          ? "No submitted performance ratings yet."
-          : `Average submitted rating is ${avg} out of 5.`,
-      );
-      facts.push(
-        `${assembled.data.performance.pendingReviews} draft review(s) and ${assembled.data.performance.submittedReviews} waiting for employee acknowledgement.`,
-      );
-      source = "Performance review aggregates";
-    }
-
-    if (intent === "general") {
-      facts.push(
-        `Health score ${assembled.data.health.score} (${assembled.data.health.band}). Attendance ${assembled.data.attendancePct}%. Late ${assembled.data.latePct}%. Pending leave ${assembled.data.pendingApprovals}. Approved leave days ${assembled.data.leaveDaysApproved}.`,
-      );
-    }
-
-    const factText = facts.join(" ");
-    const fallbackAnswer =
-      intent === "general"
-        ? `Hi ${firstName}. Team health is ${assembled.data.health.score} (${assembled.data.health.band}). Attendance is ${assembled.data.attendancePct}%, with ${assembled.data.pendingApprovals} pending leave request(s). What would you like to look at first?`
-        : factText || chatReply(firstName, asked);
-    const payload: Omit<AiCopilotResult, "conversationId"> = isAiConfigured()
-      ? {
-          answer: await phraseCopilotAnswer({
-            question: asked,
-            facts: factText,
-            firstName,
-          }),
-          source,
-          acted: false,
-          needsConfirmation: false,
-          confirmationSummary: null,
-        }
-      : {
-          answer: fallbackAnswer,
-          source,
-          acted: false,
-          needsConfirmation: false,
-          confirmationSummary: null,
-        };
-    return finish(payload);
+    const answer = isAiConfigured()
+      ? await phraseAssistantChat({ question: asked, firstName, history })
+      : chatReply(firstName, asked);
+    return finish({ answer, source: "HR assistant", acted: false });
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not answer.") };
   }

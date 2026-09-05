@@ -36,7 +36,13 @@ export type AssistantLookupTool =
   | "lookup_person"
   | "lookup_leave_balance"
   | "lookup_reports"
-  | "lookup_attendance_exceptions";
+  | "lookup_attendance_exceptions"
+  | "lookup_leave_today"
+  | "lookup_pending_leave"
+  | "lookup_attendance_summary"
+  | "lookup_payroll"
+  | "lookup_performance"
+  | "lookup_org_overview";
 
 export type ChatTurn = { role: "user" | "assistant"; body: string };
 
@@ -70,6 +76,12 @@ export const LOOKUP_TOOLS = [
   "lookup_leave_balance",
   "lookup_reports",
   "lookup_attendance_exceptions",
+  "lookup_leave_today",
+  "lookup_pending_leave",
+  "lookup_attendance_summary",
+  "lookup_payroll",
+  "lookup_performance",
+  "lookup_org_overview",
 ] as const;
 
 const REFUSE_RE =
@@ -398,6 +410,16 @@ export function summarizePendingAction(tool: AssistantToolName, args: Record<str
   }
 }
 
+export function lookupForCopilotIntent(intent: CopilotIntent): AssistantLookupTool | null {
+  if (intent === "leave_today") return "lookup_leave_today";
+  if (intent === "pending_leave") return "lookup_pending_leave";
+  if (intent === "attendance") return "lookup_attendance_summary";
+  if (intent === "payroll") return "lookup_payroll";
+  if (intent === "performance") return "lookup_performance";
+  if (intent === "general") return "lookup_org_overview";
+  return null;
+}
+
 export function classifyCopilotQuestion(question: string): CopilotIntent {
   const text = question.trim();
   if (!text) return "refuse";
@@ -568,6 +590,30 @@ export function planAssistantTurn(question: string, history: ChatTurn[] = []): A
       tool: "lookup_attendance_exceptions",
       args: { kind: "missing_checkout" },
     };
+  }
+
+  if (LEAVE_TODAY_RE.test(text)) {
+    return { kind: "lookup", tool: "lookup_leave_today", args: {} };
+  }
+
+  if (PENDING_RE.test(text) && /leave|approval/i.test(text)) {
+    return { kind: "lookup", tool: "lookup_pending_leave", args: {} };
+  }
+
+  if (PAYROLL_RE.test(text) && !/compute|email|send|create payrun/i.test(text)) {
+    return { kind: "lookup", tool: "lookup_payroll", args: {} };
+  }
+
+  if (PERFORMANCE_RE.test(text) && !/create|submit|cycle/i.test(text)) {
+    return { kind: "lookup", tool: "lookup_performance", args: {} };
+  }
+
+  if (HEALTH_RE.test(text)) {
+    return { kind: "lookup", tool: "lookup_org_overview", args: {} };
+  }
+
+  if (ATTENDANCE_RE.test(text) && !/mark\s+/i.test(text)) {
+    return { kind: "lookup", tool: "lookup_attendance_summary", args: {} };
   }
 
   const findPerson = text.match(/find (?:employee|person)(?: named)?\s+(.+)/i);
@@ -749,16 +795,6 @@ export function planAssistantTurn(question: string, history: ChatTurn[] = []): A
     };
   }
 
-  if (
-    HEALTH_RE.test(text) ||
-    LEAVE_TODAY_RE.test(text) ||
-    PAYROLL_RE.test(text) ||
-    PERFORMANCE_RE.test(text) ||
-    PENDING_RE.test(text) ||
-    ATTENDANCE_RE.test(text)
-  ) {
-    return { kind: "answer" };
-  }
   return { kind: "chat" };
 }
 
@@ -770,6 +806,10 @@ export function conversationTitleFromQuestion(question: string) {
 
 export function isAssistantToolName(value: string | undefined): value is AssistantToolName {
   return Boolean(value && (ASSISTANT_TOOLS as readonly string[]).includes(value));
+}
+
+export function isAssistantLookupTool(value: string | undefined): value is AssistantLookupTool {
+  return Boolean(value && (LOOKUP_TOOLS as readonly string[]).includes(value));
 }
 
 export function parsePendingAction(value: unknown): { tool: AssistantToolName; args: Record<string, string>; summary: string } | null {

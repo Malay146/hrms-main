@@ -2,9 +2,13 @@
  * Capability probe for the HR copilot planner.
  * Run: npx tsx lib/ai/copilot-capability.probe.ts
  *
- * Classifies jury-demo prompts against planAssistantTurn only (no DB, no LLM).
- * A kind of "chat" or "answer" on an operational request usually means the
- * chatbot cannot actually do the work.
+ * This file is a routing test, not canned Q&A. `prompt` is a sample user
+ * question. `expect` is only the planner kind (lookup/act/chat) — never a
+ * scripted answer. Production answers come from parameterized SQL in
+ * lib/ai/copilot-query.ts after Confirm for writes.
+ *
+ * A kind of "chat" on an operational request usually means the chatbot
+ * cannot actually do the work.
  */
 import { planAssistantTurn, type AssistantPlan } from "./copilot";
 
@@ -19,14 +23,14 @@ const CORPUS: Probe[] = [
   { prompt: "name them", jury: "read" },
   { prompt: "list departments", jury: "read", expect: "lookup" },
   { prompt: "who are in Engineering", jury: "read", expect: "lookup" },
-  { prompt: "Who is on leave today?", jury: "read", expect: "answer" },
+  { prompt: "Who is on leave today?", jury: "read", expect: "lookup" },
   { prompt: "who is late today", jury: "read", expect: "lookup" },
   { prompt: "who hasn't checked out", jury: "read", expect: "lookup" },
-  { prompt: "What is attendance this month?", jury: "read", expect: "answer" },
-  { prompt: "How many leave requests are pending?", jury: "read", expect: "answer" },
-  { prompt: "What is total net in the last paid payrun?", jury: "read", expect: "answer" },
-  { prompt: "What is the average performance rating?", jury: "read", expect: "answer" },
-  { prompt: "how is the team doing", jury: "read", expect: "answer" },
+  { prompt: "What is attendance this month?", jury: "read", expect: "lookup" },
+  { prompt: "How many leave requests are pending?", jury: "read", expect: "lookup" },
+  { prompt: "What is total net in the last paid payrun?", jury: "read", expect: "lookup" },
+  { prompt: "What is the average performance rating?", jury: "read", expect: "lookup" },
+  { prompt: "how is the team doing", jury: "read", expect: "lookup" },
   { prompt: "compare Engineering vs Sales headcount", jury: "read", expect: "lookup" },
   { prompt: "show contracts expiring this month", jury: "read" },
   { prompt: "open jobs and candidates in interview", jury: "read" },

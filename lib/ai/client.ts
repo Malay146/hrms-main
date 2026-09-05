@@ -4,12 +4,16 @@ import { z } from "zod";
 import { ALLOWED_INSIGHT_HREFS } from "./insights";
 import {
   ASSISTANT_TOOLS,
+  LOOKUP_TOOLS,
   chatReply,
+  classifyCopilotQuestion,
   COPILOT_REFUSAL,
+  isAssistantLookupTool,
   isAssistantToolName,
   isGreeting,
   isHelp,
   isSmallTalk,
+  lookupForCopilotIntent,
   planAssistantTurn,
   type AssistantPlan,
 } from "./copilot";
@@ -64,28 +68,6 @@ href must be one of: ${ALLOWED_INSIGHT_HREFS.join(", ")}.`,
   return output.insights;
 }
 
-export async function phraseCopilotAnswer(input: {
-  question: string;
-  facts: string;
-  firstName: string;
-}) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("AI provider is not configured.");
-  }
-  const { text } = await generateText({
-    model: model(),
-    system: `You are a friendly HR assistant for PeoplePay360, talking to ${input.firstName}.
-Answer only the question they asked, using the supplied facts.
-Sound like a helpful colleague: warm, clear, and concise.
-Do not recap every metric. Do not mention health score, late %, or department breakdowns unless they asked.
-Do not invent people, departments, or numbers.
-Do not mention bank accounts or individual wages.
-Keep it to 1–3 short sentences.`,
-    prompt: `Question: ${input.question}\n\nFacts:\n${input.facts}`,
-  });
-  return text.trim();
-}
-
 export async function phraseAssistantChat(input: {
   question: string;
   firstName: string;
@@ -129,8 +111,8 @@ Never refuse to name employees; do not say you cannot provide names.`,
 }
 
 const copilotPlanSchema = z.object({
-  kind: z.enum(["answer", "act", "clarify", "refuse", "chat"]),
-  tool: z.enum(ASSISTANT_TOOLS).optional(),
+  kind: z.enum(["lookup", "act", "clarify", "refuse", "chat", "answer"]),
+  tool: z.union([z.enum(ASSISTANT_TOOLS), z.enum(LOOKUP_TOOLS)]).optional(),
   args: z.record(z.string(), z.string().nullable()).optional(),
   answer: z.string().max(600).optional().default(""),
 });
@@ -165,9 +147,9 @@ export async function planCopilotTurn(input: {
       model: model(),
       output: Output.object({ schema: copilotPlanSchema }),
       system: `You are the PeoplePay360 HR assistant for a signed-in staff user.
-Decide whether to chat, answer a workforce question, or take an action.
+Decide whether to chat, look up live data, or take an action. Never invent numbers.
 
-Tools:
+Write tools (kind=act):
 - create_employee: fullName, email, department, jobTitle, optional role/phone
 - update_employee: employee (name or ID), optional fullName, department, jobTitle, status (active|inactive|on_leave), employeeType, phone
 - create_department: name, optional code. Name is enough. Do not ask for roles, headcount, or other details.
@@ -180,6 +162,21 @@ Tools:
 - clock_in: employee, optional date
 - clock_out: employee, optional date
 
+Read tools (kind=lookup). The app runs parameterized SQL for these. Do not write SQL.
+- lookup_headcount: optional department
+- lookup_departments
+- lookup_people: department
+- lookup_person: query (name, employee ID, or phone)
+- lookup_leave_balance: employee
+- lookup_reports: employee, optional direction (reports|manager)
+- lookup_attendance_exceptions: kind (late|missing_checkout)
+- lookup_leave_today
+- lookup_pending_leave
+- lookup_attendance_summary
+- lookup_payroll (org net total only, never named wages)
+- lookup_performance
+- lookup_org_overview
+
 Rules:
 - Greetings, thanks, help, and small talk: kind=chat. Never treat a hello as a metrics briefing.
 - Never dump wages, bank details, passwords, API keys, or named salary/compensation. Use kind=refuse.
@@ -190,7 +187,7 @@ Rules:
 - If the user wants to add/remove/update people, departments, leave, or attendance and you have enough fields, use kind=act.
 - Do not answer with a capability list when they asked you to do something.
 - If an action is requested but fields are missing, kind=clarify and ask for the missing fields. For departments, name is never missing if they named it.
-- For questions about metrics, who is on leave, attendance, pending leave, payroll totals, reviews, headcount, or team health, use kind=answer. Never say you cannot look that up.
+- For live workforce questions (who is on leave, attendance, pending leave, payroll totals, reviews, headcount, team health), use kind=lookup and the matching tool. Never invent counts.
 Keep answer short.`,
       prompt: JSON.stringify({
         question: input.question,
@@ -217,8 +214,13 @@ Keep answer short.`,
       if (Object.keys(args).length === 0 && fallback.kind === "act") return fallback;
       return { kind: "act", tool: output.tool, args };
     }
+    if (output.kind === "lookup" && output.tool && isAssistantLookupTool(output.tool)) {
+      return { kind: "lookup", tool: output.tool, args: compactArgs(output.args) };
+    }
     if (fallback.kind === "act" || fallback.kind === "lookup") return fallback;
-    return { kind: "answer" };
+    const mapped = lookupForCopilotIntent(classifyCopilotQuestion(input.question));
+    if (mapped) return { kind: "lookup", tool: mapped, args: {} };
+    return { kind: "chat" };
   } catch {
     return fallback;
   }
