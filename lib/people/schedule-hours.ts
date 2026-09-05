@@ -19,3 +19,8 @@ export function weeklyHours(
 export function daysPerWeek(lines: { weekday: number }[]) {
   return new Set(lines.map((line) => line.weekday)).size;
 }
+
+/** Domain rule: one working-schedule line per weekday. SQL enforces this with a unique index. */
+export function hasUniqueWeekdays(lines: { weekday: number }[]) {
+  return daysPerWeek(lines) === lines.length;
+}

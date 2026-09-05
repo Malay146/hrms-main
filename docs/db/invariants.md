@@ -1,6 +1,6 @@
 # Database invariants
 
-Catalog of PeoplePay360 facts that PostgreSQL must eventually enforce. Status is as of Task 2 (CHECK constraints applied). Later tasks copy `INVARIANT_SQL` from `lib/db/invariants.ts` **verbatim** into Prisma migrations.
+Catalog of PeoplePay360 facts that PostgreSQL must eventually enforce. Status is as of Task 3 (CHECK constraints + BCNF unique keys). Later tasks copy `INVARIANT_SQL` from `lib/db/invariants.ts` **verbatim** into Prisma migrations.
 
 **Status values**
 
@@ -10,9 +10,9 @@ Catalog of PeoplePay360 facts that PostgreSQL must eventually enforce. Status is
 | `app-only` | TypeScript / Zod / action checks; a crash or race can persist a violation |
 | `enforced` | Already a UNIQUE / PK / FK / CHECK in Postgres (`prisma/schema.prisma` or a Task 2+ migration) |
 
-Task 2 applied `INVARIANT_SQL.checks` in `prisma/migrations/20260906010000_check_constraints`. Uniques, EXCLUDE, and RLS are still not in Postgres. Existing UNIQUE indexes in the schema stay `enforced`.
+Task 2 applied `INVARIANT_SQL.checks` in `prisma/migrations/20260906010000_check_constraints`. Task 3 applied `INVARIANT_SQL.uniques` plus the other BCNF uniques (including SQL-only `lower()` / `COALESCE` indexes) in `prisma/migrations/20260906020000_bcnf_unique_keys`. EXCLUDE and RLS are still not in Postgres. Existing UNIQUE indexes in the schema stay `enforced`.
 
-Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariants.ts) (`INVARIANT_SQL.checks` / `.uniques` / `.exclusion`). Task 2 copied **`.checks` only**.
+Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariants.ts) (`INVARIANT_SQL.checks` / `.uniques` / `.exclusion`). Task 3 copied **`.uniques`** verbatim.
 
 ---
 
@@ -76,8 +76,8 @@ Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariant
 ### `schedule_line_one_per_weekday`
 
 - **SQL:** `CREATE UNIQUE INDEX "working_schedule_line_scheduleId_weekday_key" ON "working_schedule_line" ("scheduleId", "weekday");` (`INVARIANT_SQL.uniques.scheduleLineOnePerWeekday`)
-- **Status:** `missing`
-- **Notes:** Two Monday lines on the same schedule are allowed today. Task 3 adds the unique index.
+- **Status:** `enforced`
+- **Notes:** Applied by Task 3. `hasUniqueWeekdays` in `lib/people/schedule-hours.ts` still documents the domain rule.
 
 ### `schedule_line_weekday`
 
@@ -102,8 +102,8 @@ Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariant
 ### `allocation_unique_per_year`
 
 - **SQL:** `CREATE UNIQUE INDEX "time_off_allocation_employee_type_year_key" ON "time_off_allocation" ("employeeId", "typeId", "validityYear");` (`INVARIANT_SQL.uniques.allocationUniquePerYear`)
-- **Status:** `missing`
-- **Notes:** Two allocations for the same employee / type / year can coexist. Task 3 adds the unique index.
+- **Status:** `enforced`
+- **Notes:** Applied by Task 3.
 
 ### `allocation_amounts`
 
@@ -139,7 +139,11 @@ These are UNIQUE indexes already in `prisma/schema.prisma`. They are **not** mis
 | `job_opening_code_per_org` | `@@unique([organizationId, code])` on `job_opening` | `enforced` |
 | `attendance_rollup_one_per_org_day` | `@@unique([organizationId, date])` on `attendance_daily_rollup` | `enforced` |
 | `profile_one_per_user` | `employee_profile.userId` `@unique` | `enforced` |
-| `employee_id_globally_unique` | `employee_profile.employeeId` `@unique` | `enforced` (Task 3 will narrow to `(organizationId, employeeId)`) |
+| `employee_id_per_org` | `@@unique([organizationId, employeeId])` on `employee_profile` (`employee_profile_organizationId_employeeId_key`) | `enforced` (Task 3 dropped the global `employee_profile_employeeId_key`; trigram GIN kept) |
+| `department_name_per_org` | SQL-only unique `(organizationId, lower(name))` on `department` (`department_organizationId_lower_name_key`) | `enforced` |
+| `salary_rule_code_per_structure` | `@@unique([structureId, code])` on `salary_rule` | `enforced` |
+| `payrun_one_per_org_period_type` | SQL-only unique `(organizationId, periodStart, periodEnd, COALESCE(bcnf_employee_type_text(employeeType), ''))` on `payrun` (`payrun_org_period_type_key`) | `enforced` |
+| `salary_structure_name_per_org` | SQL-only unique `(organizationId, lower(name))` on `salary_structure` (`salary_structure_organizationId_name_key`) | `enforced` |
 
 ---
 

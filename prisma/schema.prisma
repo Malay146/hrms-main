@@ -311,6 +311,7 @@ model CopilotMessage {
   @@map("copilot_message")
 }
 
+/// UNIQUE department_organizationId_lower_name_key: (organizationId, lower(name)) — SQL-only
 model Department {
   id             String            @id @default(cuid())
   organizationId String
@@ -360,6 +361,7 @@ model WorkingScheduleLine {
   hours      Decimal         @db.Decimal(4, 2)
   schedule   WorkingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
 
+  @@unique([scheduleId, weekday])
   @@index([scheduleId])
   @@map("working_schedule_line")
 }
@@ -370,7 +372,7 @@ model EmployeeProfile {
   user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   organizationId   String
   organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employeeId       String              @unique
+  employeeId       String
   fullName         String
   role             Role
   departmentId     String
@@ -400,6 +402,7 @@ model EmployeeProfile {
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
+  @@unique([organizationId, employeeId])
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([organizationId, departmentId])
@@ -479,6 +482,7 @@ model TimeOffAllocation {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  @@unique([employeeId, typeId, validityYear], map: "time_off_allocation_employee_type_year_key")
   @@index([employeeId])
   @@index([typeId])
   @@index([status, validityYear])
@@ -535,6 +539,7 @@ model Attendance {
   @@map("attendance")
 }
 
+/// UNIQUE salary_structure_organizationId_name_key: (organizationId, lower(name)) — SQL-only
 model SalaryStructure {
   id             String       @id @default(cuid())
   organizationId String
@@ -568,10 +573,12 @@ model SalaryRule {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
+  @@unique([structureId, code])
   @@index([structureId])
   @@map("salary_rule")
 }
 
+/// UNIQUE payrun_org_period_type_key: (organizationId, periodStart, periodEnd, COALESCE(bcnf_employee_type_text(employeeType), '')) — SQL-only (enum→text wrapper is IMMUTABLE)
 model Payrun {
   id             String         @id @default(cuid())
   organizationId String

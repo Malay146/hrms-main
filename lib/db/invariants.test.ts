@@ -10,6 +10,11 @@ const CHECK_MIGRATION_PATH = join(
   "prisma/migrations/20260906010000_check_constraints/migration.sql",
 );
 
+const UNIQUE_MIGRATION_PATH = join(
+  process.cwd(),
+  "prisma/migrations/20260906020000_bcnf_unique_keys/migration.sql",
+);
+
 const CHECK_CONSTRAINT_NAMES = Object.values(INVARIANT_SQL.checks).map((sql) => {
   const match = sql.match(/ADD CONSTRAINT "([^"]+)"/);
   assert.ok(match, `CHECK SQL must name a constraint:\n${sql}`);
@@ -92,6 +97,20 @@ describe("db invariants catalog", () => {
     assert.match(sql, /"employeeId" WITH =/);
     assert.match(sql, /daterange\("startDate", "endDate", '\[\]'\)/);
     assert.match(sql, /status = 'approved'/);
+  });
+
+  it("bcnf-unique-keys migration includes every INVARIANT_SQL.uniques snippet verbatim", () => {
+    assert.ok(
+      existsSync(UNIQUE_MIGRATION_PATH),
+      `expected migration at ${UNIQUE_MIGRATION_PATH}`,
+    );
+    const sql = readFileSync(UNIQUE_MIGRATION_PATH, "utf8").replace(/\r\n/g, "\n");
+    for (const [name, snippet] of Object.entries(INVARIANT_SQL.uniques)) {
+      assert.ok(
+        sql.includes(snippet),
+        `migration must include INVARIANT_SQL.uniques.${name} verbatim`,
+      );
+    }
   });
 
   it("check-constraints migration includes every INVARIANT_SQL.checks snippet verbatim", () => {
