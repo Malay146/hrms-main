@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { buildAiSnapshot } from "@/lib/ai/build-snapshot";
@@ -66,10 +67,91 @@ async function loadCachedInsights(organizationId: string): Promise<AiInsightCard
 
 export async function getAiAnalytics(periodDays = PERIOD_DAYS): Promise<ActionResult<AiAnalyticsData>> {
   try {
-    const assembled = await assembleAiSnapshot(periodDays);
-    return { ok: true, data: assembled.data };
+    const user = await requirePermission("viewAiAnalytics");
+    const profile = await prisma.employeeProfile.findUnique({
+      where: { userId: user.id },
+      select: { organizationId: true },
+    });
+    if (!profile) return { ok: false, error: "No organization on this account." };
+
+    const { readLatestAiSnapshot, runAiSnapshotRebuildJob } = await import(
+      "@/lib/jobs/handlers/ai-snapshot"
+    );
+    const { enqueueAndRun } = await import("@/lib/jobs/queue");
+
+    const cached = await readLatestAiSnapshot(profile.organizationId);
+    const staleMs = 6 * 60 * 60 * 1000;
+    const isFresh =
+      cached && Date.now() - cached.generatedAt.getTime() < staleMs;
+
+    if (isFresh && cached) {
+      return { ok: true, data: cached.data };
+    }
+
+    // Bootstrap or refresh via job (processed inline for single-node DX).
+    await enqueueAndRun({
+      organizationId: profile.organizationId,
+      type: "ai_snapshot_rebuild",
+      payload: { periodDays },
+      createdByUserId: user.id,
+    });
+
+    const after = await readLatestAiSnapshot(profile.organizationId);
+    if (after) return { ok: true, data: after.data };
+
+    // Last resort bootstrap without waiting on claim races
+    const job = await prisma.backgroundJob.create({
+      data: {
+        organizationId: profile.organizationId,
+        type: "ai_snapshot_rebuild",
+        status: "running",
+        payload: { periodDays },
+        createdByUserId: user.id,
+        lockedAt: new Date(),
+      },
+    });
+    await runAiSnapshotRebuildJob(profile.organizationId, job.id, periodDays);
+    await prisma.backgroundJob.update({
+      where: { id: job.id },
+      data: { status: "succeeded", finishedAt: new Date() },
+    });
+    const boot = await readLatestAiSnapshot(profile.organizationId);
+    if (!boot) return { ok: false, error: "Could not build AI analytics snapshot." };
+    return { ok: true, data: boot.data };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load AI analytics.") };
+  }
+}
+
+export async function refreshAiAnalyticsAction(
+  periodDays = PERIOD_DAYS,
+): Promise<ActionResult<{ jobId: string; generatedAt?: string }>> {
+  try {
+    const user = await requirePermission("viewAiAnalytics");
+    const profile = await prisma.employeeProfile.findUnique({
+      where: { userId: user.id },
+      select: { organizationId: true },
+    });
+    if (!profile) return { ok: false, error: "No organization on this account." };
+    const { enqueueAndRun } = await import("@/lib/jobs/queue");
+    const job = await enqueueAndRun({
+      organizationId: profile.organizationId,
+      type: "ai_snapshot_rebuild",
+      payload: { periodDays },
+      createdByUserId: user.id,
+    });
+    const { readLatestAiSnapshot } = await import("@/lib/jobs/handlers/ai-snapshot");
+    const snap = await readLatestAiSnapshot(profile.organizationId);
+    revalidatePath("/admin/analytics");
+    return {
+      ok: true,
+      data: {
+        jobId: job.id,
+        generatedAt: snap?.generatedAt.toISOString(),
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not refresh AI analytics.") };
   }
 }
 

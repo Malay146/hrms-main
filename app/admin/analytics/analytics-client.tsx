@@ -23,10 +23,11 @@ import PendingApprovalIcon from "@/components/icons/pending-approval";
 import TotalPayrollIcon from "@/components/icons/total-payroll";
 import AiIcon from "@/components/icons/sidebar/ai";
 import { cn } from "@/utils/cn";
-import { generateAiInsights } from "@/lib/actions/ai";
+import { generateAiInsights, refreshAiAnalyticsAction } from "@/lib/actions/ai";
 import type { AiAnalyticsData, AiInsightCard } from "@/lib/shared/types";
 import { BarChartTooltip, PieChartTooltip, chartCursor, chartTooltipWrapperStyle } from "@/components/charts/chart-tooltip";
 import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
+import { useRouter } from "next/navigation";
 
 const HEALTH_BADGE = {
   healthy: { variant: "success" as const, label: "Healthy" },
@@ -41,6 +42,7 @@ const INSIGHT_BADGE = {
 };
 
 export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [insights, setInsights] = useState<AiInsightCard[]>(data.insights);
   const [refreshing, setRefreshing] = useState(false);
@@ -102,19 +104,24 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
   ];
 
   async function onRefresh() {
-    if (!data.aiEnabled) {
-      toast("Connect an AI provider to generate written analysis.");
-      return;
-    }
     setRefreshing(true);
-    const result = await generateAiInsights();
-    setRefreshing(false);
-    if (!result.ok) {
-      toast(result.error);
+    const snap = await refreshAiAnalyticsAction();
+    if (!snap.ok) {
+      setRefreshing(false);
+      toast(snap.error);
       return;
     }
-    setInsights(result.data);
-    toast("Insights refreshed.");
+    if (data.aiEnabled) {
+      const result = await generateAiInsights();
+      if (result.ok) {
+        setInsights(result.data);
+      } else {
+        toast(result.error);
+      }
+    }
+    setRefreshing(false);
+    toast("Analytics snapshot refreshed.");
+    router.refresh();
   }
 
   return (
@@ -132,7 +139,7 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
           disabled={refreshing}
           className="cursor-pointer rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 px-4 py-2 disabled:opacity-50"
         >
-          {refreshing ? "Refreshing…" : "Refresh insights"}
+          {refreshing ? "Refreshing…" : "Refresh analytics"}
         </button>
       </div>
 

@@ -53,6 +53,10 @@ export type PerformanceBoard = {
   cycles: PerformanceCycleItem[];
   reviews: PerformanceReviewItem[];
   employees: PerformanceEmployeeOption[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
   stats: {
     avgRating: number | null;
     pendingReviews: number;

@@ -71,6 +71,29 @@ enum JobOpeningStatus {
   closed
 }
 
+enum BackgroundJobStatus {
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+}
+
+enum BackgroundJobType {
+  payrun_compute
+  ai_snapshot_rebuild
+  payslip_bulk_email
+  employee_import_chunk
+  attendance_rollup_backfill
+}
+
+enum OrgMetricsKind {
+  admin_home
+  payroll_kpis
+  ai_analytics
+  all
+}
+
 enum CandidateStage {
   applied
   screening
@@ -223,6 +246,9 @@ model Organization {
   jobOpenings           JobOpening[]
   candidates            Candidate[]
   performanceCycles     PerformanceCycle[]
+  attendanceDailyRollups AttendanceDailyRollup[]
+  metricsSnapshots       OrgMetricsSnapshot[]
+  backgroundJobs         BackgroundJob[]
 
   @@map("organization")
 }
@@ -717,6 +743,63 @@ model Candidate {
   @@index([organizationId, stage])
   @@index([jobOpeningId])
   @@map("candidate")
+}
+
+model AttendanceDailyRollup {
+  id                   String       @id @default(cuid())
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  date                 DateTime     @db.Date
+  presentCount         Int          @default(0)
+  halfDayCount         Int          @default(0)
+  absentCount          Int          @default(0)
+  leaveCount           Int          @default(0)
+  lateCount            Int          @default(0)
+  missingCheckoutCount Int          @default(0)
+  updatedAt            DateTime     @updatedAt
+
+  @@unique([organizationId, date])
+  @@index([organizationId, date])
+  @@map("attendance_daily_rollup")
+}
+
+model OrgMetricsSnapshot {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  kind           OrgMetricsKind
+  payload        Json
+  generatedAt    DateTime
+  sourceJobId    String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([organizationId, kind, generatedAt])
+  @@map("org_metrics_snapshot")
+}
+
+model BackgroundJob {
+  id              String              @id @default(cuid())
+  organizationId  String
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type            BackgroundJobType
+  status          BackgroundJobStatus @default(queued)
+  payload         Json
+  progressCurrent Int?
+  progressTotal   Int?
+  result          Json?
+  error           String?
+  attempts        Int                 @default(0)
+  lockedAt        DateTime?
+  lockedBy        String?
+  createdByUserId String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  finishedAt      DateTime?
+
+  @@index([organizationId, status, createdAt])
+  @@index([status, lockedAt])
+  @@map("background_job")
 }
 
 /// Legacy payroll rows — keep until Krishil retires in payrun Phase 3.

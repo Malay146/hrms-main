@@ -6,6 +6,7 @@ import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/s
 import { formatNotificationStamp, formatRelativeTime } from "@/lib/shared/dates";
 import { createNotifications, organizationUserIds, NOTIFICATION_CATEGORIES } from "@/lib/shared/notify";
 import type { NotificationCategory } from "@/lib/shared/notify";
+import { clampPage, clampPageSize, pageSkip, totalPagesFor } from "@/lib/shared/pagination";
 import type { ActionResult } from "@/lib/shared/types";
 import { z } from "zod";
 import { firstZodError } from "@/lib/shared/validations";
@@ -91,21 +92,38 @@ function revalidateNotifications() {
   revalidatePath("/employee/notifications");
 }
 
-export async function listMyNotifications(): Promise<
+export async function listMyNotifications(input?: {
+  page?: number;
+  pageSize?: number;
+}): Promise<
   ActionResult<{
     items: NotificationItem[];
     unreadCount: number;
     announcements: NotificationItem[];
     preferences: NotificationPreferences;
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
   }>
 > {
   try {
     const user = await requireUser();
-    const [rows, prefRow] = await Promise.all([
+    const page = clampPage(input?.page);
+    const pageSize = clampPageSize(input?.pageSize, 24, 60);
+    const [rows, total, unreadCount, announcementRows, prefRow] = await Promise.all([
       prisma.notification.findMany({
         where: { userId: user.id },
         orderBy: { createdAt: "desc" },
-        take: 100,
+        skip: pageSkip(page, pageSize),
+        take: pageSize,
+      }),
+      prisma.notification.count({ where: { userId: user.id } }),
+      prisma.notification.count({ where: { userId: user.id, readAt: null } }),
+      prisma.notification.findMany({
+        where: { userId: user.id, category: "announcement" },
+        orderBy: { createdAt: "desc" },
+        take: 5,
       }),
       prisma.notificationPreference.findUnique({ where: { userId: user.id } }),
     ]);
@@ -120,13 +138,18 @@ export async function listMyNotifications(): Promise<
         }
       : DEFAULT_PREFERENCES;
     const items = preferences.inApp ? rows.map(mapNotification) : [];
+    const announcements = preferences.inApp ? announcementRows.map(mapNotification) : [];
     return {
       ok: true,
       data: {
         items,
-        unreadCount: items.filter((row) => !row.read).length,
-        announcements: items.filter((row) => row.type === "announcement").slice(0, 8),
+        unreadCount: preferences.inApp ? unreadCount : 0,
+        announcements,
         preferences,
+        page,
+        pageSize,
+        total: preferences.inApp ? total : 0,
+        totalPages: totalPagesFor(preferences.inApp ? total : 0, pageSize),
       },
     };
   } catch (error) {

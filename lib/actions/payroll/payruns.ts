@@ -5,10 +5,7 @@ import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
 import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
 import { dateFromKey, payslipIssueMonth, toDateKey } from "@/lib/shared/dates";
-import { computePayslip } from "@/lib/payroll/compute";
-import { payslipWarning } from "@/lib/payroll/warnings";
 import { stubHasContract, stubWage } from "@/lib/payroll/period-wage";
-import { stubWorkedDays, unpaidDaysInPeriod, weekdayCount } from "@/lib/payroll/worked-days";
 import { ensureRegularSalaryStructure } from "@/lib/actions/payroll/salary";
 import {
   deliverUnsentPayslip,
@@ -165,42 +162,77 @@ function mapPayslip(row: {
 
 export async function listEligibleEmployees(input: {
   employeeType?: EmployeeType | null;
-}): Promise<ActionResult<EligibleEmployee[]>> {
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<
+  ActionResult<{
+    rows: EligibleEmployee[];
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  }>
+> {
   try {
     await requirePermission("editPayroll");
-    const profiles = await prisma.employeeProfile.findMany({
-      where: {
-        status: "active",
-        ...(input.employeeType ? { employeeType: input.employeeType } : {}),
-      },
-      include: {
-        department: { select: { name: true } },
-        user: {
-          select: {
-            email: true,
-            payrolls: { orderBy: { month: "desc" }, take: 1, select: { basic: true } },
+    const page = clampPage(input.page);
+    const pageSize = clampPageSize(input.pageSize, 40, 60);
+    const search = input.search?.trim() ?? "";
+    const where = {
+      status: "active" as const,
+      ...(input.employeeType ? { employeeType: input.employeeType } : {}),
+      ...(search
+        ? {
+            OR: [
+              { fullName: { contains: search, mode: "insensitive" as const } },
+              { employeeId: { contains: search, mode: "insensitive" as const } },
+              { user: { email: { contains: search, mode: "insensitive" as const } } },
+            ],
+          }
+        : {}),
+    };
+    const [total, profiles] = await Promise.all([
+      prisma.employeeProfile.count({ where }),
+      prisma.employeeProfile.findMany({
+        where,
+        include: {
+          department: { select: { name: true } },
+          user: {
+            select: {
+              email: true,
+              payrolls: { orderBy: { month: "desc" }, take: 1, select: { basic: true } },
+            },
           },
         },
-      },
-      orderBy: { employeeId: "asc" },
-    });
+        orderBy: { employeeId: "asc" },
+        skip: pageSkip(page, pageSize),
+        take: pageSize,
+      }),
+    ]);
     return {
       ok: true,
-      data: profiles.map((profile) => {
-        const wage = stubWage(profile.wage, profile.user.payrolls[0]?.basic);
-        return {
-          id: profile.id,
-          userId: profile.userId,
-          name: profile.fullName,
-          email: profile.user.email,
-          employeeId: profile.employeeId,
-          department: profile.department.name,
-          employeeType: profile.employeeType,
-          wage,
-          bankAccount: profile.bankAccount,
-          hasContract: stubHasContract(wage),
-        };
-      }),
+      data: {
+        rows: profiles.map((profile) => {
+          const wage = stubWage(profile.wage, profile.user.payrolls[0]?.basic);
+          return {
+            id: profile.id,
+            userId: profile.userId,
+            name: profile.fullName,
+            email: profile.user.email,
+            employeeId: profile.employeeId,
+            department: profile.department.name,
+            employeeType: profile.employeeType,
+            wage,
+            bankAccount: profile.bankAccount,
+            hasContract: stubHasContract(wage),
+          };
+        }),
+        page,
+        pageSize,
+        total,
+        totalPages: totalPagesFor(total, pageSize),
+      },
     };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load employees.") };
@@ -343,135 +375,34 @@ export async function createPayrunAction(input: {
   }
 }
 
-export async function computePayrunAction(payrunId: string): Promise<ActionResult> {
+export async function computePayrunAction(
+  payrunId: string,
+): Promise<ActionResult<{ jobId: string; status: string }>> {
   try {
-    await requirePermission("editPayroll");
+    const actor = await requirePermission("editPayroll");
     const payrun = await prisma.payrun.findUnique({
       where: { id: payrunId },
-      include: {
-        structure: { include: { rules: { orderBy: { sequence: "asc" } } } },
-        payslips: {
-          include: {
-            employee: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    payrolls: { orderBy: { month: "desc" }, take: 1, select: { basic: true } },
-                    leaveRequests: {
-                      select: {
-                        type: { select: { code: true } },
-                        status: true,
-                        startDate: true,
-                        endDate: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+      select: { id: true, organizationId: true, status: true },
     });
     if (!payrun) return { ok: false, error: "Payrun not found." };
     if (payrun.status === "paid") return { ok: false, error: "Paid payruns cannot be recomputed." };
 
-    const periodStart = toDateKey(payrun.periodStart);
-    const periodEnd = toDateKey(payrun.periodEnd);
-    const scheduledDays = weekdayCount(periodStart, periodEnd);
-    const employeeIds = payrun.payslips.map((slip) => slip.employeeId);
-    const duplicateRows =
-      employeeIds.length === 0
-        ? []
-        : await prisma.payslip.findMany({
-            where: {
-              employeeId: { in: employeeIds },
-              id: { notIn: payrun.payslips.map((slip) => slip.id) },
-              payrun: {
-                id: { not: payrun.id },
-                periodStart: payrun.periodStart,
-                periodEnd: payrun.periodEnd,
-              },
-            },
-            select: { employeeId: true },
-          });
-    const duplicateEmployeeIds = new Set(duplicateRows.map((row) => row.employeeId));
+    const { enqueueAndRun } = await import("@/lib/jobs/queue");
+    const job = await enqueueAndRun({
+      organizationId: payrun.organizationId,
+      type: "payrun_compute",
+      payload: { payrunId },
+      createdByUserId: actor.id,
+    });
 
-    for (const slip of payrun.payslips) {
-      const wage = stubWage(slip.employee.wage, slip.employee.user.payrolls[0]?.basic);
-      const unpaidLeaveDays = unpaidDaysInPeriod(
-        periodStart,
-        periodEnd,
-        slip.employee.user.leaveRequests.map((leave) => ({
-          type: leave.type.code,
-          status: leave.status,
-          startDate: toDateKey(leave.startDate),
-          endDate: toDateKey(leave.endDate),
-        })),
-      );
-      const workedDays = stubWorkedDays(scheduledDays, unpaidLeaveDays);
-
-      const warning = payslipWarning({
-        bankAccount: slip.employee.bankAccount,
-        hasContract: stubHasContract(wage),
-        duplicateInOtherPayrun: duplicateEmployeeIds.has(slip.employeeId),
-      });
-
-      let gross = 0;
-      let net = 0;
-      let lines: { name: string; code: string; category: SalaryCategory; amount: number; ruleId: string }[] = [];
-      if (stubHasContract(wage) && payrun.structure.rules.length > 0) {
-        const computed = computePayslip(
-          payrun.structure.rules.map((rule) => ({
-            name: rule.name,
-            code: rule.code,
-            category: rule.category,
-            sequence: rule.sequence,
-            computation: rule.computation,
-            amount: rule.amount == null ? undefined : Number(rule.amount),
-            percentage: rule.percentage == null ? undefined : Number(rule.percentage),
-            percentBaseCode: rule.percentBaseCode ?? undefined,
-            formula: rule.formula ?? undefined,
-          })),
-          { wage, workedDays, scheduledDays, unpaidLeaveDays },
-        );
-        gross = computed.gross;
-        net = computed.net;
-        lines = computed.lines.map((line) => ({
-          ...line,
-          ruleId: payrun.structure.rules.find((rule) => rule.code === line.code)?.id ?? "",
-        }));
-      }
-
-      await prisma.$transaction([
-        prisma.payslipLine.deleteMany({ where: { payslipId: slip.id } }),
-        prisma.payslip.update({
-          where: { id: slip.id },
-          data: {
-            workedDays,
-            wage,
-            gross,
-            net,
-            warning,
-            status: "computed",
-            lines: {
-              create: lines.map((line) => ({
-                ruleId: line.ruleId || null,
-                name: line.name,
-                code: line.code,
-                category: line.category,
-                amount: line.amount,
-              })),
-            },
-          },
-        }),
-      ]);
+    if (job.status === "failed") {
+      return { ok: false, error: job.error || "Payrun compute job failed." };
     }
 
-    await prisma.payrun.update({ where: { id: payrunId }, data: { status: "computed" } });
-    revalidatePayroll(payrunId);
-    return { ok: true, data: undefined };
+    return {
+      ok: true,
+      data: { jobId: job.id, status: job.status },
+    };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not compute payrun.") };
   }

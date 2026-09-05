@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
-import { kolkataTodayKey } from "@/lib/shared/dates";
+import {
+  clampPage,
+  clampPageSize,
+  pageSkip,
+  totalPagesFor,
+  type PagedResult,
+} from "@/lib/shared/pagination";
 import {
   createDepartmentSchema,
   deleteDepartmentSchema,
@@ -14,6 +20,13 @@ import {
 import { departmentCodeFromName } from "@/lib/people/department-code";
 import type { ActionResult } from "@/lib/shared/types";
 
+export type DepartmentMember = {
+  name: string;
+  email: string;
+  jobTitle: string;
+  employeeId: string;
+};
+
 export type DepartmentListItem = {
   id: string;
   name: string;
@@ -22,7 +35,7 @@ export type DepartmentListItem = {
   employeeCount: number;
   managerName: string;
   status: "Active" | "Inactive";
-  members: { name: string; email: string; jobTitle: string; employeeId: string }[];
+  members: DepartmentMember[];
 };
 
 const DESCRIPTIONS: Record<string, string> = {
@@ -33,83 +46,205 @@ const DESCRIPTIONS: Record<string, string> = {
   Finance: "Accounting, budgets, payroll compliance, and audits.",
 };
 
-function mapDepartment(
-  dept: {
-    id: string;
-    name: string;
-    code: string;
-    profiles: {
-      userId: string;
-      fullName: string;
-      jobTitle: string;
-      employeeId: string;
-      role: string;
-      status: string;
-      user: { email: string };
-    }[];
-  },
-  leaveSet: Set<string>,
-): DepartmentListItem {
-  const members = dept.profiles;
-  const manager =
-    members.find((m) => m.role === "hr_manager" || m.role === "admin") ?? members[0];
-  const activeCount = members.filter(
-    (m) => m.status === "active" && !leaveSet.has(m.userId),
-  ).length;
+const profileSelect = {
+  userId: true,
+  fullName: true,
+  jobTitle: true,
+  employeeId: true,
+  role: true,
+  status: true,
+  user: { select: { email: true } },
+} as const;
+
+function mapMember(m: {
+  fullName: string;
+  jobTitle: string;
+  employeeId: string;
+  user: { email: string };
+}): DepartmentMember {
   return {
-    id: dept.id,
-    name: dept.name,
-    code: dept.code,
-    description:
-      DESCRIPTIONS[dept.name] ?? `Team directory for ${dept.name}.`,
-    employeeCount: members.length,
-    managerName: manager?.fullName ?? "—",
-    status: members.length === 0 || activeCount > 0 ? "Active" : "Inactive",
-    members: members.map((m) => ({
-      name: m.fullName,
-      email: m.user.email,
-      jobTitle: m.jobTitle,
-      employeeId: m.employeeId,
-    })),
+    name: m.fullName,
+    email: m.user.email,
+    jobTitle: m.jobTitle,
+    employeeId: m.employeeId,
   };
 }
 
-async function leaveUserIdsToday() {
-  const today = kolkataTodayKey();
-  const onLeave = await prisma.leaveRequest.findMany({
-    where: {
-      status: "approved",
-      startDate: { lte: new Date(`${today}T00:00:00.000Z`) },
-      endDate: { gte: new Date(`${today}T00:00:00.000Z`) },
-    },
-    select: { userId: true },
-  });
-  return new Set(onLeave.map((row) => row.userId));
+function mapDepartment(input: {
+  id: string;
+  name: string;
+  code: string;
+  employeeCount: number;
+  managerName: string;
+  status: "Active" | "Inactive";
+  members: DepartmentMember[];
+}): DepartmentListItem {
+  return {
+    id: input.id,
+    name: input.name,
+    code: input.code,
+    description: DESCRIPTIONS[input.name] ?? `Team directory for ${input.name}.`,
+    employeeCount: input.employeeCount,
+    managerName: input.managerName,
+    status: input.status,
+    members: input.members,
+  };
 }
 
 export async function listDepartments(): Promise<ActionResult<DepartmentListItem[]>> {
   try {
     await requirePermission("managePeople");
-    const [departments, leaveSet] = await Promise.all([
-      prisma.department.findMany({
-        include: {
-          profiles: {
-            include: { user: { select: { email: true } } },
-            orderBy: { fullName: "asc" },
-          },
+    const departments = await prisma.department.findMany({
+      include: {
+        _count: { select: { profiles: true } },
+        profiles: {
+          select: profileSelect,
+          orderBy: { fullName: "asc" },
+          take: 5,
         },
-        orderBy: { name: "asc" },
-      }),
-      leaveUserIdsToday(),
+      },
+      orderBy: { name: "asc" },
+    });
+
+    const deptIds = departments.map((d) => d.id);
+    const [managers, activeGroups] = await Promise.all([
+      deptIds.length === 0
+        ? Promise.resolve([])
+        : prisma.employeeProfile.findMany({
+            where: {
+              departmentId: { in: deptIds },
+              role: { in: ["admin", "hr_manager"] },
+            },
+            select: { departmentId: true, fullName: true },
+            orderBy: [{ departmentId: "asc" }, { fullName: "asc" }],
+          }),
+      deptIds.length === 0
+        ? Promise.resolve([])
+        : prisma.employeeProfile.groupBy({
+            by: ["departmentId"],
+            where: {
+              departmentId: { in: deptIds },
+              status: "active",
+            },
+            _count: { _all: true },
+          }),
     ]);
+
+    const managerByDept = new Map<string, string>();
+    for (const row of managers) {
+      if (!managerByDept.has(row.departmentId)) {
+        managerByDept.set(row.departmentId, row.fullName);
+      }
+    }
+    const activeByDept = new Map(activeGroups.map((row) => [row.departmentId, row._count._all]));
 
     return {
       ok: true,
-      data: departments.map((dept) => mapDepartment(dept, leaveSet)),
+      data: departments.map((dept) => {
+        const preview = dept.profiles;
+        const managerName =
+          managerByDept.get(dept.id) ??
+          preview.find((m) => m.role === "hr_manager" || m.role === "admin")?.fullName ??
+          preview[0]?.fullName ??
+          "—";
+        const employeeCount = dept._count.profiles;
+        const activeCount = activeByDept.get(dept.id) ?? 0;
+        return mapDepartment({
+          id: dept.id,
+          name: dept.name,
+          code: dept.code,
+          employeeCount,
+          managerName,
+          status: employeeCount === 0 || activeCount > 0 ? "Active" : "Inactive",
+          members: preview.map(mapMember),
+        });
+      }),
     };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load departments.") };
   }
+}
+
+export async function listDepartmentMembers(input: {
+  departmentId: string;
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}): Promise<ActionResult<PagedResult<DepartmentMember>>> {
+  try {
+    await requirePermission("managePeople");
+    const page = clampPage(input.page);
+    const pageSize = clampPageSize(input.pageSize);
+    const search = input.search?.trim() ?? "";
+    const where = {
+      departmentId: input.departmentId,
+      ...(search
+        ? {
+            OR: [
+              { fullName: { contains: search, mode: "insensitive" as const } },
+              { employeeId: { contains: search, mode: "insensitive" as const } },
+              { jobTitle: { contains: search, mode: "insensitive" as const } },
+              { user: { email: { contains: search, mode: "insensitive" as const } } },
+            ],
+          }
+        : {}),
+    };
+    const [total, rows] = await Promise.all([
+      prisma.employeeProfile.count({ where }),
+      prisma.employeeProfile.findMany({
+        where,
+        select: profileSelect,
+        orderBy: { fullName: "asc" },
+        skip: pageSkip(page, pageSize),
+        take: pageSize,
+      }),
+    ]);
+    return {
+      ok: true,
+      data: {
+        rows: rows.map(mapMember),
+        page,
+        pageSize,
+        total,
+        totalPages: totalPagesFor(total, pageSize),
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not load department members.") };
+  }
+}
+
+async function departmentForMutation(id: string): Promise<DepartmentListItem | null> {
+  const dept = await prisma.department.findUnique({
+    where: { id },
+    include: {
+      _count: { select: { profiles: true } },
+      profiles: {
+        select: profileSelect,
+        orderBy: { fullName: "asc" },
+        take: 20,
+      },
+    },
+  });
+  if (!dept) return null;
+  const manager =
+    (await prisma.employeeProfile.findFirst({
+      where: { departmentId: dept.id, role: { in: ["admin", "hr_manager"] } },
+      select: { fullName: true },
+      orderBy: { fullName: "asc" },
+    })) ?? dept.profiles[0];
+  const activeCount = await prisma.employeeProfile.count({
+    where: { departmentId: dept.id, status: "active" },
+  });
+  return mapDepartment({
+    id: dept.id,
+    name: dept.name,
+    code: dept.code,
+    employeeCount: dept._count.profiles,
+    managerName: manager?.fullName ?? "—",
+    status: dept._count.profiles === 0 || activeCount > 0 ? "Active" : "Inactive",
+    members: dept.profiles.map(mapMember),
+  });
 }
 
 export async function createDepartmentAction(input: {
@@ -152,17 +287,22 @@ export async function createDepartmentAction(input: {
         name,
         code,
       },
-      include: {
-        profiles: {
-          include: { user: { select: { email: true } } },
-          orderBy: { fullName: "asc" },
-        },
-      },
     });
 
     revalidatePath("/admin/people/department");
     revalidatePath("/admin/people/employees");
-    return { ok: true, data: mapDepartment(created, await leaveUserIdsToday()) };
+    return {
+      ok: true,
+      data: mapDepartment({
+        id: created.id,
+        name: created.name,
+        code: created.code,
+        employeeCount: 0,
+        managerName: "—",
+        status: "Active",
+        members: [],
+      }),
+    };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not create department.") };
   }
@@ -179,20 +319,17 @@ export async function renameDepartmentAction(input: {
       return { ok: false, error: firstZodError(parsed.error) };
     }
 
-    const updated = await prisma.department.update({
+    await prisma.department.update({
       where: { id: parsed.data.id },
       data: { name: parsed.data.name.trim() },
-      include: {
-        profiles: {
-          include: { user: { select: { email: true } } },
-          orderBy: { fullName: "asc" },
-        },
-      },
     });
+
+    const mapped = await departmentForMutation(parsed.data.id);
+    if (!mapped) return { ok: false, error: "Department not found." };
 
     revalidatePath("/admin/people/department");
     revalidatePath("/admin/people/employees");
-    return { ok: true, data: mapDepartment(updated, await leaveUserIdsToday()) };
+    return { ok: true, data: mapped };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not rename department.") };
   }
@@ -251,7 +388,7 @@ export async function moveEmployeeDepartmentAction(input: {
     employeeId: string;
     fromDepartmentId: string;
     toDepartmentId: string;
-    member: DepartmentListItem["members"][number];
+    member: DepartmentMember;
   }>
 > {
   try {

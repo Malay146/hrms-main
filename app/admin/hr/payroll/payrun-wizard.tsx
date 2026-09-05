@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Search } from "lucide-react";
 import { toast } from "sonner";
 import { createPayrunAction, listEligibleEmployees, type EligibleEmployee } from "@/lib/actions/payroll/payruns";
 import type { SalaryStructureListItem } from "@/lib/actions/payroll/salary";
+import { ListPagination } from "@/components/ui/list-pagination";
 
 type EmployeeType = "full_time" | "intern" | "contractor";
 
@@ -25,26 +27,70 @@ export function PayrunWizard({
   const [employeeType, setEmployeeType] = useState<EmployeeType | "">("");
   const [employees, setEmployees] = useState<EligibleEmployee[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const selectedIds = useMemo(
     () => Object.entries(selected).filter(([, value]) => value).map(([id]) => id),
     [selected],
   );
 
+  async function loadEmployees(nextPage: number, nextSearch: string) {
+    const result = await listEligibleEmployees({
+      employeeType: employeeType || null,
+      search: nextSearch.trim() || undefined,
+      page: nextPage,
+      pageSize: 40,
+    });
+    if (!result.ok) {
+      toast.error(result.error);
+      return false;
+    }
+    setEmployees(result.data.rows);
+    setPage(result.data.page);
+    setTotal(result.data.total);
+    setTotalPages(result.data.totalPages);
+    setSelected((prev) => {
+      const next = { ...prev };
+      for (const row of result.data.rows) {
+        if (next[row.id] === undefined) next[row.id] = true;
+      }
+      return next;
+    });
+    return true;
+  }
+
   function continueToEmployees() {
     startTransition(async () => {
-      const result = await listEligibleEmployees({
-        employeeType: employeeType || null,
-      });
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      setEmployees(result.data);
-      setSelected(Object.fromEntries(result.data.map((row) => [row.id, true])));
-      setStep(2);
+      setSearch("");
+      const ok = await loadEmployees(1, "");
+      if (ok) setStep(2);
     });
   }
+
+  useEffect(() => {
+    if (step !== 2) return;
+    const handle = window.setTimeout(() => {
+      startTransition(async () => {
+        await loadEmployees(1, search);
+      });
+    }, 250);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce search on step 2
+  }, [search]);
+
+  function selectAllOnPage(checked: boolean) {
+    setSelected((prev) => {
+      const next = { ...prev };
+      for (const row of employees) next[row.id] = checked;
+      return next;
+    });
+  }
+
+  const allOnPageSelected =
+    employees.length > 0 && employees.every((row) => Boolean(selected[row.id]));
 
   function create() {
     startTransition(async () => {
@@ -74,7 +120,9 @@ export function PayrunWizard({
           <div>
             <h2 className="text-h3 font-semibold">New pay run</h2>
             <p className="text-sm text-zinc-500 font-medium">
-              {step === 1 ? "Choose structure and period. Continue does not create a record." : "Select employees, then Create Payrun."}
+              {step === 1
+                ? "Choose structure and period. Continue does not create a record."
+                : "Select employees, then Create Payrun."}
             </p>
           </div>
           <button type="button" onClick={onClose} className="text-sm font-semibold text-zinc-500">
@@ -129,6 +177,28 @@ export function PayrunWizard({
           </div>
         ) : (
           <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <div className="relative flex-1">
+                <Search className="size-4 absolute left-3 top-3 text-zinc-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search name, ID, or email"
+                  className="w-full h-10 pl-9 pr-3 border border-border rounded-lg text-sm"
+                />
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm font-semibold text-zinc-600 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={allOnPageSelected}
+                  onChange={(e) => selectAllOnPage(e.target.checked)}
+                />
+                Select all on page
+              </label>
+            </div>
+            <p className="text-xs font-semibold text-zinc-500">
+              {selectedIds.length} selected across pages
+            </p>
             <div className="border border-border rounded-xl overflow-x-auto max-h-[50vh]">
               <table className="w-full text-left text-sm">
                 <thead>
@@ -160,6 +230,17 @@ export function PayrunWizard({
                 </tbody>
               </table>
             </div>
+            <ListPagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageItemCount={employees.length}
+              onPageChange={(nextPage) => {
+                startTransition(async () => {
+                  await loadEmployees(nextPage, search);
+                });
+              }}
+            />
             <div className="flex justify-between">
               <button type="button" onClick={() => setStep(1)} className="px-3.5 py-2 rounded-lg border border-border bg-surface hover:bg-surface-hover text-sm font-semibold">
                 Back

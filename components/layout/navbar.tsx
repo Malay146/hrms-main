@@ -77,6 +77,7 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadTotal, setUnreadTotal] = useState(0);
   const [soundsEnabled, setSoundsEnabled] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -84,9 +85,10 @@ export default function Navbar() {
   const previousUnread = useRef<number | null>(null);
 
   async function refreshNotifications() {
-    const result = await listMyNotifications();
+    const result = await listMyNotifications({ pageSize: 20 });
     if (result.ok) {
       setNotifications(result.data.items.slice(0, 12));
+      setUnreadTotal(result.data.unreadCount);
       setSoundsEnabled(result.data.preferences.sounds);
     }
   }
@@ -118,7 +120,7 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = unreadTotal;
   const hasUnread = unreadCount > 0;
 
   useEffect(() => {
@@ -135,6 +137,7 @@ export default function Navbar() {
 
   const handleMarkAllRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadTotal(0);
     void markAllNotificationsReadAction();
   };
 
@@ -142,6 +145,7 @@ export default function Navbar() {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
     );
+    setUnreadTotal((prev) => Math.max(0, prev - 1));
     void markNotificationReadAction(id, true);
     if (href) {
       setIsOpen(false);

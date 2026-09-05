@@ -1,13 +1,6 @@
-import { requireDocsHtml, swaggerHtml } from "@/lib/api/v1/swagger-html";
+import { NextResponse } from "next/server";
 
-export async function GET() {
-  const denied = await requireDocsHtml();
-  if (denied) return denied;
-  return new Response(swaggerHtml("/api/v1/openapi.json"), {
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
-      "X-Frame-Options": "SAMEORIGIN",
-    },
-  });
+/** Old docs URL — send people to the standalone Swagger page. */
+export async function GET(request: Request) {
+  return NextResponse.redirect(new URL("/swagger-ui", request.url), 308);
 }

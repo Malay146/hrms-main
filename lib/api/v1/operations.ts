@@ -679,9 +679,19 @@ export const apiOperations: ApiOperation[] = [
     operationId: "listEligibleEmployees",
     summary: "Employees eligible for a payrun",
     tags: ["Payroll"],
-    query: z.object({ employeeType: z.enum(["full_time", "intern", "contractor"]).optional() }),
+    query: z.object({
+      employeeType: z.enum(["full_time", "intern", "contractor"]).optional(),
+      search: z.string().optional(),
+      page: z.coerce.number().optional(),
+      pageSize: z.coerce.number().optional(),
+    }),
     handler: async ({ query }) =>
-      listEligibleEmployees({ employeeType: query.employeeType as "full_time" | "intern" | "contractor" | undefined }),
+      listEligibleEmployees({
+        employeeType: query.employeeType as "full_time" | "intern" | "contractor" | undefined,
+        search: query.search ? String(query.search) : undefined,
+        page: query.page ? Number(query.page) : undefined,
+        pageSize: query.pageSize ? Number(query.pageSize) : undefined,
+      }),
   }),
   defineOp({
     method: "post",
@@ -848,7 +858,21 @@ export const apiOperations: ApiOperation[] = [
     operationId: "getPerformanceBoard",
     summary: "Performance board",
     tags: ["Performance"],
-    handler: async () => getPerformanceBoard(),
+    query: z.object({
+      page: z.coerce.number().optional(),
+      pageSize: z.coerce.number().optional(),
+      search: z.string().optional(),
+      cycleId: z.string().optional(),
+      status: z.string().optional(),
+    }),
+    handler: async ({ query }) =>
+      getPerformanceBoard({
+        page: query.page ? Number(query.page) : undefined,
+        pageSize: query.pageSize ? Number(query.pageSize) : undefined,
+        search: query.search ? String(query.search) : undefined,
+        cycleId: query.cycleId ? String(query.cycleId) : undefined,
+        status: query.status ? String(query.status) : undefined,
+      }),
   }),
   defineOp({
     method: "put",
@@ -996,7 +1020,15 @@ export const apiOperations: ApiOperation[] = [
     operationId: "listNotifications",
     summary: "My notifications",
     tags: ["Notifications"],
-    handler: async () => listMyNotifications(),
+    query: z.object({
+      page: z.coerce.number().optional(),
+      pageSize: z.coerce.number().optional(),
+    }),
+    handler: async ({ query }) =>
+      listMyNotifications({
+        page: query.page ? Number(query.page) : undefined,
+        pageSize: query.pageSize ? Number(query.pageSize) : undefined,
+      }),
   }),
   defineOp({
     method: "post",

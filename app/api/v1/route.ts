@@ -7,8 +7,8 @@ export async function GET(request: Request) {
       data: {
         name: "PeoplePay360 HRMS API",
         version: "1.0.0",
-        docs: "/admin/developers",
-        swagger: "/api/docs",
+        docs: "/swagger-ui",
+        swagger: "/swagger-ui",
         openapi: "/api/v1/openapi.json",
         health: "/api/v1/health",
       },

@@ -3,7 +3,7 @@
 **Date:** 2026-09-05  
 **Status:** Partially implemented (P0–P2 core landed 2026-09-05)  
 **Audience:** Engineers implementing speedups across admin/employee App Router surfaces  
-**Related:** Employees already use server pagination + one `unstable_cache` path; TanStack Query is wired via `QueryProvider` in AppChrome.
+**Related:** Employees already use server pagination + one `unstable_cache` path; TanStack Query is wired via `QueryProvider` in AppChrome. For **~5k employees / production structure** (metrics rollups, background jobs, remaining unbounded loaders), see [2026-09-05-scale-5k.md](./2026-09-05-scale-5k.md).
 
 ---
 

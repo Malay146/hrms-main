@@ -64,7 +64,16 @@ export function PayrunForm({
             <button
               type="button"
               disabled={pending}
-              onClick={() => run(() => computePayrunAction(payrun.id), "Payrun computed")}
+              onClick={() =>
+                run(
+                  async () => {
+                    const result = await computePayrunAction(payrun.id);
+                    if (!result.ok) return result;
+                    return { ok: true as const };
+                  },
+                  "Payrun compute queued",
+                )
+              }
               className="rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 px-3.5 py-2"
             >
               Compute

@@ -102,7 +102,7 @@ const adminNavItems: SidebarItemType[] = [
       { label: "Working Schedules", href: "/admin/people/schedules" },
       { label: "Departments", href: "/admin/people/department" },
       { label: "Attendance", href: "/admin/people/attendance" },
-      { label: "Time Off Requests", href: "/admin/people/leave" },
+      { label: "Leave Requests", href: "/admin/people/leave" },
       { label: "Allocations", href: "/admin/people/leave/allocations" },
       { label: "Types", href: "/admin/people/leave/types" },
     ],
@@ -129,11 +129,6 @@ const adminNavItems: SidebarItemType[] = [
     label: "AI Analytics",
     icon: AiIcon,
     href: "/admin/analytics",
-  },
-  {
-    label: "API",
-    icon: BookIcon,
-    href: "/admin/developers",
   },
   {
     label: "divider",

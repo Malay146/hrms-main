@@ -21,6 +21,7 @@ import {
 import { createNotifications, staffUserIds } from "@/lib/shared/notify";
 import { firstZodError } from "@/lib/shared/validations";
 import { clampPage, clampPageSize, pageSkip, totalPagesFor } from "@/lib/shared/pagination";
+import { withTiming } from "@/lib/shared/logger";
 import { z } from "zod";
 import type { ActionResult, AttendanceLogItem, AttendanceStatus } from "@/lib/shared/types";
 
@@ -141,6 +142,9 @@ function attendanceStatusWhere(status?: string): Prisma.AttendanceWhereInput | u
 export async function listAttendanceLogs(
   filters?: AttendanceListQuery,
 ): Promise<ActionResult<AttendanceListResult>> {
+  return withTiming(
+    "timing.attendance_list",
+    async () => {
   try {
     await requirePermission("managePeople");
     const window = defaultAttendanceWindow();
@@ -238,6 +242,12 @@ export async function listAttendanceLogs(
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load attendance.") };
   }
+    },
+    {
+      page: filters?.page ?? 1,
+      status: filters?.status ?? "All",
+    },
+  );
 }
 
 export async function getAttendanceAction(
@@ -360,6 +370,13 @@ export async function upsertAttendanceAction(input: {
     revalidatePath("/employee/attendance");
     revalidatePath("/admin");
     revalidateTag("attendance", "max");
+    void (async () => {
+      const { organizationIdForUser, recomputeAttendanceDailyRollup } = await import(
+        "@/lib/jobs/handlers/attendance-rollup"
+      );
+      const orgId = await organizationIdForUser(parsed.data.userId);
+      if (orgId) await recomputeAttendanceDailyRollup(orgId, parsed.data.date);
+    })().catch(() => undefined);
     return { ok: true, data: mapAttendance(saved) };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not save attendance.") };
@@ -416,6 +433,13 @@ export async function clockInAction(): Promise<ActionResult<{ checkIn: string }>
     revalidatePath("/admin");
     revalidatePath("/admin/people/attendance");
     revalidateTag("attendance", "max");
+    void (async () => {
+      const { organizationIdForUser, recomputeAttendanceDailyRollup } = await import(
+        "@/lib/jobs/handlers/attendance-rollup"
+      );
+      const orgId = await organizationIdForUser(user.id);
+      if (orgId) await recomputeAttendanceDailyRollup(orgId, today);
+    })().catch(() => undefined);
     return { ok: true, data: { checkIn: formatDisplayTime(checkIn) } };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -474,6 +498,13 @@ export async function clockOutAction(): Promise<
     revalidatePath("/employee/attendance");
     revalidatePath("/admin/people/attendance");
     revalidateTag("attendance", "max");
+    void (async () => {
+      const { organizationIdForUser, recomputeAttendanceDailyRollup } = await import(
+        "@/lib/jobs/handlers/attendance-rollup"
+      );
+      const orgId = await organizationIdForUser(user.id);
+      if (orgId) await recomputeAttendanceDailyRollup(orgId, today);
+    })().catch(() => undefined);
     return {
       ok: true,
       data: { checkOut: formatDisplayTime(checkOut), hours: formatHours(hours) },
