@@ -48,6 +48,7 @@ async function main() {
           id: id(),
           accountId: userId,
           providerId: "credential",
+          issuer: "local:credential",
           password,
           createdAt: now,
           updatedAt: now,

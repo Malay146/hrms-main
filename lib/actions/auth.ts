@@ -40,7 +40,11 @@ export async function signInAction(input: {
         redirectTo: dbUser?.mustChangePassword ? "/change-password" : homePath(role),
       },
     };
-  } catch {
+  } catch (error) {
+    logger.warn("auth.login_failed", {
+      email: parsed.data.email,
+      reason: error instanceof Error ? error.message : "unknown",
+    });
     return { ok: false, error: "Invalid email or password." };
   }
 }
