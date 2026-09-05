@@ -33,8 +33,15 @@ export function AttendanceWidget() {
   }
 
   useEffect(() => {
-    void refresh();
+    const id = window.setTimeout(() => {
+      void refresh();
+    }, 2000);
+    return () => window.clearTimeout(id);
   }, []);
+
+  useEffect(() => {
+    if (open) void refresh();
+  }, [open]);
 
   useEffect(() => {
     if (!checkInAt || checkedOut) return;

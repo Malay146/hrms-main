@@ -52,17 +52,57 @@ export default function Dashboard({
     setMounted(true);
   }, []);
 
+  const teamPct = (count: number) =>
+    stats.totalEmployees === 0 ? "0% of team" : `${Math.round((count / stats.totalEmployees) * 100)}% of team`;
+  const departmentCount = stats.distribution.length;
+
   const cards = [
-    { icon: TotalEmployeeIcon, value: String(stats.totalEmployees), subtext: "Headcount", subtextColor: "text-[#16A34A]", label: "Total employee" },
-    { icon: PresentTodayIcon, value: String(stats.presentToday), subtext: "Checked in", subtextColor: "text-[#16A34A]", label: "Present Today" },
-    { icon: LeaveTodayIcon, value: String(stats.leaveToday), subtext: "Approved leave", subtextColor: "text-[#DC2626]", label: "Leave Today" },
+    {
+      icon: TotalEmployeeIcon,
+      value: String(stats.totalEmployees),
+      subtext: `${departmentCount} department${departmentCount === 1 ? "" : "s"}`,
+      subtextColor: "text-[#16A34A]",
+      label: "Total employee",
+    },
+    {
+      icon: PresentTodayIcon,
+      value: String(stats.presentToday),
+      subtext: teamPct(stats.presentToday),
+      subtextColor: "text-[#16A34A]",
+      label: "Present Today",
+    },
+    {
+      icon: LeaveTodayIcon,
+      value: String(stats.leaveToday),
+      subtext: teamPct(stats.leaveToday),
+      subtextColor: "text-[#DC2626]",
+      label: "Leave Today",
+    },
     payroll?.canViewPayroll
-      ? { icon: OpenPositionIcon, value: `₹${Math.round(payroll.totalNetPaid).toLocaleString("en-IN")}`, subtext: `${payroll.payslipsPaid} paid`, subtextColor: "text-[#16A34A]", label: "Total net salary paid" }
-      : { icon: OpenPositionIcon, value: "—", subtext: "No payroll access", subtextColor: "text-zinc-500", label: "Total net salary paid" },
-    { icon: PendingApprovalIcon, value: String(stats.pendingApprovals), subtext: "Leave requests", subtextColor: "text-[#D97706]", label: "Pending Approvals" },
+      ? {
+          icon: OpenPositionIcon,
+          value: `₹${Math.round(payroll.totalNetPaid).toLocaleString("en-IN")}`,
+          subtext: `${payroll.payslipsPaid} paid`,
+          subtextColor: "text-[#16A34A]",
+          label: "Total net salary paid",
+        }
+      : {
+          icon: OpenPositionIcon,
+          value: "—",
+          subtext: "No payroll access",
+          subtextColor: "text-zinc-500",
+          label: "Total net salary paid",
+        },
+    {
+      icon: PendingApprovalIcon,
+      value: String(stats.pendingApprovals),
+      subtext: stats.pendingApprovals === 0 ? "All clear" : "Awaiting review",
+      subtextColor: "text-[#D97706]",
+      label: "Pending Approvals",
+    },
   ];
 
-  const maxAttendance = Math.max(10, ...stats.weeklyAttendance.map((row) => row.attendance));
+  const maxAttendance = Math.max(1, ...stats.weeklyAttendance.map((row) => row.attendance));
 
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-4 bg-surface flex flex-col">
@@ -70,11 +110,11 @@ export default function Dashboard({
       <div className="flex items-center justify-between mt-6">
         <div className="flex flex-col">
           <h3 className="text-h3 font-semibold text-zinc-500">
-            Good Morning,
+            {stats.greeting},
             <span className="text-black dark:text-white"> {stats.firstName} 👋</span>
           </h3>
           <p className="text-body-lg text-zinc-500 font-medium">
-            Here what’s happening to your organisation today
+            Here what’s happening to your organisation {stats.todayLabel ? `on ${stats.todayLabel}` : "today"}
           </p>
         </div>
         <form className="flex flex-wrap gap-2 items-end" method="get">
@@ -222,15 +262,19 @@ export default function Dashboard({
               )}
             </div>
             <div className="flex-1 flex flex-col justify-center gap-4 pl-6">
-              {stats.distribution.map((item) => (
-                <div key={item.name} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                    <span className="text-zinc-700 font-medium">{item.name}</span>
+              {stats.distribution.length === 0 ? (
+                <p className="text-sm font-medium text-zinc-400">No employees to distribute yet</p>
+              ) : (
+                stats.distribution.map((item) => (
+                  <div key={item.name} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                      <span className="text-zinc-700 font-medium">{item.name}</span>
+                    </div>
+                    <span className="text-zinc-900 font-semibold">{item.percentage}</span>
                   </div>
-                  <span className="text-zinc-900 font-semibold">{item.percentage}</span>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

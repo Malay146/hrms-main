@@ -108,6 +108,7 @@ export type CalendarMarker = {
 
 export type DashboardStats = {
   firstName: string;
+  greeting: string;
   todayLabel: string;
   totalEmployees: number;
   presentToday: number;
@@ -121,11 +122,13 @@ export type DashboardStats = {
 
 export type EmployeeDashboardData = {
   firstName: string;
+  greeting: string;
   todayLabel: string;
   isClockedIn: boolean;
   checkInLabel: string;
   workedHours: string;
   remainingLeave: number;
+  upcomingLabel: string;
   weeklyHours: { day: string; hours: number }[];
 };
 

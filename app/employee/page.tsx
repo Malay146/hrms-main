@@ -3,11 +3,13 @@ import { getEmployeeDashboard } from "@/lib/actions/dashboard";
 
 const empty = {
   firstName: "there",
+  greeting: "Good morning",
   todayLabel: "",
   isClockedIn: false,
   checkInLabel: "",
   workedHours: "0.0 hrs",
   remainingLeave: 0,
+  upcomingLabel: "No upcoming leave",
   weeklyHours: [],
 };
 

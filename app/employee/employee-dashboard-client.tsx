@@ -42,7 +42,9 @@ export function EmployeeDashboardClient({
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col text-left">
-          <h1 className="text-h1 font-medium">Welcome Back, {data.firstName}</h1>
+          <h1 className="text-h1 font-medium">
+            {data.greeting}, {data.firstName}
+          </h1>
           <p className="text-body-lg text-zinc-500 font-medium">
             Here is your workspace summary for today, {data.todayLabel}.
           </p>
@@ -67,11 +69,11 @@ export function EmployeeDashboardClient({
           { label: "Today's Work Status", value: data.isClockedIn ? "Clocked In" : "Clocked Out", color: data.isClockedIn ? "text-emerald-600" : "text-red-500" },
           { label: "Remaining Leave Balance", value: `${data.remainingLeave} Days` },
           { label: "Hours today", value: data.workedHours },
-          { label: "Upcoming Event", value: "Q3 Town Hall" },
+          { label: "Upcoming leave", value: data.upcomingLabel },
         ].map((stat) => (
           <div key={stat.label} className="border border-border rounded-xl p-5 bg-surface">
             <span className="text-sm font-medium text-zinc-500">{stat.label}</span>
-            <span className={cn("text-2xl font-bold text-zinc-950 mt-2 block", stat.color)}>{stat.value}</span>
+            <span className={cn("text-2xl font-bold text-zinc-950 mt-2 block leading-tight", stat.color, stat.label === "Upcoming leave" && "text-lg")}>{stat.value}</span>
           </div>
         ))}
       </div>
@@ -103,7 +105,11 @@ export function EmployeeDashboardClient({
                 </defs>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F4F4F5" />
                 <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: "#A1A1AA", fontSize: 11, fontWeight: 600 }} />
-                <YAxis tickLine={false} axisLine={false} domain={[0, 10]} />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  domain={[0, Math.max(1, ...data.weeklyHours.map((row) => row.hours))]}
+                />
                 <Tooltip />
                 <Bar dataKey="hours" fill="url(#hoursGrad)" radius={[4, 4, 0, 0]} maxBarSize={40} />
               </BarChart>

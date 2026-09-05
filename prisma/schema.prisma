@@ -454,7 +454,7 @@ model Payslip {
   employeeId String
   employee   EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   contractId String?
-  contract   Contract?       @relation(fields: [contractId], references: [id])
+  contract   Contract?       @relation(fields: [contractId], references: [id], onDelete: SetNull)
   workedDays Decimal         @db.Decimal(6, 2)
   status     PayslipStatus   @default(draft)
   warning    String?

@@ -37,6 +37,13 @@ export function kolkataTodayKey(now = new Date()) {
   return formatDateKey(year, month, day);
 }
 
+export function kolkataGreeting(now = new Date()) {
+  const { hour } = kolkataParts(now);
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 export function dateFromKey(dateKey: string) {
   return new Date(`${dateKey}T00:00:00.000Z`);
 }

@@ -3,8 +3,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { PersonAvatar } from "@/components/ui/person-avatar";
-import SearchIcon from "@/components/icons/navbar/search";
-import CommandIcon from "@/components/icons/navbar/command";
 import NotificationIcon from "@/components/icons/notification";
 import SettingsIcon from "@/components/icons/settings";
 import LogoutIcon from "@/components/icons/logout";
@@ -13,6 +11,13 @@ import Link from "next/link";
 import { useSessionUser } from "@/components/providers/session-context";
 import { firstAllowedAdminPath, isStaffRole, ROLE_LABELS } from "@/lib/auth/permissions";
 import { AttendanceWidget } from "@/components/layout/attendance-widget";
+import { CommandTrigger, useCommandPalette } from "@/components/layout/command-trigger";
+import dynamic from "next/dynamic";
+
+const CommandPalette = dynamic(
+  () => import("@/components/layout/command-palette").then((mod) => mod.CommandPalette),
+  { ssr: false },
+);
 
 // ChevronsUpDown Icon
 const ChevronsUpDownIcon = ({ className }: { className?: string }) => (
@@ -77,6 +82,7 @@ export default function Navbar() {
   const portalHref = isAdminPortal ? "/employee" : firstAllowedAdminPath(user.role);
   const portalLabel = isAdminPortal ? "My self-service" : "Admin app";
 
+  const { open: commandOpen, setOpen: setCommandOpen } = useCommandPalette();
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [notifications, setNotifications] = useState(initialNotifications);
@@ -137,16 +143,11 @@ export default function Navbar() {
 
   return (
     <header className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-6 h-[60px] bg-background/80 backdrop-blur-md border-b border-border shrink-0 select-none">
-      {/* Search Input Bar */}
-      <div className="flex items-center w-[280px] h-10 bg-surface border border-border rounded-lg px-3 gap-2 shadow-2xs hover:border-border-strong focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-focus-ring/40 transition-all duration-150 cursor-text">
-        <SearchIcon className="w-5 h-5 text-icon-secondary shrink-0" />
-        <span className="text-body text-text-tertiary flex-1 truncate select-none text-left">
-          Find Something
-        </span>
-        <div className="flex items-center gap-0.5 bg-surface-secondary border border-border rounded px-1.5 py-0.5 text-text-secondary select-none text-[10px] font-medium leading-none shrink-0 shadow-3xs">
-          <CommandIcon className="size-4" />
-          <span className="text-button">K</span>
-        </div>
+      <div className="flex items-center">
+        <CommandTrigger onClick={() => setCommandOpen(true)} />
+        {commandOpen ? (
+          <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+        ) : null}
       </div>
 
       {/* Right Side Actions */}

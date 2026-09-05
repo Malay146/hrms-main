@@ -8,15 +8,16 @@ interface ToastProps {
   message: string;
   type: ToastType;
   onClose: () => void;
+  durationMs?: number;
 }
 
-export const Toast = ({ message, type, onClose }: ToastProps) => {
+export const Toast = ({ message, type, onClose, durationMs = 3000 }: ToastProps) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
-    }, 3000);
+    }, durationMs);
     return () => clearTimeout(timer);
-  }, [onClose]);
+  }, [onClose, durationMs]);
 
   const icons = {
     success: <CheckCircle2 className="size-4 text-zinc-500" />,

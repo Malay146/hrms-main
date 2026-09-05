@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FilterX, LayoutGrid, List, MoreHorizontal, Plus, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { FilterX, LayoutGrid, List, Plus, Search } from "lucide-react";
 import { cn } from "@/utils/cn";
 import TotalEmployeeIcon from "@/components/icons/total-employee";
 import PresentTodayIcon from "@/components/icons/present-today";
@@ -18,6 +19,7 @@ import type { EmployeeListItem, Role } from "@/lib/shared/types";
 type ViewMode = "kanban" | "list";
 
 const KANBAN_COLUMNS = ["Active", "On Leave", "Inactive"] as const;
+const CREATE_TOAST_KEY = "hrms-employee-create-toast";
 
 export function EmployeesClient({
   initialEmployees,
@@ -29,13 +31,26 @@ export function EmployeesClient({
   const [selectedDept, setSelectedDept] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [view, setView] = useState<ViewMode>("kanban");
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [pending, setPending] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const user = useSessionUser();
   const canCreateUsers = hasPermission(user.role, "createUsers");
-  const dropdownRef = useRef<HTMLTableCellElement>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem(CREATE_TOAST_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(CREATE_TOAST_KEY);
+    try {
+      const parsed = JSON.parse(raw) as { message: string; type: "success" | "error" };
+      if (parsed.message && (parsed.type === "success" || parsed.type === "error")) {
+        setToast(parsed);
+      }
+    } catch {
+      // Ignore a stale or malformed toast payload.
+    }
+  }, []);
 
   const departments = useMemo(
     () => ["All", ...new Set(employees.map((emp) => emp.department))],
@@ -75,14 +90,13 @@ export function EmployeesClient({
       return;
     }
     setShowCreate(false);
-    if (result.data.emailSent) {
-      setToast({ message: `Created ${result.data.employeeId}. Login details emailed.`, type: "success" });
-    } else {
-      setToast({
-        message: `Created ${result.data.employeeId}. Email failed. Temporary password: ${result.data.temporaryPassword}`,
-        type: "success",
-      });
-    }
+    const createdToast = result.data.emailSent
+      ? { message: `Created ${result.data.employeeId}. Login details emailed.`, type: "success" as const }
+      : {
+          message: `Created ${result.data.employeeId}. Email failed${result.data.emailError ? `: ${result.data.emailError}` : ""}. Temporary password: ${result.data.temporaryPassword}`,
+          type: "error" as const,
+        };
+    sessionStorage.setItem(CREATE_TOAST_KEY, JSON.stringify(createdToast));
     window.location.reload();
   }
 
@@ -269,30 +283,38 @@ export function EmployeesClient({
                 <th className="py-3.5 px-6">Designation</th>
                 <th className="py-3.5 px-6">Joined</th>
                 <th className="py-3.5 px-6">Status</th>
-                <th className="py-3.5 px-6" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-sm font-medium text-zinc-400">
+                  <td colSpan={5} className="py-12 text-center text-sm font-medium text-zinc-400">
                     No employees found
                   </td>
                 </tr>
               ) : (
                 filteredEmployees.map((emp) => (
-                  <tr key={emp.employeeId} className="hover:bg-zinc-50/50">
+                  <tr
+                    key={emp.employeeId}
+                    className="hover:bg-zinc-50/50 cursor-pointer"
+                    onClick={() => router.push(`/admin/people/employees/${emp.employeeId}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        router.push(`/admin/people/employees/${emp.employeeId}`);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="link"
+                  >
                     <td className="py-3.5 px-6">
-                      <Link
-                        href={`/admin/people/employees/${emp.employeeId}`}
-                        className="flex items-center gap-3"
-                      >
+                      <div className="flex items-center gap-3">
                         <PersonAvatar name={emp.name} size={32} />
                         <div>
                           <p className="font-semibold text-zinc-900">{emp.name}</p>
                           <p className="text-xs text-zinc-400">{emp.email}</p>
                         </div>
-                      </Link>
+                      </div>
                     </td>
                     <td className="py-3.5 px-6 text-zinc-500">{emp.department}</td>
                     <td className="py-3.5 px-6 text-zinc-700">{emp.designation}</td>
@@ -311,31 +333,6 @@ export function EmployeesClient({
                       >
                         {emp.status}
                       </span>
-                    </td>
-                    <td
-                      className="py-3.5 px-6 text-right relative"
-                      ref={activeMenuId === emp.employeeId ? dropdownRef : null}
-                    >
-                      <button
-                        onClick={() =>
-                          setActiveMenuId(
-                            activeMenuId === emp.employeeId ? null : emp.employeeId,
-                          )
-                        }
-                        className="cursor-pointer p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-400"
-                      >
-                        <MoreHorizontal className="size-4" />
-                      </button>
-                      {activeMenuId === emp.employeeId && (
-                        <div className="absolute right-6 top-10 w-40 bg-surface border border-border rounded-xl shadow-lg py-1 z-40">
-                          <Link
-                            href={`/admin/people/employees/${emp.employeeId}`}
-                            className="block px-3 py-2 text-xs font-semibold rounded-lg hover:bg-surface-hover"
-                          >
-                            Open form
-                          </Link>
-                        </div>
-                      )}
                     </td>
                   </tr>
                 ))
@@ -419,7 +416,14 @@ export function EmployeesClient({
         </div>
       )}
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          durationMs={toast.type === "error" ? 12000 : 4000}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

@@ -74,7 +74,7 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
   }, []);
 
   const healthBadge = HEALTH_BADGE[data.health.band];
-  const maxAttendance = Math.max(10, ...data.weeklyAttendance.map((row) => row.attendance));
+  const maxAttendance = Math.max(1, ...data.weeklyAttendance.map((row) => row.attendance));
   const payrollLabel =
     data.payrollNet == null ? "—" : `₹${Math.round(data.payrollNet).toLocaleString("en-IN")}`;
 

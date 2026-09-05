@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { DayPicker } from "react-day-picker";
+import { useState } from "react";
 import { cn } from "@/utils/cn";
 import { Toast } from "@/components/ui/toast";
+import { AttendanceCalendar } from "@/components/leave/attendance-calendar";
 import { applyLeaveAction } from "@/lib/actions/people/leave";
-import { dateFromKey, kolkataTodayKey } from "@/lib/shared/dates";
+import { kolkataTodayKey } from "@/lib/shared/dates";
 import type { CalendarMarker, LeaveListItem, LeaveType } from "@/lib/shared/types";
 
 export function EmployeeLeaveClient({
@@ -44,12 +44,6 @@ export function EmployeeLeaveClient({
   const matchingAllocations = options.allocations.filter(
     (row) => row.typeId === selectedType?.id,
   );
-
-  const modifierDates = useMemo(() => ({
-    present: markers.filter((m) => m.kind === "present").map((m) => dateFromKey(m.date)),
-    absent: markers.filter((m) => m.kind === "absent").map((m) => dateFromKey(m.date)),
-    leave: markers.filter((m) => m.kind === "leave").map((m) => dateFromKey(m.date)),
-  }), [markers]);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -149,22 +143,15 @@ export function EmployeeLeaveClient({
 
         <div className="lg:col-span-8 flex flex-col gap-4">
           <div className="border border-border rounded-xl p-5">
-            <h2 className="text-base font-bold text-zinc-950 mb-3">Attendance calendar</h2>
-            <DayPicker
-              mode="single"
-              modifiers={modifierDates}
-              modifiersClassNames={{
-                present: "bg-emerald-50 text-emerald-700 rounded-full",
-                absent: "bg-red-50 text-red-700 rounded-full",
-                leave: "bg-amber-50 text-amber-700 rounded-full",
+            <AttendanceCalendar
+              markers={markers}
+              from={from}
+              to={to}
+              onRangeChange={(nextFrom, nextTo) => {
+                setFrom(nextFrom);
+                setTo(nextTo);
               }}
-              className="text-sm"
             />
-            <div className="flex gap-4 mt-3 text-xs font-semibold text-zinc-500">
-              <span>Present</span>
-              <span>Absent</span>
-              <span>Leave</span>
-            </div>
           </div>
 
           <div className="border border-border rounded-xl overflow-hidden">

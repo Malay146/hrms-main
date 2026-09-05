@@ -32,15 +32,15 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   const session = await getSession();
   if (!session?.user) return null;
 
-  const profile = await prisma.employeeProfile.findUnique({
+  const profilePromise = prisma.employeeProfile.findUnique({
     where: { userId: session.user.id },
     include: { department: { select: { name: true } } },
   });
-
-  const dbUser = await prisma.user.findUnique({
+  const dbUserPromise = prisma.user.findUnique({
     where: { id: session.user.id },
     select: { role: true, mustChangePassword: true },
   });
+  const [profile, dbUser] = await Promise.all([profilePromise, dbUserPromise]);
 
   const role = (dbUser?.role ?? session.user.role ?? profile?.role ?? "employee") as Role;
 

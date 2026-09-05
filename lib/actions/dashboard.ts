@@ -9,7 +9,9 @@ import {
   dateFromKey,
   formatDisplayDate,
   formatHours,
+  kolkataGreeting,
   kolkataTodayKey,
+  toDateKey,
   weekDayKeys,
   workingHours,
 } from "@/lib/shared/dates";
@@ -30,7 +32,7 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
       recentLeaves,
       profiles,
     ] = await Promise.all([
-      prisma.employeeProfile.count({ where: { role: "employee" } }),
+      prisma.employeeProfile.count(),
       prisma.attendance.count({
         where: { date: todayDate, status: { in: ["present", "half_day"] } },
       }),
@@ -57,7 +59,6 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
         },
       }),
       prisma.employeeProfile.findMany({
-        where: { role: "employee" },
         select: { department: { select: { name: true } } },
       }),
     ]);
@@ -78,6 +79,7 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
       ok: true,
       data: {
         firstName: admin.fullName.split(" ")[0] ?? "Admin",
+        greeting: kolkataGreeting(),
         todayLabel: formatDisplayDate(today),
         totalEmployees,
         presentToday,
@@ -87,7 +89,7 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
         recentLeaves: recentLeaves.map((row) => mapLeave(row)),
         distribution,
         activities: recentLeaves.map((row) => ({
-          text: `${row.user.profile?.fullName ?? "Employee"} ${row.status} ${row.type} leave`,
+          text: `${row.user.profile?.fullName ?? "Employee"} ${row.status} ${row.type.name} leave`,
           time: formatDisplayDate(row.createdAt),
         })),
       },
@@ -102,36 +104,56 @@ export async function getEmployeeDashboard(): Promise<ActionResult<EmployeeDashb
     const user = await requireUser();
     const today = kolkataTodayKey();
     const keys = weekDayKeys();
-    const [todayRow, weekRows, profile] = await Promise.all([
+    const [todayRow, weekRows, profile, nextLeave] = await Promise.all([
       prisma.attendance.findUnique({
         where: { userId_date: { userId: user.id, date: dateFromKey(today) } },
+        select: { checkIn: true, checkOut: true },
       }),
       prisma.attendance.findMany({
         where: {
           userId: user.id,
           date: { gte: dateFromKey(keys[0]), lte: dateFromKey(keys[5]) },
         },
+        select: { date: true, checkIn: true, checkOut: true, workedHours: true },
       }),
       prisma.employeeProfile.findUnique({
         where: { userId: user.id },
         select: { paidLeaveBalance: true },
       }),
+      prisma.leaveRequest.findFirst({
+        where: {
+          userId: user.id,
+          status: { in: ["approved", "pending"] },
+          endDate: { gte: dateFromKey(today) },
+        },
+        orderBy: { startDate: "asc" },
+        include: { type: { select: { name: true } } },
+      }),
     ]);
 
-    const byDate = new Map(weekRows.map((row) => [row.date.toISOString().slice(0, 10), row]));
+    const byDate = new Map(weekRows.map((row) => [toDateKey(row.date), row]));
     const labels = ["Mon", "Tue", "Wed", "Thu", "Fri"];
     const weeklyHours = keys.slice(0, 5).map((key, index) => {
       const row = byDate.get(key);
+      const hours =
+        row?.workedHours != null
+          ? Number(row.workedHours)
+          : workingHours(row?.checkIn ?? null, row?.checkOut ?? null);
       return {
         day: labels[index],
-        hours: Number(workingHours(row?.checkIn ?? null, row?.checkOut ?? null).toFixed(1)),
+        hours: Number(hours.toFixed(1)),
       };
     });
+
+    const upcomingLabel = nextLeave
+      ? `${nextLeave.status === "pending" ? "Pending" : "Approved"} ${nextLeave.type.name} · ${formatDisplayDate(nextLeave.startDate)}`
+      : "No upcoming leave";
 
     return {
       ok: true,
       data: {
         firstName: user.fullName.split(" ")[0] ?? "there",
+        greeting: kolkataGreeting(),
         todayLabel: formatDisplayDate(today),
         isClockedIn: Boolean(todayRow?.checkIn && !todayRow.checkOut),
         checkInLabel: todayRow?.checkIn
@@ -142,8 +164,13 @@ export async function getEmployeeDashboard(): Promise<ActionResult<EmployeeDashb
               hour12: true,
             }).format(todayRow.checkIn)
           : "",
-        workedHours: formatHours(workingHours(todayRow?.checkIn ?? null, todayRow?.checkOut ?? new Date())),
+        workedHours: formatHours(
+          todayRow?.checkIn
+            ? workingHours(todayRow.checkIn, todayRow.checkOut ?? new Date())
+            : 0,
+        ),
         remainingLeave: profile?.paidLeaveBalance ?? 0,
+        upcomingLabel,
         weeklyHours,
       },
     };

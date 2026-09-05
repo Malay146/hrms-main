@@ -6,6 +6,7 @@ import { kolkataTodayKey } from "@/lib/shared/dates";
 
 const emptyStats = {
   firstName: "Admin",
+  greeting: "Good morning",
   todayLabel: "",
   totalEmployees: 0,
   presentToday: 0,

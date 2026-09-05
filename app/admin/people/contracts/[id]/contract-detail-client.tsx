@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Toast } from "@/components/ui/toast";
 import {
+  deleteContractAction,
   upsertContractAction,
   type ContractFormOptions,
   type ContractListItem,
@@ -61,6 +62,18 @@ export function ContractDetailClient({
       }
       setToast({ message: `Saved ${result.data.code}.`, type: "success" });
       router.refresh();
+    });
+  }
+
+  function handleDelete() {
+    if (!window.confirm(`Delete contract ${contract.code}? This cannot be undone.`)) return;
+    startTransition(async () => {
+      const result = await deleteContractAction(contract.id);
+      if (!result.ok) {
+        setToast({ message: result.error, type: "error" });
+        return;
+      }
+      router.push("/admin/people/contracts");
     });
   }
 
@@ -198,7 +211,15 @@ export function ContractDetailClient({
             className="px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong resize-y"
           />
         </label>
-        <div className="sm:col-span-2 flex justify-end">
+        <div className="sm:col-span-2 flex justify-between gap-3">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={handleDelete}
+            className="cursor-pointer px-3.5 py-2 rounded-lg border border-error/30 bg-error-soft/40 text-sm font-semibold text-error hover:bg-error-soft disabled:opacity-60"
+          >
+            Delete contract
+          </button>
           <button
             type="submit"
             disabled={pending}

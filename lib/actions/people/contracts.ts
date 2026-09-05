@@ -339,3 +339,34 @@ export async function upsertContractAction(input: {
     return { ok: false, error: actionErrorMessage(error, "Could not save contract.") };
   }
 }
+
+export async function deleteContractAction(id: string): Promise<ActionResult<{ id: string }>> {
+  try {
+    await requirePermission("managePeople");
+    const existing = await prisma.contract.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        employee: { select: { employeeId: true } },
+      },
+    });
+    if (!existing) {
+      return { ok: false, error: "Contract not found." };
+    }
+
+    await prisma.$transaction([
+      prisma.payslip.updateMany({
+        where: { contractId: id },
+        data: { contractId: null },
+      }),
+      prisma.contract.delete({ where: { id } }),
+    ]);
+
+    revalidatePath("/admin/people/contracts");
+    revalidatePath(`/admin/people/contracts/${id}`);
+    revalidatePath(`/admin/people/employees/${existing.employee.employeeId}`);
+    return { ok: true, data: { id } };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not delete contract.") };
+  }
+}

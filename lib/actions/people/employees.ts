@@ -353,7 +353,7 @@ export async function createEmployeeAction(input: {
   department: string;
   jobTitle: string;
   phone?: string;
-}): Promise<ActionResult<{ employeeId: string; emailSent: boolean; temporaryPassword?: string }>> {
+}): Promise<ActionResult<{ employeeId: string; emailSent: boolean; emailError?: string; temporaryPassword?: string }>> {
   try {
     const admin = await requirePermission("createUsers");
     const parsed = createEmployeeSchema.safeParse(input);
@@ -461,6 +461,7 @@ export async function createEmployeeAction(input: {
 
     const loginUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
     let emailSent = true;
+    let emailError: string | undefined;
     try {
       await sendAccountCredentialsEmail({
         to: parsed.data.email,
@@ -471,9 +472,10 @@ export async function createEmployeeAction(input: {
       });
     } catch (error) {
       emailSent = false;
+      emailError = error instanceof Error ? error.message : "unknown";
       logger.error("mail.credentials_failed", {
         employeeId,
-        reason: error instanceof Error ? error.message : "unknown",
+        reason: emailError,
       });
     }
 
@@ -485,6 +487,7 @@ export async function createEmployeeAction(input: {
       data: {
         employeeId,
         emailSent,
+        emailError,
         temporaryPassword: emailSent ? undefined : password,
       },
     };

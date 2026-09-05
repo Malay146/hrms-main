@@ -2,11 +2,12 @@
 
 import React, { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { FileText, Plus, Search } from "lucide-react";
+import { FileText, Plus, Search, Trash2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { Modal } from "@/components/ui/modal";
 import { Toast } from "@/components/ui/toast";
 import {
+  deleteContractAction,
   upsertContractAction,
   type ContractFormOptions,
   type ContractListItem,
@@ -145,6 +146,19 @@ export function ContractsClient({
     });
   }
 
+  function handleDelete(row: ContractListItem) {
+    if (!window.confirm(`Delete contract ${row.code}? This cannot be undone.`)) return;
+    startTransition(async () => {
+      const result = await deleteContractAction(row.id);
+      if (!result.ok) {
+        setToast({ message: result.error, type: "error" });
+        return;
+      }
+      setContracts((prev) => prev.filter((item) => item.id !== row.id));
+      setToast({ message: `Deleted ${row.code}.`, type: "success" });
+    });
+  }
+
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
@@ -205,6 +219,7 @@ export function ContractsClient({
                 <th className="px-4 py-3">End</th>
                 <th className="px-4 py-3">Wage / month</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right"> </th>
               </tr>
             </thead>
             <tbody>
@@ -246,6 +261,17 @@ export function ContractsClient({
                     >
                       {row.status === "running" ? "Running" : "Expired"}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => handleDelete(row)}
+                      className="cursor-pointer inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-semibold text-error hover:bg-error-soft/50 disabled:opacity-60"
+                    >
+                      <Trash2 className="size-3.5" />
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}

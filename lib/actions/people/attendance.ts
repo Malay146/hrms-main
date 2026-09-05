@@ -139,9 +139,15 @@ export async function listMyAttendance(): Promise<ActionResult<AttendanceLogItem
 export async function getTodayAttendance() {
   const user = await requireUser();
   const today = kolkataTodayKey();
-  return prisma.attendance.findUnique({
+  const row = await prisma.attendance.findUnique({
     where: { userId_date: { userId: user.id, date: dateFromKey(today) } },
+    select: { checkIn: true, checkOut: true },
   });
+  if (!row) return null;
+  return {
+    checkIn: row.checkIn?.toISOString() ?? null,
+    checkOut: row.checkOut?.toISOString() ?? null,
+  };
 }
 
 export async function upsertAttendanceAction(input: {
