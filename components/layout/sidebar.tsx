@@ -17,7 +17,9 @@ import LogoutIcon from "@/components/icons/logout";
 import MyProfileIcon from "@/components/icons/my-profile";
 import BookIcon from "@/components/icons/book";
 import PenIcon from "@/components/icons/pen";
-
+import CreditCardIcon from "@/components/icons/credit-card";
+import { useSessionUser } from "@/components/providers/session-context";
+import { canAccessAdminPath } from "@/lib/permissions";
 import CollapsibleIcon from "@/components/icons/sidebar/collapsible";
 
 // Dynamic Branch Connector SVG Component
@@ -148,6 +150,11 @@ const employeeNavItems: SidebarItemType[] = [
     href: "/employee/leave",
   },
   {
+    label: "My Payroll",
+    icon: CreditCardIcon,
+    href: "/employee/payroll",
+  },
+  {
     label: "divider",
     icon: () => null,
     isDivider: true,
@@ -166,8 +173,22 @@ const employeeNavItems: SidebarItemType[] = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const isAdmin = pathname.startsWith("/admin");
-  const items = isAdmin ? adminNavItems : employeeNavItems;
+  const user = useSessionUser();
+  const isAdminPortal = pathname.startsWith("/admin");
+  const items = isAdminPortal
+    ? adminNavItems
+        .map((item) => {
+          if (item.isDivider) return item;
+          if (item.children) {
+            const children = item.children.filter((child) => canAccessAdminPath(user.role, child.href));
+            if (children.length === 0) return null;
+            return { ...item, children };
+          }
+          if (item.href && !canAccessAdminPath(user.role, item.href)) return null;
+          return item;
+        })
+        .filter((item): item is SidebarItemType => Boolean(item))
+    : employeeNavItems;
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {

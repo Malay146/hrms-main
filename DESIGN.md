@@ -358,6 +358,16 @@ Semantic icon gradients already in product:
 - Warning / leave: `#D97706` → `#FBBF24`
 - Inactive: `#71717A` → `#A1A1AA`
 
+### Tables
+
+- Outer: `border border-border rounded-xl overflow-hidden`
+- Header row: `bg-zinc-50/80 border-b`, `py-3.5` or `py-4`, `px-6`, uppercase tracking
+- Body: `divide-y divide-border`, row `hover:bg-zinc-50/50`
+- Employee cell: 32px circular initials (`bg-zinc-100 text-zinc-700 font-bold text-xs`) + name `font-semibold text-zinc-900` + email `text-xs text-zinc-400`
+- Row actions: `MoreHorizontal` 16px, menu `rounded-xl border shadow-lg`
+- Empty: `py-12 text-center text-sm font-medium text-zinc-400`
+- Horizontal scroll on small screens: `overflow-x-auto`
+
 ### Charts (Recharts)
 
 - Hide until mounted; placeholder `bg-zinc-50 rounded-xl animate-pulse` at chart height (200–250px)

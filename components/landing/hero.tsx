@@ -37,7 +37,7 @@ export default function HeroSection() {
       <div className="max-w-7xl mx-auto px-6 sm:px-8 relative z-10 w-full">
         <div className="flex flex-col lg:flex-row items-center justify-between min-h-[640px] relative">
           
-          {/* LEFT PART: Title, Description, Get Started CTA (Fixed Width & Independent Layout) */}
+          {/* LEFT PART: Title, Description, Login CTA */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -57,13 +57,13 @@ export default function HeroSection() {
               Automate employee attendance, manage department hierarchies, approve leave requests seamlessly, and empower teams with real-time self-service insights.
             </p>
 
-            {/* Get Started CTA */}
+            {/* Login CTA */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 pt-4">
               <Link
-                href="/sign-up"
+                href="/login"
                 className="group relative inline-flex items-center justify-center gap-2.5 px-4 py-3 rounded-md bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 font-semibold text-md shadow-lg shadow-zinc-950/10 dark:shadow-white/5 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
               >
-                <span>Get Started</span>
+                <span>Login</span>
                 <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
               </Link>
             </div>

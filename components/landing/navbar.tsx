@@ -22,19 +22,13 @@ export default function LandingNavbar() {
           </div>
         </Link>
 
-        {/* Right: Sign In & Sign Up CTAs */}
+        {/* Right: Login only */}
         <div className="flex items-center gap-3">
           <Link
             href="/login"
-            className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:text-zinc-950 dark:hover:text-white rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-all cursor-pointer"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/sign-up"
             className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-zinc-950 hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 rounded-md shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer"
           >
-            Sign up
+            Login
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
