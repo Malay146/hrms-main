@@ -1,37 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# HRMS (PeoplePay360)
 
-## Getting Started
+Next.js HRMS with PostgreSQL + Prisma 7 + Better Auth.
 
-First, run the development server:
+## Prerequisites
+
+- Node 20+
+- PostgreSQL 16+ (Homebrew recommended — **not Docker**)
+
+## Setup (local Postgres)
 
 ```bash
+# Install + start Postgres on port 5433
+brew install postgresql@16
+# In postgresql.conf set: port = 5433
+brew services start postgresql@16
+# Or: pg_ctl -D /opt/homebrew/var/postgresql@16 -l /tmp/pg16.log start
+
+# Create role + database (once)
+psql -h 127.0.0.1 -p 5433 -d postgres -c "CREATE ROLE postgres LOGIN PASSWORD 'admin123' SUPERUSER;"
+psql -h 127.0.0.1 -p 5433 -d postgres -c 'CREATE DATABASE "PeoplePay360" OWNER postgres;'
+
+# App env
+cp .env.example .env
+# DATABASE_URL=postgresql://postgres:admin123@localhost:5433/PeoplePay360
+
+npm install
+npx prisma migrate deploy
+npm run db:seed
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Seed logins
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | `admin@oddo.com` | `admin@oddo@1234` |
+| Demo employees | e.g. `william.joseph@oddo.com` | `Employee@1234` |
 
-## Learn More
+Public sign-up is closed. Admins create users from **Employees → Add User**.
 
-To learn more about Next.js, take a look at the following resources:
+## Wired to Postgres
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Auth, employees, departments, attendance, leave, payroll, dashboards, profile, password change.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Still UI-only / Coming Soon
 
-## Deploy on Vercel
+Recruitment, Notifications, Performance, AI Analytics, Admin Settings chrome.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Useful scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# hrms-main
+```bash
+npm run db:migrate
+npm run db:seed
+npm run db:studio
+```
