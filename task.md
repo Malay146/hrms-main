@@ -1,0 +1,5 @@
+- [/] Migrate all existing HR Admin files into the new `/app/admin` directory structure
+- [ ] Implement dynamic navigation in `components/layout/sidebar.tsx`
+- [ ] Create the new Employee view and sub-routes under `/app/employee`
+- [ ] Re-write `/app/page.tsx` as the landing selector page
+- [ ] Validate and run build to ensure type safety and compile check passes
