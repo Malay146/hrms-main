@@ -289,7 +289,7 @@ export function EmployeesClient({
             return (
               <div
                 key={column}
-                className="border border-border rounded-xl bg-zinc-50/40 flex flex-col min-h-[280px]"
+                className="border border-border rounded-xl bg-zinc-50 flex flex-col min-h-[280px]"
               >
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                   <h2 className="text-sm font-bold text-zinc-950">{column}</h2>
