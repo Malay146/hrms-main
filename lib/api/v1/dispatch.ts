@@ -2,6 +2,7 @@ import { z } from "zod";
 import { firstZodError } from "@/lib/shared/validations";
 import { findApiOperation } from "@/lib/api/v1/operations";
 import { actionToResponse, errorToResponse, jsonResponse, requestIdFrom } from "@/lib/api/v1/http";
+import { runWithRequestId } from "@/lib/shared/request-context";
 
 function parseQuery(url: URL, schema?: z.ZodType) {
   if (!schema) return {};
@@ -18,6 +19,10 @@ function parseQuery(url: URL, schema?: z.ZodType) {
 
 export async function dispatchV1(request: Request, slug: string[]) {
   const requestId = requestIdFrom(request);
+  return runWithRequestId(requestId, () => dispatchInner(request, slug, requestId));
+}
+
+async function dispatchInner(request: Request, slug: string[], requestId: string) {
   const pathname = `/${slug.join("/")}`;
   const found = findApiOperation(request.method, pathname);
   if (!found) {
