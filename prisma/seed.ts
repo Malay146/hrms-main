@@ -143,10 +143,10 @@ async function main() {
   }
 
   const timeOffDefs = [
-    { name: "Paid Time Off", code: "paid" },
-    { name: "Sick Leave", code: "sick" },
-    { name: "Unpaid Leave", code: "unpaid" },
-    { name: "Comp Off", code: "comp_off", requiresAllocation: false },
+    { name: "Paid Time Off", code: "paid", requiresAllocation: true },
+    { name: "Sick Leave", code: "sick", requiresAllocation: false },
+    { name: "Unpaid Leave", code: "unpaid", requiresAllocation: false },
+    { name: "Comp Off", code: "comp_off", requiresAllocation: true },
   ] as const;
 
   const timeOffTypes: Record<string, string> = {};
@@ -156,7 +156,7 @@ async function main() {
         organizationId: organization.id,
         name: def.name,
         code: def.code,
-        requiresAllocation: "requiresAllocation" in def ? def.requiresAllocation : true,
+        requiresAllocation: def.requiresAllocation,
       },
     });
     timeOffTypes[def.code] = row.id;

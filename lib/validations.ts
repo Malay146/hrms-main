@@ -143,6 +143,7 @@ export const applyLeaveSchema = z.object({
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date is required."),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "End date is required."),
   remarks: z.string().min(3, "Add a brief reason."),
+  allocationId: z.string().optional().nullable(),
 });
 
 export const decideLeaveSchema = z.object({
