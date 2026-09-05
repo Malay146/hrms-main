@@ -22,7 +22,10 @@ export async function listEmployees(): Promise<ActionResult<EmployeeListItem[]>>
     const today = kolkataTodayKey();
     const [profiles, leavesToday] = await Promise.all([
       prisma.employeeProfile.findMany({
-        include: { user: { select: { email: true } } },
+        include: {
+          user: { select: { email: true } },
+          department: { select: { name: true } },
+        },
         orderBy: { employeeId: "asc" },
       }),
       prisma.leaveRequest.findMany({
@@ -50,7 +53,10 @@ export async function getEmployeeByCode(employeeId: string): Promise<ActionResul
     await requirePermission("managePeople");
     const profile = await prisma.employeeProfile.findUnique({
       where: { employeeId },
-      include: { user: { select: { email: true } } },
+      include: {
+        user: { select: { email: true } },
+        department: { select: { name: true } },
+      },
     });
     if (!profile) {
       return { ok: false, error: "Employee not found." };
@@ -113,7 +119,29 @@ export async function createEmployeeAction(input: {
     const userId = randomId();
     const passwordHash = await hashPassword(password);
 
+    const deptName = parsed.data.department.trim();
+    const deptCode = deptName
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 32) || "GENERAL";
+
     await prisma.$transaction(async (tx) => {
+      const department = await tx.department.upsert({
+        where: {
+          organizationId_code: {
+            organizationId: adminProfile.organizationId,
+            code: deptCode,
+          },
+        },
+        create: {
+          organizationId: adminProfile.organizationId,
+          name: deptName,
+          code: deptCode,
+        },
+        update: { name: deptName },
+      });
+
       await tx.user.create({
         data: {
           id: userId,
@@ -145,7 +173,7 @@ export async function createEmployeeAction(input: {
           employeeId,
           fullName: parsed.data.fullName,
           role: parsed.data.role,
-          department: parsed.data.department,
+          departmentId: department.id,
           jobTitle: parsed.data.jobTitle,
           phone: parsed.data.phone || null,
           status: "active",

@@ -50,20 +50,21 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
           user: {
             select: {
               email: true,
-              profile: { select: { fullName: true, department: true } },
+              profile: { select: { fullName: true, department: { select: { name: true } } } },
             },
           },
         },
       }),
       prisma.employeeProfile.findMany({
         where: { role: "employee" },
-        select: { department: true },
+        select: { department: { select: { name: true } } },
       }),
     ]);
 
     const counts = new Map<string, number>();
     for (const profile of profiles) {
-      counts.set(profile.department, (counts.get(profile.department) ?? 0) + 1);
+      const name = profile.department.name;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
     }
     const distribution = [...counts.entries()].map(([name, value], index) => ({
       name,

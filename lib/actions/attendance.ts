@@ -35,7 +35,7 @@ export async function listAttendanceLogs(): Promise<ActionResult<AttendanceLogIt
         user: {
           select: {
             email: true,
-            profile: { select: { fullName: true, department: true } },
+            profile: { select: { fullName: true, department: { select: { name: true } } } },
           },
         },
       },
@@ -56,7 +56,7 @@ export async function listMyAttendance(): Promise<ActionResult<AttendanceLogItem
         user: {
           select: {
             email: true,
-            profile: { select: { fullName: true, department: true } },
+            profile: { select: { fullName: true, department: { select: { name: true } } } },
           },
         },
       },

@@ -1,7 +1,12 @@
 import "dotenv/config";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "../lib/db";
-import { currentPayrollMonth, dateFromKey, kolkataTodayKey } from "../lib/dates";
+import {
+  currentPayrollMonth,
+  dateFromKey,
+  inclusiveDayCount,
+  kolkataTodayKey,
+} from "../lib/dates";
 
 const ADMIN_EMAIL = "admin@oddo.com";
 const ADMIN_PASSWORD = "admin@oddo@1234";
@@ -19,13 +24,21 @@ function daysAgo(n: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function deptCode(name: string) {
+  return name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 32);
+}
+
 async function createUser(opts: {
   name: string;
   email: string;
   role: "admin" | "hr_manager" | "hr_payroll_manager" | "employee";
   organizationId: string;
+  departmentId: string;
   employeeId: string;
-  department: string;
   jobTitle: string;
   phone?: string;
   passwordHash: string;
@@ -61,7 +74,7 @@ async function createUser(opts: {
           employeeId: opts.employeeId,
           fullName: opts.name,
           role: opts.role,
-          department: opts.department,
+          departmentId: opts.departmentId,
           jobTitle: opts.jobTitle,
           phone: opts.phone ?? null,
           status: "active",
@@ -83,12 +96,23 @@ async function createUser(opts: {
 }
 
 async function main() {
-  await prisma.payroll.deleteMany();
+  await prisma.payslipLine.deleteMany();
+  await prisma.payslip.deleteMany();
+  await prisma.payrun.deleteMany();
+  await prisma.salaryRule.deleteMany();
+  await prisma.salaryStructure.deleteMany();
+  await prisma.contract.deleteMany();
   await prisma.leaveRequest.deleteMany();
+  await prisma.timeOffAllocation.deleteMany();
+  await prisma.timeOffType.deleteMany();
   await prisma.attendance.deleteMany();
+  await prisma.payroll.deleteMany();
   await prisma.session.deleteMany();
   await prisma.account.deleteMany();
   await prisma.employeeProfile.deleteMany();
+  await prisma.workingScheduleLine.deleteMany();
+  await prisma.workingSchedule.deleteMany();
+  await prisma.department.deleteMany();
   await prisma.verification.deleteMany();
   await prisma.user.deleteMany();
   await prisma.organization.deleteMany();
@@ -105,13 +129,46 @@ async function main() {
     },
   });
 
+  const departmentNames = ["Human Resources", "Engineering", "Sales", "Finance"];
+  const departments: Record<string, string> = {};
+  for (const name of departmentNames) {
+    const dept = await prisma.department.create({
+      data: {
+        organizationId: organization.id,
+        name,
+        code: deptCode(name),
+      },
+    });
+    departments[name] = dept.id;
+  }
+
+  const timeOffDefs = [
+    { name: "Paid Time Off", code: "paid" },
+    { name: "Sick Leave", code: "sick" },
+    { name: "Unpaid Leave", code: "unpaid" },
+    { name: "Comp Off", code: "comp_off", requiresAllocation: false },
+  ] as const;
+
+  const timeOffTypes: Record<string, string> = {};
+  for (const def of timeOffDefs) {
+    const row = await prisma.timeOffType.create({
+      data: {
+        organizationId: organization.id,
+        name: def.name,
+        code: def.code,
+        requiresAllocation: "requiresAllocation" in def ? def.requiresAllocation : true,
+      },
+    });
+    timeOffTypes[def.code] = row.id;
+  }
+
   const adminId = await createUser({
     name: "Admin",
     email: ADMIN_EMAIL,
     role: "admin",
     organizationId: organization.id,
+    departmentId: departments["Human Resources"],
     employeeId: "ODDO-2026-001",
-    department: "Human Resources",
     jobTitle: "Administrator",
     passwordHash: adminHash,
     basic: 0,
@@ -178,13 +235,19 @@ async function main() {
   const userIds: Record<string, string> = { admin: adminId };
   for (const person of people) {
     userIds[person.email] = await createUser({
-      ...person,
+      name: person.name,
+      email: person.email,
+      role: person.role,
       organizationId: organization.id,
+      departmentId: departments[person.department],
+      employeeId: person.employeeId,
+      jobTitle: person.jobTitle,
+      phone: person.phone,
       passwordHash: demoHash,
+      basic: person.basic,
     });
   }
 
-  // Attendance for the last few weekdays
   const attendees = [
     userIds["william.joseph@oddo.com"],
     userIds["bruce.banner@oddo.com"],
@@ -203,48 +266,59 @@ async function main() {
         data: {
           userId,
           date: dateFromKey(key),
-          checkIn: new Date(`${key}T${String(checkInHour).padStart(2, "0")}:${String(checkInMin).padStart(2, "0")}:00.000Z`),
-          checkOut:
-            dayOffset === 0
-              ? null
-              : new Date(`${key}T17:0${index}:00.000Z`),
+          checkIn: new Date(
+            `${key}T${String(checkInHour).padStart(2, "0")}:${String(checkInMin).padStart(2, "0")}:00.000Z`,
+          ),
+          checkOut: dayOffset === 0 ? null : new Date(`${key}T17:0${index}:00.000Z`),
           status: "present",
         },
       });
     }
   }
 
-  // Leave requests
-  await prisma.leaveRequest.createMany({
-    data: [
-      {
-        userId: userIds["john.cena@oddo.com"],
-        type: "sick",
-        startDate: dateFromKey(daysAgo(-2)),
-        endDate: dateFromKey(daysAgo(-1)),
-        remarks: "Medical checkup",
-        status: "pending",
+  const leaveSeeds = [
+    {
+      userId: userIds["john.cena@oddo.com"],
+      code: "sick",
+      start: daysAgo(-2),
+      end: daysAgo(-1),
+      remarks: "Medical checkup",
+      status: "pending" as const,
+    },
+    {
+      userId: userIds["sarah.mills@oddo.com"],
+      code: "paid",
+      start: daysAgo(-10),
+      end: daysAgo(-8),
+      remarks: "Family vacation",
+      status: "approved" as const,
+      adminComment: "Approved",
+    },
+    {
+      userId: userIds["mark.lou@oddo.com"],
+      code: "unpaid",
+      start: daysAgo(5),
+      end: daysAgo(5),
+      remarks: "Personal errand",
+      status: "rejected" as const,
+      adminComment: "Insufficient notice",
+    },
+  ];
+
+  for (const leave of leaveSeeds) {
+    await prisma.leaveRequest.create({
+      data: {
+        userId: leave.userId,
+        typeId: timeOffTypes[leave.code],
+        startDate: dateFromKey(leave.start),
+        endDate: dateFromKey(leave.end),
+        duration: inclusiveDayCount(leave.start, leave.end),
+        remarks: leave.remarks,
+        status: leave.status,
+        adminComment: leave.adminComment ?? null,
       },
-      {
-        userId: userIds["sarah.mills@oddo.com"],
-        type: "paid",
-        startDate: dateFromKey(daysAgo(-10)),
-        endDate: dateFromKey(daysAgo(-8)),
-        remarks: "Family vacation",
-        status: "approved",
-        adminComment: "Approved",
-      },
-      {
-        userId: userIds["mark.lou@oddo.com"],
-        type: "unpaid",
-        startDate: dateFromKey(daysAgo(5)),
-        endDate: dateFromKey(daysAgo(5)),
-        remarks: "Personal errand",
-        status: "rejected",
-        adminComment: "Insufficient notice",
-      },
-    ],
-  });
+    });
+  }
 
   console.log("Seed complete.");
   console.log(`Admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);

@@ -21,17 +21,17 @@ enum EmployeeStatus {
   on_leave
 }
 
+enum EmployeeType {
+  full_time
+  intern
+  contractor
+}
+
 enum AttendanceStatus {
   present
   absent
   half_day
   leave
-}
-
-enum LeaveType {
-  paid
-  sick
-  unpaid
 }
 
 enum LeaveStatus {
@@ -40,22 +40,80 @@ enum LeaveStatus {
   rejected
 }
 
+enum ContractStatus {
+  running
+  expired
+}
+
+enum CalendarType {
+  fixed
+  variable
+}
+
+enum TimeOffUnit {
+  days
+  hours
+}
+
+enum TimeOffApprover {
+  manager
+  officer
+}
+
+enum AllocationStatus {
+  draft
+  approved
+  refused
+}
+
+enum SalaryCategory {
+  basic
+  allowance
+  gross
+  deduction
+  net
+  contribution
+}
+
+enum RuleComputation {
+  fixed
+  percent_of_wage
+  percent_of_basic
+  percent_of_gross
+  percent_of_category
+  formula
+}
+
+enum PayrunStatus {
+  draft
+  computed
+  validated
+  paid
+}
+
+enum PayslipStatus {
+  draft
+  computed
+  validated
+  paid
+}
+
 model User {
-  id            String    @id
-  name          String
-  email         String
-  emailVerified Boolean
-  image         String?
-  createdAt     DateTime
-  updatedAt     DateTime
-  role          String    @default("employee")
-  mustChangePassword Boolean @default(false)
-  sessions      Session[]
-  accounts      Account[]
-  profile       EmployeeProfile?
-  attendances   Attendance[]
-  leaveRequests LeaveRequest[]
-  payrolls      Payroll[]
+  id                 String           @id
+  name               String
+  email              String
+  emailVerified      Boolean
+  image              String?
+  createdAt          DateTime
+  updatedAt          DateTime
+  role               String           @default("employee")
+  mustChangePassword Boolean          @default(false)
+  sessions           Session[]
+  accounts           Account[]
+  profile            EmployeeProfile?
+  attendances        Attendance[]
+  leaveRequests      LeaveRequest[]
+  payrolls           Payroll[]
 
   @@unique([email])
   @@map("user")
@@ -112,72 +170,319 @@ model Verification {
 }
 
 model Organization {
-  id        String             @id @default(cuid())
-  name      String
-  email     String
-  slug      String             @unique
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  profiles  EmployeeProfile[]
+  id               String            @id @default(cuid())
+  name             String
+  email            String
+  slug             String            @unique
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  profiles         EmployeeProfile[]
+  departments      Department[]
+  schedules        WorkingSchedule[]
+  timeOffTypes     TimeOffType[]
+  salaryStructures SalaryStructure[]
+  payruns          Payrun[]
 
   @@map("organization")
 }
 
-model EmployeeProfile {
-  id               String         @id @default(cuid())
-  userId           String         @unique
-  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organizationId   String
-  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employeeId       String         @unique
-  fullName         String
-  role             Role
-  department       String
-  jobTitle         String
-  phone            String?
-  status           EmployeeStatus @default(active)
-  paidLeaveBalance Int            @default(20)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+model Department {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  code           String
+  profiles       EmployeeProfile[]
+  contracts      Contract[]
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("department")
+}
+
+model WorkingSchedule {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  calendarType   CalendarType          @default(fixed)
+  timezone       String                @default("Asia/Kolkata")
+  active         Boolean               @default(true)
+  hoursPerWeek   Decimal               @db.Decimal(6, 2)
+  daysPerWeek    Int
+  lines          WorkingScheduleLine[]
+  profiles       EmployeeProfile[]
+  contracts      Contract[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
   @@index([organizationId])
+  @@map("working_schedule")
+}
+
+model WorkingScheduleLine {
+  id         String          @id @default(cuid())
+  scheduleId String
+  weekday    Int
+  startMin   Int
+  endMin     Int
+  breakMin   Int             @default(60)
+  hours      Decimal         @db.Decimal(4, 2)
+  schedule   WorkingSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId])
+  @@map("working_schedule_line")
+}
+
+model EmployeeProfile {
+  id               String              @id @default(cuid())
+  userId           String              @unique
+  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId   String
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId       String              @unique
+  fullName         String
+  role             Role
+  departmentId     String
+  department       Department          @relation(fields: [departmentId], references: [id])
+  managerId        String?
+  manager          EmployeeProfile?    @relation("EmployeeManager", fields: [managerId], references: [id])
+  reports          EmployeeProfile[]   @relation("EmployeeManager")
+  scheduleId       String?
+  schedule         WorkingSchedule?    @relation(fields: [scheduleId], references: [id])
+  employeeType     EmployeeType        @default(full_time)
+  workLocation     String?
+  companyName      String?
+  bankAccount      String?
+  personalEmail    String?
+  address          String?
+  joinDate         DateTime?           @db.Date
+  jobTitle         String
+  phone            String?
+  status           EmployeeStatus      @default(active)
+  paidLeaveBalance Int                 @default(20)
+  contracts        Contract[]
+  allocations      TimeOffAllocation[]
+  payslips         Payslip[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([organizationId])
+  @@index([departmentId])
+  @@index([scheduleId])
+  @@index([managerId])
   @@map("employee_profile")
 }
 
+model Contract {
+  id                String           @id @default(cuid())
+  code              String           @unique
+  employeeId        String
+  employee          EmployeeProfile  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  departmentId      String?
+  department        Department?      @relation(fields: [departmentId], references: [id])
+  scheduleId        String?
+  schedule          WorkingSchedule? @relation(fields: [scheduleId], references: [id])
+  salaryStructureId String?
+  salaryStructure   SalaryStructure? @relation(fields: [salaryStructureId], references: [id])
+  jobTitle          String
+  wage              Decimal          @db.Decimal(12, 2)
+  startDate         DateTime         @db.Date
+  endDate           DateTime?        @db.Date
+  status            ContractStatus
+  notes             String?
+  payslips          Payslip[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([employeeId])
+  @@index([departmentId])
+  @@index([scheduleId])
+  @@index([salaryStructureId])
+  @@map("contract")
+}
+
+model TimeOffType {
+  id                 String              @id @default(cuid())
+  organizationId     String
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name               String
+  code               String
+  unit               TimeOffUnit         @default(days)
+  requiresAllocation Boolean             @default(true)
+  approver           TimeOffApprover     @default(manager)
+  color              String              @default("zinc")
+  payrollNote        String?
+  allocations        TimeOffAllocation[]
+  leaveRequests      LeaveRequest[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("time_off_type")
+}
+
+model TimeOffAllocation {
+  id            String        @id @default(cuid())
+  employeeId    String
+  employee      EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  typeId        String
+  type          TimeOffType   @relation(fields: [typeId], references: [id], onDelete: Cascade)
+  allocated     Decimal       @db.Decimal(8, 2)
+  taken         Decimal       @default(0) @db.Decimal(8, 2)
+  validityYear  Int
+  status        AllocationStatus @default(draft)
+  description   String?
+  leaveRequests LeaveRequest[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([employeeId])
+  @@index([typeId])
+  @@map("time_off_allocation")
+}
+
+model LeaveRequest {
+  id           String             @id @default(cuid())
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  typeId       String
+  type         TimeOffType        @relation(fields: [typeId], references: [id])
+  allocationId String?
+  allocation   TimeOffAllocation? @relation(fields: [allocationId], references: [id])
+  startDate    DateTime           @db.Date
+  endDate      DateTime           @db.Date
+  duration     Decimal            @db.Decimal(8, 2)
+  remarks      String
+  status       LeaveStatus        @default(pending)
+  adminComment String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([userId, status])
+  @@index([startDate, endDate])
+  @@index([typeId])
+  @@index([allocationId])
+  @@map("leave_request")
+}
+
 model Attendance {
-  id        String           @id @default(cuid())
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date      DateTime         @db.Date
-  checkIn   DateTime?
-  checkOut  DateTime?
-  status    AttendanceStatus
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  id            String           @id @default(cuid())
+  userId        String
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date          DateTime         @db.Date
+  checkIn       DateTime?
+  checkOut      DateTime?
+  status        AttendanceStatus
+  workedHours   Decimal?         @db.Decimal(6, 2)
+  overtimeHours Decimal?         @db.Decimal(6, 2)
+  notes         String?
+  manualEdit    Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   @@unique([userId, date])
   @@index([date])
   @@map("attendance")
 }
 
-model LeaveRequest {
-  id           String      @id @default(cuid())
-  userId       String
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type         LeaveType
-  startDate    DateTime    @db.Date
-  endDate      DateTime    @db.Date
-  remarks      String
-  status       LeaveStatus @default(pending)
-  adminComment String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+model SalaryStructure {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  active         Boolean      @default(true)
+  rules          SalaryRule[]
+  contracts      Contract[]
+  payruns        Payrun[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  @@index([userId, status])
-  @@index([startDate, endDate])
-  @@map("leave_request")
+  @@index([organizationId])
+  @@map("salary_structure")
 }
 
+model SalaryRule {
+  id              String          @id @default(cuid())
+  structureId     String
+  structure       SalaryStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  name            String
+  code            String
+  category        SalaryCategory
+  sequence        Int
+  computation     RuleComputation
+  amount          Decimal?        @db.Decimal(12, 2)
+  percentage      Decimal?        @db.Decimal(8, 4)
+  percentBaseCode String?
+  formula         String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([structureId])
+  @@map("salary_rule")
+}
+
+model Payrun {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  structureId    String
+  structure      SalaryStructure @relation(fields: [structureId], references: [id])
+  periodStart    DateTime       @db.Date
+  periodEnd      DateTime       @db.Date
+  employeeType   EmployeeType?
+  status         PayrunStatus   @default(draft)
+  payslips       Payslip[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([organizationId])
+  @@index([structureId])
+  @@map("payrun")
+}
+
+model Payslip {
+  id         String          @id @default(cuid())
+  payrunId   String
+  payrun     Payrun          @relation(fields: [payrunId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  contractId String?
+  contract   Contract?       @relation(fields: [contractId], references: [id])
+  workedDays Decimal         @db.Decimal(6, 2)
+  status     PayslipStatus   @default(draft)
+  warning    String?
+  gross      Decimal         @default(0) @db.Decimal(12, 2)
+  net        Decimal         @default(0) @db.Decimal(12, 2)
+  lines      PayslipLine[]
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([payrunId, employeeId])
+  @@index([employeeId])
+  @@index([contractId])
+  @@map("payslip")
+}
+
+model PayslipLine {
+  id        String         @id @default(cuid())
+  payslipId String
+  payslip   Payslip        @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  ruleId    String?
+  name      String
+  code      String
+  category  SalaryCategory
+  amount    Decimal        @db.Decimal(12, 2)
+
+  @@index([payslipId])
+  @@map("payslip_line")
+}
+
+/// Legacy payroll rows — keep until Krishil retires in payrun Phase 3.
 model Payroll {
   id           String   @id @default(cuid())
   userId       String

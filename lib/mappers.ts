@@ -20,23 +20,39 @@ import {
 } from "@/lib/dates";
 import { initialsFromName } from "@/lib/employee-id";
 
+export function departmentName(
+  department: string | { name: string } | null | undefined,
+): string {
+  if (!department) return "—";
+  return typeof department === "string" ? department : department.name;
+}
+
+export function leaveTypeFromCode(code: string): LeaveType {
+  if (code === "sick") return "sick";
+  if (code === "unpaid") return "unpaid";
+  return "paid";
+}
+
 export function mapEmployeeStatus(status: string, onLeaveToday: boolean) {
   if (status === "inactive") return "Inactive";
   if (onLeaveToday || status === "on_leave") return "On Leave";
   return "Active";
 }
 
-export function mapEmployee(row: {
-  userId: string;
-  employeeId: string;
-  fullName: string;
-  department: string;
-  jobTitle: string;
-  phone: string | null;
-  status: string;
-  createdAt: Date;
-  user: { email: string };
-}, onLeaveToday: boolean): EmployeeListItem {
+export function mapEmployee(
+  row: {
+    userId: string;
+    employeeId: string;
+    fullName: string;
+    department?: string | { name: string } | null;
+    jobTitle: string;
+    phone: string | null;
+    status: string;
+    createdAt: Date;
+    user: { email: string };
+  },
+  onLeaveToday: boolean,
+): EmployeeListItem {
   return {
     id: row.employeeId,
     userId: row.userId,
@@ -44,7 +60,7 @@ export function mapEmployee(row: {
     name: row.fullName,
     email: row.user.email,
     avatar: initialsFromName(row.fullName),
-    department: row.department,
+    department: departmentName(row.department),
     designation: row.jobTitle,
     type: "Full-time",
     joinDate: formatDisplayDate(row.createdAt),
@@ -62,7 +78,10 @@ export function mapAttendance(row: {
   status: AttendanceStatus;
   user: {
     email: string;
-    profile: { fullName: string; department: string } | null;
+    profile: {
+      fullName: string;
+      department?: string | { name: string } | null;
+    } | null;
   };
 }): AttendanceLogItem {
   const late = row.status === "present" && isLateCheckIn(row.checkIn);
@@ -73,7 +92,7 @@ export function mapAttendance(row: {
     name,
     email: row.user.email,
     avatar: initialsFromName(name),
-    department: row.user.profile?.department ?? "—",
+    department: departmentName(row.user.profile?.department),
     date: formatDisplayDate(row.date),
     checkIn: formatDisplayTime(row.checkIn),
     checkOut: formatDisplayTime(row.checkOut),
@@ -86,7 +105,7 @@ export function mapAttendance(row: {
 export function mapLeave(row: {
   id: string;
   userId: string;
-  type: LeaveType;
+  type?: LeaveType | { code: string; name: string };
   startDate: Date;
   endDate: Date;
   remarks: string;
@@ -94,22 +113,29 @@ export function mapLeave(row: {
   status: string;
   user: {
     email: string;
-    profile: { fullName: string; department: string } | null;
+    profile: {
+      fullName: string;
+      department?: string | { name: string } | null;
+    } | null;
   };
 }): LeaveListItem {
   const name = row.user.profile?.fullName ?? row.user.email;
   const startDate = toDateKey(row.startDate);
   const endDate = toDateKey(row.endDate);
   const days = inclusiveDayCount(startDate, endDate);
+  const leaveType: LeaveType =
+    typeof row.type === "string"
+      ? row.type
+      : leaveTypeFromCode(row.type?.code ?? "paid");
   return {
     id: row.id,
     userId: row.userId,
     name,
     email: row.user.email,
     avatar: initialsFromName(name),
-    department: row.user.profile?.department ?? "—",
-    leaveType: LEAVE_TYPE_LABELS[row.type],
-    type: row.type,
+    department: departmentName(row.user.profile?.department),
+    leaveType: row.type && typeof row.type !== "string" ? row.type.name : LEAVE_TYPE_LABELS[leaveType],
+    type: leaveType,
     duration: `${days} Day${days === 1 ? "" : "s"}`,
     from: formatDisplayDate(startDate),
     to: formatDisplayDate(endDate),
@@ -132,7 +158,12 @@ export function mapPayroll(row: {
   netSalary: { toString(): string };
   user: {
     email: string;
-    profile: { employeeId: string; fullName: string; department: string; jobTitle: string } | null;
+    profile: {
+      employeeId: string;
+      fullName: string;
+      department?: string | { name: string } | null;
+      jobTitle: string;
+    } | null;
   };
 }): PayrollListItem {
   const name = row.user.profile?.fullName ?? row.user.email;
@@ -144,7 +175,7 @@ export function mapPayroll(row: {
     email: row.user.email,
     avatar: initialsFromName(name),
     role: row.user.profile?.jobTitle ?? "Employee",
-    department: row.user.profile?.department ?? "—",
+    department: departmentName(row.user.profile?.department),
     month: row.month,
     monthLabel: formatPayrollMonth(row.month),
     basic: Number(row.basic),

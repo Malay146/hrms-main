@@ -34,6 +34,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
 
   const profile = await prisma.employeeProfile.findUnique({
     where: { userId: session.user.id },
+    include: { department: { select: { name: true } } },
   });
 
   const dbUser = await prisma.user.findUnique({
@@ -51,7 +52,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     mustChangePassword: Boolean(dbUser?.mustChangePassword),
     employeeId: profile?.employeeId ?? null,
     fullName: profile?.fullName ?? session.user.name,
-    department: profile?.department ?? null,
+    department: profile?.department?.name ?? null,
     jobTitle: profile?.jobTitle ?? null,
     phone: profile?.phone ?? null,
     status: profile?.status ?? null,

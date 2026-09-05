@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
-import { mapLeave } from "@/lib/mappers";
+import { leaveTypeFromCode, mapLeave } from "@/lib/mappers";
 import {
   dateFromKey,
   eachDateKey,
@@ -27,18 +27,44 @@ function revalidateLeave() {
   revalidatePath("/admin/people/leave");
 }
 
+const leaveInclude = {
+  type: { select: { code: true, name: true } },
+  user: {
+    select: {
+      email: true,
+      profile: {
+        select: {
+          fullName: true,
+          department: { select: { name: true } },
+        },
+      },
+    },
+  },
+} as const;
+
+async function resolveTimeOffTypeId(userId: string, code: LeaveType) {
+  const profile = await prisma.employeeProfile.findUnique({
+    where: { userId },
+    select: { organizationId: true },
+  });
+  if (!profile) throw new Error("Employee profile is missing.");
+  const type = await prisma.timeOffType.findUnique({
+    where: {
+      organizationId_code: {
+        organizationId: profile.organizationId,
+        code,
+      },
+    },
+  });
+  if (!type) throw new Error(`Time off type "${code}" is not configured.`);
+  return type.id;
+}
+
 export async function listLeaveRequests(): Promise<ActionResult<LeaveListItem[]>> {
   try {
     await requirePermission("approveLeave");
     const rows = await prisma.leaveRequest.findMany({
-      include: {
-        user: {
-          select: {
-            email: true,
-            profile: { select: { fullName: true, department: true } },
-          },
-        },
-      },
+      include: leaveInclude,
       orderBy: { createdAt: "desc" },
     });
     return { ok: true, data: rows.map((row) => mapLeave(row)) };
@@ -52,14 +78,7 @@ export async function listMyLeaves(): Promise<ActionResult<LeaveListItem[]>> {
     const user = await requireUser();
     const rows = await prisma.leaveRequest.findMany({
       where: { userId: user.id },
-      include: {
-        user: {
-          select: {
-            email: true,
-            profile: { select: { fullName: true, department: true } },
-          },
-        },
-      },
+      include: leaveInclude,
       orderBy: { createdAt: "desc" },
     });
     return { ok: true, data: rows.map((row) => mapLeave(row)) };
@@ -144,23 +163,20 @@ export async function applyLeaveAction(input: {
       return { ok: false, error: "This range overlaps another pending or approved leave." };
     }
 
+    const typeId = await resolveTimeOffTypeId(user.id, parsed.data.type);
+    const duration = inclusiveDayCount(parsed.data.startDate, parsed.data.endDate);
+
     const created = await prisma.leaveRequest.create({
       data: {
         userId: user.id,
-        type: parsed.data.type,
+        typeId,
         startDate: dateFromKey(parsed.data.startDate),
         endDate: dateFromKey(parsed.data.endDate),
+        duration,
         remarks: parsed.data.remarks,
         status: "pending",
       },
-      include: {
-        user: {
-          select: {
-            email: true,
-            profile: { select: { fullName: true, department: true } },
-          },
-        },
-      },
+      include: leaveInclude,
     });
 
     logger.info("leave.applied", { leaveId: created.id, userId: user.id });
@@ -185,6 +201,7 @@ export async function decideLeaveAction(input: {
 
     const leave = await prisma.leaveRequest.findUnique({
       where: { id: parsed.data.leaveId },
+      include: { type: { select: { code: true } } },
     });
     if (!leave) {
       return { ok: false, error: "Leave request not found." };
@@ -196,7 +213,8 @@ export async function decideLeaveAction(input: {
       return { ok: true, data: undefined };
     }
 
-    const days = paidLeaveDays(leave.type, toDateKey(leave.startDate), toDateKey(leave.endDate));
+    const leaveType = leaveTypeFromCode(leave.type.code);
+    const days = paidLeaveDays(leaveType, toDateKey(leave.startDate), toDateKey(leave.endDate));
 
     await prisma.$transaction(async (tx) => {
       if (parsed.data.decision === "approved" && leave.status === "pending" && days > 0) {
@@ -259,12 +277,13 @@ export async function getPaidLeaveBalance() {
   });
   const used = await prisma.leaveRequest.findMany({
     where: { userId: user.id, status: "approved" },
+    include: { type: { select: { code: true } } },
   });
   const sickUsed = used
-    .filter((row) => row.type === "sick")
+    .filter((row) => row.type.code === "sick")
     .reduce((sum, row) => sum + inclusiveDayCount(toDateKey(row.startDate), toDateKey(row.endDate)), 0);
   const unpaidUsed = used
-    .filter((row) => row.type === "unpaid")
+    .filter((row) => row.type.code === "unpaid")
     .reduce((sum, row) => sum + inclusiveDayCount(toDateKey(row.startDate), toDateKey(row.endDate)), 0);
 
   return {
