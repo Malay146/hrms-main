@@ -2,17 +2,17 @@
 
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/db";
-import { orgSlugFromName, nextEmployeeId } from "@/lib/employee-id";
 import { logger } from "@/lib/logger";
-import { firstZodError, loginSchema, signUpSchema } from "@/lib/validations";
-import { kolkataParts } from "@/lib/dates";
+import { firstZodError, loginSchema, changePasswordSchema } from "@/lib/validations";
+import { homePath } from "@/lib/permissions";
+import { actionErrorMessage, requireUser } from "@/lib/session";
+import { prisma } from "@/lib/db";
 import type { ActionResult, Role } from "@/lib/types";
 
 export async function signInAction(input: {
   email: string;
   password: string;
-}): Promise<ActionResult<{ role: Role }>> {
+}): Promise<ActionResult<{ role: Role; redirectTo: string }>> {
   const parsed = loginSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: firstZodError(parsed.error) };
@@ -27,80 +27,59 @@ export async function signInAction(input: {
       headers: await headers(),
     });
 
-    const role = ((result.user as { role?: Role }).role ?? "employee") as Role;
+    const dbUser = await prisma.user.findUnique({
+      where: { id: result.user.id },
+      select: { role: true, mustChangePassword: true },
+    });
+    const role = (dbUser?.role ?? (result.user as { role?: Role }).role ?? "employee") as Role;
     logger.info("auth.login", { userId: result.user.id, role });
-    return { ok: true, data: { role } };
+    return {
+      ok: true,
+      data: {
+        role,
+        redirectTo: dbUser?.mustChangePassword ? "/change-password" : homePath(role),
+      },
+    };
   } catch {
     return { ok: false, error: "Invalid email or password." };
   }
 }
 
-export async function signUpOrganizationAction(input: {
-  name: string;
-  organizationName: string;
-  organizationEmail: string;
-  password: string;
+export async function signUpOrganizationAction(): Promise<ActionResult<{ role: Role }>> {
+  return {
+    ok: false,
+    error: "Public sign-up is closed. Ask an administrator to create your account.",
+  };
+}
+
+export async function changePasswordAction(input: {
+  currentPassword: string;
+  newPassword: string;
   confirmPassword: string;
-}): Promise<ActionResult<{ role: Role }>> {
-  const parsed = signUpSchema.safeParse(input);
+}): Promise<ActionResult<{ redirectTo: string }>> {
+  const parsed = changePasswordSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: firstZodError(parsed.error) };
   }
 
-  const existingUsers = await prisma.user.count();
-  if (existingUsers > 0) {
-    return {
-      ok: false,
-      error: "This organization already has an admin. Ask them to create your account.",
-    };
-  }
-
   try {
-    const signedUp = await auth.api.signUpEmail({
+    const user = await requireUser();
+    await auth.api.changePassword({
       body: {
-        name: parsed.data.name,
-        email: parsed.data.organizationEmail,
-        password: parsed.data.password,
+        currentPassword: parsed.data.currentPassword,
+        newPassword: parsed.data.newPassword,
+        revokeOtherSessions: true,
       },
       headers: await headers(),
     });
-
-    const slug = orgSlugFromName(parsed.data.organizationName);
-    const year = kolkataParts().year;
-    const organization = await prisma.organization.create({
-      data: {
-        name: parsed.data.organizationName,
-        email: parsed.data.organizationEmail,
-        slug,
-      },
-    });
-
     await prisma.user.update({
-      where: { id: signedUp.user.id },
-      data: { role: "admin", emailVerified: true },
+      where: { id: user.id },
+      data: { mustChangePassword: false },
     });
-
-    await prisma.employeeProfile.create({
-      data: {
-        userId: signedUp.user.id,
-        organizationId: organization.id,
-        employeeId: nextEmployeeId(slug, year, []),
-        fullName: parsed.data.name,
-        role: "admin",
-        department: "Human Resources",
-        jobTitle: "HR Admin",
-        status: "active",
-        paidLeaveBalance: 20,
-      },
-    });
-
-    logger.info("auth.signup", { userId: signedUp.user.id, role: "admin" });
-    return { ok: true, data: { role: "admin" } };
+    logger.info("auth.password_changed", { userId: user.id });
+    return { ok: true, data: { redirectTo: homePath(user.role) } };
   } catch (error) {
-    logger.error("auth.signup_failed", {
-      reason: error instanceof Error ? error.name : "unknown",
-    });
-    return { ok: false, error: "Could not create the organization. Try a different email." };
+    return { ok: false, error: actionErrorMessage(error, "Could not change password.") };
   }
 }
 

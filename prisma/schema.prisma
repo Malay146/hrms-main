@@ -9,6 +9,9 @@ datasource db {
 
 enum Role {
   admin
+  hr_manager
+  hr_payroll_user
+  hr_payroll_manager
   employee
 }
 
@@ -46,6 +49,7 @@ model User {
   createdAt     DateTime
   updatedAt     DateTime
   role          String    @default("employee")
+  mustChangePassword Boolean @default(false)
   sessions      Session[]
   accounts      Account[]
   profile       EmployeeProfile?

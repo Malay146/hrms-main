@@ -23,10 +23,25 @@ export const signUpSchema = z
     path: ["confirmPassword"],
   });
 
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required."),
+    newPassword: passwordSchema,
+    confirmPassword: z.string().min(1, "Confirm your password."),
+  })
+  .refine((value) => value.newPassword === value.confirmPassword, {
+    message: "Passwords do not match.",
+    path: ["confirmPassword"],
+  })
+  .refine((value) => value.currentPassword !== value.newPassword, {
+    message: "New password must be different from the current password.",
+    path: ["newPassword"],
+  });
+
 export const createEmployeeSchema = z.object({
   fullName: z.string().min(2, "Full name is required."),
   email: z.string().email("Enter a valid email."),
-  password: passwordSchema,
+  role: z.enum(["admin", "hr_manager", "hr_payroll_user", "hr_payroll_manager", "employee"]),
   department: z.string().min(1, "Department is required."),
   jobTitle: z.string().min(1, "Job title is required."),
   phone: z.string().optional(),

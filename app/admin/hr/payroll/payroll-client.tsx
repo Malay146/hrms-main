@@ -9,8 +9,10 @@ import type { PayrollListItem } from "@/lib/types";
 
 export function PayrollClient({
   initialRows,
+  canEdit,
 }: {
   initialRows: PayrollListItem[];
+  canEdit: boolean;
 }) {
   const [rows, setRows] = useState(initialRows);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -47,10 +49,16 @@ export function PayrollClient({
             Edit salary structure. Net pay is generated as basic + HRA + allowance − deductions.
           </p>
         </div>
-        <button className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98">
-          <Play className="size-4" />
-          Run Payroll
-        </button>
+        {canEdit ? (
+          <button className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98">
+            <Play className="size-4" />
+            Run Payroll
+          </button>
+        ) : (
+          <span className="px-3 py-1 rounded-full text-xs font-bold bg-zinc-100 text-zinc-500 border border-zinc-200">
+            Read only
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -99,43 +107,49 @@ export function PayrollClient({
                     <input
                       type="number"
                       value={row.basic}
+                      disabled={!canEdit}
                       onChange={(e) => setRows((prev) => prev.map((item) => item.userId === row.userId ? { ...item, basic: Number(e.target.value) } : item))}
-                      className="h-10 w-28 px-2 border border-border rounded-lg text-sm"
+                      className="h-10 w-28 px-2 border border-border rounded-lg text-sm disabled:bg-zinc-50"
                     />
                   </td>
                   <td className="py-3 px-4">
                     <input
                       type="number"
                       value={row.hraPct}
+                      disabled={!canEdit}
                       onChange={(e) => setRows((prev) => prev.map((item) => item.userId === row.userId ? { ...item, hraPct: Number(e.target.value) } : item))}
-                      className="h-10 w-20 px-2 border border-border rounded-lg text-sm"
+                      className="h-10 w-20 px-2 border border-border rounded-lg text-sm disabled:bg-zinc-50"
                     />
                   </td>
                   <td className="py-3 px-4">
                     <input
                       type="number"
                       value={row.allowancePct}
+                      disabled={!canEdit}
                       onChange={(e) => setRows((prev) => prev.map((item) => item.userId === row.userId ? { ...item, allowancePct: Number(e.target.value) } : item))}
-                      className="h-10 w-20 px-2 border border-border rounded-lg text-sm"
+                      className="h-10 w-20 px-2 border border-border rounded-lg text-sm disabled:bg-zinc-50"
                     />
                   </td>
                   <td className="py-3 px-4">
                     <input
                       type="number"
                       value={row.deductions}
+                      disabled={!canEdit}
                       onChange={(e) => setRows((prev) => prev.map((item) => item.userId === row.userId ? { ...item, deductions: Number(e.target.value) } : item))}
-                      className="h-10 w-28 px-2 border border-border rounded-lg text-sm"
+                      className="h-10 w-28 px-2 border border-border rounded-lg text-sm disabled:bg-zinc-50"
                     />
                   </td>
                   <td className="py-3 px-4 font-semibold">₹{Number(row.netSalary || 0).toLocaleString()}</td>
                   <td className="py-3 px-6">
-                    <button
-                      onClick={() => save(row)}
-                      disabled={savingId === row.userId}
-                      className="cursor-pointer px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-semibold"
-                    >
-                      {savingId === row.userId ? "Saving..." : "Save"}
-                    </button>
+                    {canEdit ? (
+                      <button
+                        onClick={() => save(row)}
+                        disabled={savingId === row.userId}
+                        className="cursor-pointer px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-semibold"
+                      >
+                        {savingId === row.userId ? "Saving..." : "Save"}
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))

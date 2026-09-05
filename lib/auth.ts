@@ -7,23 +7,9 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
-  databaseHooks: {
-    user: {
-      create: {
-        async before(user) {
-          const count = await prisma.user.count();
-          return {
-            data: {
-              ...user,
-              role: count === 0 ? "admin" : "employee",
-            },
-          };
-        },
-      },
-    },
-  },
   emailAndPassword: {
     enabled: true,
+    disableSignUp: true,
     requireEmailVerification: false,
     minPasswordLength: 8,
   },
@@ -35,12 +21,17 @@ export const auth = betterAuth({
         defaultValue: "employee",
         input: false,
       },
+      mustChangePassword: {
+        type: "boolean",
+        required: true,
+        defaultValue: false,
+        input: false,
+      },
     },
   },
   session: {
     cookieCache: {
-      enabled: true,
-      maxAge: 60 * 5,
+      enabled: false,
     },
   },
   trustedOrigins: [process.env.BETTER_AUTH_URL ?? "http://localhost:3000"],

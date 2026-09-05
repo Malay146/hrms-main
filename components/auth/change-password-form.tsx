@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { AuthField } from "@/components/auth/auth-field";
 import { PasswordField } from "@/components/auth/password-field";
 import { AuthSubmitButton } from "@/components/auth/auth-submit-button";
-import { signInAction } from "@/lib/actions/auth";
+import { changePasswordAction } from "@/lib/actions/auth";
 
-export function LoginForm() {
+export function ChangePasswordForm() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
@@ -17,9 +16,10 @@ export function LoginForm() {
     setError("");
     setPending(true);
     const form = new FormData(event.currentTarget);
-    const result = await signInAction({
-      email: String(form.get("email") ?? ""),
-      password: String(form.get("password") ?? ""),
+    const result = await changePasswordAction({
+      currentPassword: String(form.get("currentPassword") ?? ""),
+      newPassword: String(form.get("newPassword") ?? ""),
+      confirmPassword: String(form.get("confirmPassword") ?? ""),
     });
     setPending(false);
     if (!result.ok) {
@@ -32,31 +32,35 @@ export function LoginForm() {
 
   return (
     <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-      <AuthField
-        id="email"
-        name="email"
-        label="Email address"
-        type="email"
-        placeholder="you@company.com"
-        autoComplete="email"
-        required
-      />
-
       <PasswordField
-        id="password"
-        name="password"
-        label="Password"
-        placeholder="Enter your password"
+        id="currentPassword"
+        name="currentPassword"
+        label="Current password"
+        placeholder="Password from your email"
         autoComplete="current-password"
         required
       />
-
+      <PasswordField
+        id="newPassword"
+        name="newPassword"
+        label="New password"
+        placeholder="At least 8 characters, including a number"
+        autoComplete="new-password"
+        required
+      />
+      <PasswordField
+        id="confirmPassword"
+        name="confirmPassword"
+        label="Confirm new password"
+        placeholder="Re-enter the new password"
+        autoComplete="new-password"
+        required
+      />
       {error ? (
         <p className="text-xs font-semibold text-red-600">{error}</p>
       ) : null}
-
       <AuthSubmitButton disabled={pending}>
-        {pending ? "Signing in..." : "Sign in"}
+        {pending ? "Saving..." : "Save new password"}
       </AuthSubmitButton>
     </form>
   );

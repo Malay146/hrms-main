@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requireRole } from "@/lib/session";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
 import { mapLeave } from "@/lib/mappers";
 import { PIE_COLORS } from "@/lib/mappers";
 import { weeklyAttendanceCounts } from "@/lib/actions/attendance";
@@ -17,7 +17,7 @@ import type { ActionResult, DashboardStats, EmployeeDashboardData } from "@/lib/
 
 export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>> {
   try {
-    const admin = await requireRole("admin");
+    const admin = await requirePermission("viewAdminDashboard");
     const today = kolkataTodayKey();
     const todayDate = dateFromKey(today);
 
@@ -97,7 +97,7 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
 
 export async function getEmployeeDashboard(): Promise<ActionResult<EmployeeDashboardData>> {
   try {
-    const user = await requireRole("employee");
+    const user = await requireUser();
     const today = kolkataTodayKey();
     const keys = weekDayKeys();
     const [todayRow, weekRows, profile] = await Promise.all([

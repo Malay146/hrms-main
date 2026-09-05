@@ -11,6 +11,7 @@ import LogoutIcon from "@/components/icons/logout";
 import { cn } from "@/utils/cn";
 import Link from "next/link";
 import { useSessionUser } from "@/components/providers/session-context";
+import { firstAllowedAdminPath, isStaffRole, ROLE_LABELS } from "@/lib/permissions";
 
 // ChevronsUpDown Icon
 const ChevronsUpDownIcon = ({ className }: { className?: string }) => (
@@ -68,9 +69,12 @@ const initialNotifications = [
 export default function Navbar() {
   const pathname = usePathname();
   const user = useSessionUser();
-  const isAdmin = user.role === "admin";
-  const notificationsHref = isAdmin ? "/admin/notifications" : "/employee/notifications";
-  const settingsHref = isAdmin ? "/admin/settings" : "/employee/settings";
+  const isStaff = isStaffRole(user.role);
+  const isAdminPortal = pathname.startsWith("/admin");
+  const notificationsHref = isAdminPortal ? "/admin/notifications" : "/employee/notifications";
+  const settingsHref = isAdminPortal ? "/admin/settings" : "/employee/settings";
+  const portalHref = isAdminPortal ? "/employee" : firstAllowedAdminPath(user.role);
+  const portalLabel = isAdminPortal ? "My self-service" : "Admin app";
 
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -146,6 +150,14 @@ export default function Navbar() {
 
       {/* Right Side Actions */}
       <div className="flex items-center gap-3">
+        {isStaff ? (
+          <Link
+            href={portalHref}
+            className="h-10 px-3 border border-border rounded-lg bg-surface hover:bg-surface-hover hover:border-border-strong text-sm font-semibold text-zinc-700 shadow-2xs active:scale-98 flex items-center transition-all"
+          >
+            {portalLabel}
+          </Link>
+        ) : null}
         {/* Notification Button & Dropdown */}
         <div className="relative" ref={popoverRef}>
           <button
@@ -290,7 +302,7 @@ export default function Navbar() {
                 {user.fullName}
               </span>
               <span className="text-caption text-text-tertiary truncate">
-                {isAdmin ? "HR Admin" : user.jobTitle ?? "Employee"}
+                {ROLE_LABELS[user.role]}
               </span>
             </div>
             <ChevronsUpDownIcon className="w-5 h-5 text-icon-secondary shrink-0 ml-1" />
@@ -307,7 +319,7 @@ export default function Navbar() {
                   {user.email}
                 </span>
                 <span className="inline-flex items-center mt-1.5 px-2 py-0.5 rounded-sm text-[10px] font-bold bg-zinc-100 text-zinc-800 w-fit border border-zinc-200">
-                  {isAdmin ? "HR Admin" : "Employee"}
+                  {ROLE_LABELS[user.role]}
                 </span>
               </div>
 

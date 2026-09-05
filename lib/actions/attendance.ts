@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "../../generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { actionErrorMessage, requireRole, requireUser } from "@/lib/session";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
 import { mapAttendance } from "@/lib/mappers";
 import {
   dateFromKey,
@@ -29,7 +29,7 @@ async function approvedLeaveToday(userId: string, today: string) {
 
 export async function listAttendanceLogs(): Promise<ActionResult<AttendanceLogItem[]>> {
   try {
-    await requireRole("admin");
+    await requirePermission("managePeople");
     const rows = await prisma.attendance.findMany({
       include: {
         user: {
@@ -49,7 +49,7 @@ export async function listAttendanceLogs(): Promise<ActionResult<AttendanceLogIt
 
 export async function listMyAttendance(): Promise<ActionResult<AttendanceLogItem[]>> {
   try {
-    const user = await requireRole("employee");
+    const user = await requireUser();
     const rows = await prisma.attendance.findMany({
       where: { userId: user.id },
       include: {
@@ -78,7 +78,7 @@ export async function getTodayAttendance() {
 
 export async function clockInAction(): Promise<ActionResult<{ checkIn: string }>> {
   try {
-    const user = await requireRole("employee");
+    const user = await requireUser();
     const today = kolkataTodayKey();
     const onLeave = await approvedLeaveToday(user.id, today);
     if (onLeave) {
@@ -120,7 +120,7 @@ export async function clockInAction(): Promise<ActionResult<{ checkIn: string }>
 
 export async function clockOutAction(): Promise<ActionResult<{ checkOut: string; hours: string }>> {
   try {
-    const user = await requireRole("employee");
+    const user = await requireUser();
     const today = kolkataTodayKey();
     const row = await prisma.attendance.findUnique({
       where: { userId_date: { userId: user.id, date: dateFromKey(today) } },

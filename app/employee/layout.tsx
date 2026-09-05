@@ -1,5 +1,5 @@
 import { AppChrome } from "@/components/layout/app-chrome";
-import { requirePageRole } from "@/lib/session";
+import { requirePageUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +8,6 @@ export default async function EmployeeLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await requirePageRole("employee");
+  const user = await requirePageUser();
   return <AppChrome user={user}>{children}</AppChrome>;
 }
