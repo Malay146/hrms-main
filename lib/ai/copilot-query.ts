@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { currentPayrollMonth, dateFromKey, kolkataTodayKey } from "@/lib/shared/dates";
+import {
+  sqlAttendanceSummaryQuery,
+  sqlLeaveTodayQuery,
+  sqlPendingLeaveQuery,
+} from "./copilot-query-sql";
 
 export type DepartmentHeadcountRow = {
   id: string;
@@ -105,34 +110,13 @@ export async function sqlFindPeople(organizationId: string, query: string) {
 export async function sqlLeaveToday(organizationId: string) {
   const today = dateFromKey(kolkataTodayKey());
   return prisma.$queryRaw<Array<{ fullName: string; employeeId: string; department: string }>>(
-    Prisma.sql`
-      SELECT p."fullName", p."employeeId", d.name AS department
-      FROM leave_request lr
-      INNER JOIN "user" u ON u.id = lr."userId"
-      INNER JOIN employee_profile p ON p."userId" = u.id
-      INNER JOIN department d ON d.id = p."departmentId"
-      WHERE p."organizationId" = ${organizationId}
-        AND lr.status::text = 'approved'
-        AND lr."startDate" <= ${today}
-        AND lr."endDate" >= ${today}
-      ORDER BY p."fullName" ASC
-      LIMIT 50
-    `,
+    sqlLeaveTodayQuery(organizationId, today),
   );
 }
 
 export async function sqlPendingLeave(organizationId: string) {
   return prisma.$queryRaw<Array<{ fullName: string; employeeId: string; startDate: Date; endDate: Date }>>(
-    Prisma.sql`
-      SELECT p."fullName", p."employeeId", lr."startDate", lr."endDate"
-      FROM leave_request lr
-      INNER JOIN "user" u ON u.id = lr."userId"
-      INNER JOIN employee_profile p ON p."userId" = u.id
-      WHERE p."organizationId" = ${organizationId}
-        AND lr.status::text = 'pending'
-      ORDER BY lr."createdAt" ASC
-      LIMIT 40
-    `,
+    sqlPendingLeaveQuery(organizationId),
   );
 }
 
@@ -148,23 +132,7 @@ export async function sqlAttendanceSummary(organizationId: string) {
       todayAbsent: number;
       todayLeave: number;
     }>
-  >(
-    Prisma.sql`
-      SELECT
-        COUNT(*) FILTER (WHERE a.date >= ${monthStart} AND a.date <= ${today})::int AS "monthRows",
-        COUNT(*) FILTER (
-          WHERE a.date >= ${monthStart} AND a.date <= ${today}
-            AND a.status::text IN ('present', 'half_day')
-        )::int AS "monthPresent",
-        COUNT(*) FILTER (WHERE a.date = ${today} AND a.status::text = 'present')::int AS "todayPresent",
-        COUNT(*) FILTER (WHERE a.date = ${today} AND a.status::text = 'absent')::int AS "todayAbsent",
-        COUNT(*) FILTER (WHERE a.date = ${today} AND a.status::text = 'leave')::int AS "todayLeave"
-      FROM attendance a
-      INNER JOIN employee_profile p ON p."userId" = a."userId"
-      WHERE p."organizationId" = ${organizationId}
-        AND p.status::text <> 'inactive'
-    `,
-  );
+  >(sqlAttendanceSummaryQuery(organizationId, monthStart, today));
   return rows[0] ?? { monthRows: 0, monthPresent: 0, todayPresent: 0, todayAbsent: 0, todayLeave: 0 };
 }
 

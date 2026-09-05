@@ -297,7 +297,7 @@ export async function applyLeaveAction(input: {
       return { ok: false, error: "This range overlaps another pending or approved leave." };
     }
 
-    const { type } = await resolveTimeOffType(user.id, parsed.data.type);
+    const { type, profileId, organizationId } = await resolveTimeOffType(user.id, parsed.data.type);
     const duration = inclusiveDayCount(parsed.data.startDate, parsed.data.endDate);
 
     let allocationId: string | null = parsed.data.allocationId ?? null;
@@ -325,6 +325,8 @@ export async function applyLeaveAction(input: {
     const created = await prisma.leaveRequest.create({
       data: {
         userId: user.id,
+        organizationId,
+        employeeId: profileId,
         typeId: type.id,
         allocationId,
         startDate: dateFromKey(parsed.data.startDate),
@@ -403,7 +405,7 @@ export async function applyLeaveForEmployeeAction(input: {
       return { ok: false, error: "This range overlaps another pending or approved leave." };
     }
 
-    const { type, profileId } = await resolveTimeOffType(input.userId, parsed.data.type);
+    const { type, profileId, organizationId } = await resolveTimeOffType(input.userId, parsed.data.type);
     const duration = inclusiveDayCount(parsed.data.startDate, parsed.data.endDate);
 
     let allocationId: string | null = null;
@@ -429,6 +431,8 @@ export async function applyLeaveForEmployeeAction(input: {
     const created = await prisma.leaveRequest.create({
       data: {
         userId: input.userId,
+        organizationId,
+        employeeId: profileId,
         typeId: type.id,
         allocationId,
         startDate: dateFromKey(parsed.data.startDate),
@@ -548,6 +552,8 @@ export async function decideLeaveAction(input: {
             update: { status: "leave", checkIn: null, checkOut: null },
             create: {
               userId: leave.userId,
+              organizationId: leave.organizationId,
+              employeeId: leave.employeeId,
               date: dateFromKey(key),
               status: "leave",
             },

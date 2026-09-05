@@ -67,7 +67,7 @@ async function ensureAllocationsAndBalances(organizationId: string) {
     where: {
       status: "approved",
       typeId: paidType.id,
-      user: { profile: { organizationId } },
+      organizationId,
     },
     select: { id: true, userId: true, duration: true, allocationId: true },
   });
@@ -162,7 +162,7 @@ async function ensureAllocationsAndBalances(organizationId: string) {
       status: "pending",
       typeId: paidType.id,
       allocationId: null,
-      user: { profile: { organizationId } },
+      organizationId,
     },
     select: { id: true, userId: true },
   });
@@ -231,10 +231,15 @@ async function ensureRunningContracts(organizationId: string) {
 
 async function alignAttendanceWithLeave(organizationId: string) {
   const weekKeys = weekDayKeys();
+  const profiles = await prisma.employeeProfile.findMany({
+    where: { organizationId },
+    select: { id: true, userId: true, organizationId: true },
+  });
+  const profileByUserId = new Map(profiles.map((row) => [row.userId, row]));
   const approved = await prisma.leaveRequest.findMany({
     where: {
       status: "approved",
-      user: { profile: { organizationId } },
+      organizationId,
       startDate: { lte: dateFromKey(weekKeys[weekKeys.length - 1]!) },
       endDate: { gte: dateFromKey(weekKeys[0]!) },
     },
@@ -254,6 +259,8 @@ async function alignAttendanceWithLeave(organizationId: string) {
   let upserted = 0;
   for (const key of weekKeys) {
     for (const userId of leaveOnDay.get(key) ?? []) {
+      const profile = profileByUserId.get(userId);
+      if (!profile) throw new Error(`Missing employee profile for ${userId}`);
       await prisma.attendance.upsert({
         where: { userId_date: { userId, date: dateFromKey(key) } },
         update: {
@@ -264,6 +271,8 @@ async function alignAttendanceWithLeave(organizationId: string) {
         },
         create: {
           userId,
+          organizationId: profile.organizationId,
+          employeeId: profile.id,
           date: dateFromKey(key),
           status: "leave",
           checkIn: null,
@@ -280,7 +289,7 @@ async function alignAttendanceWithLeave(organizationId: string) {
     where: {
       status: "leave",
       date: { gte: dateFromKey(weekKeys[0]!), lte: dateFromKey(weekKeys[weekKeys.length - 1]!) },
-      user: { profile: { organizationId } },
+      organizationId,
     },
     select: { id: true, userId: true, date: true },
   });
@@ -400,7 +409,7 @@ async function rebuildRollups(organizationId: string) {
   for (const key of weekKeys) {
     const day = dateFromKey(key);
     const rows = await prisma.attendance.findMany({
-      where: { date: day, user: { profile: { organizationId } } },
+      where: { date: day, organizationId },
       select: { status: true, checkIn: true, checkOut: true },
     });
     let presentCount = 0;

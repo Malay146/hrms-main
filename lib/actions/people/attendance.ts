@@ -47,6 +47,15 @@ const attendanceListInclude = {
   },
 } as const;
 
+async function profileKeysForUser(userId: string) {
+  const profile = await prisma.employeeProfile.findUnique({
+    where: { userId },
+    select: { id: true, organizationId: true },
+  });
+  if (!profile) throw new Error("Employee profile is missing.");
+  return { employeeId: profile.id, organizationId: profile.organizationId };
+}
+
 /** Detail/edit still needs schedule; list uses the same include for late metrics on one page. */
 const attendanceInclude = attendanceListInclude;
 
@@ -335,8 +344,11 @@ export async function upsertAttendanceAction(input: {
       status = "half_day";
     }
 
+    const keys = await profileKeysForUser(parsed.data.userId);
     const data = {
       userId: parsed.data.userId,
+      organizationId: keys.organizationId,
+      employeeId: keys.employeeId,
       date: dateFromKey(parsed.data.date),
       checkIn,
       checkOut,
@@ -387,6 +399,7 @@ export async function clockInAction(): Promise<ActionResult<{ checkIn: string }>
   try {
     const user = await requireUser();
     const today = kolkataTodayKey();
+    const keys = await profileKeysForUser(user.id);
     const onLeave = await approvedLeaveToday(user.id, today);
     if (onLeave) {
       await prisma.attendance.upsert({
@@ -394,6 +407,8 @@ export async function clockInAction(): Promise<ActionResult<{ checkIn: string }>
         update: { status: "leave" },
         create: {
           userId: user.id,
+          organizationId: keys.organizationId,
+          employeeId: keys.employeeId,
           date: dateFromKey(today),
           status: "leave",
         },
@@ -405,6 +420,8 @@ export async function clockInAction(): Promise<ActionResult<{ checkIn: string }>
     await prisma.attendance.create({
       data: {
         userId: user.id,
+        organizationId: keys.organizationId,
+        employeeId: keys.employeeId,
         date: dateFromKey(today),
         checkIn,
         status: "present",

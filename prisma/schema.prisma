@@ -249,6 +249,8 @@ model Organization {
   attendanceDailyRollups AttendanceDailyRollup[]
   metricsSnapshots       OrgMetricsSnapshot[]
   backgroundJobs         BackgroundJob[]
+  attendances            Attendance[]
+  leaveRequests          LeaveRequest[]
 
   @@map("organization")
 }
@@ -399,6 +401,8 @@ model EmployeeProfile {
   payslips         Payslip[]
   reviews          PerformanceReview[] @relation("ReviewEmployee")
   reviewsGiven     PerformanceReview[] @relation("ReviewReviewer")
+  attendances      Attendance[]
+  leaveRequests    LeaveRequest[]
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 
@@ -492,23 +496,29 @@ model TimeOffAllocation {
 /// CHECK leave_request_dates_ordered: endDate >= startDate
 /// CHECK leave_request_duration_nonneg: duration >= 0
 model LeaveRequest {
-  id           String             @id @default(cuid())
-  userId       String
-  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  typeId       String
-  type         TimeOffType        @relation(fields: [typeId], references: [id])
-  allocationId String?
-  allocation   TimeOffAllocation? @relation(fields: [allocationId], references: [id])
-  startDate    DateTime           @db.Date
-  endDate      DateTime           @db.Date
-  duration     Decimal            @db.Decimal(8, 2)
-  remarks      String
-  status       LeaveStatus        @default(pending)
-  adminComment String?
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id             String             @id @default(cuid())
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       EmployeeProfile    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  typeId         String
+  type           TimeOffType        @relation(fields: [typeId], references: [id])
+  allocationId   String?
+  allocation     TimeOffAllocation? @relation(fields: [allocationId], references: [id])
+  startDate      DateTime           @db.Date
+  endDate        DateTime           @db.Date
+  duration       Decimal            @db.Decimal(8, 2)
+  remarks        String
+  status         LeaveStatus        @default(pending)
+  adminComment   String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   @@index([userId, status])
+  @@index([organizationId, status])
+  @@index([employeeId])
   @@index([status, startDate, endDate])
   @@index([startDate, endDate])
   @@index([typeId])
@@ -518,23 +528,29 @@ model LeaveRequest {
 
 /// CHECK attendance_checkout_needs_checkin: checkOut IS NULL OR checkIn IS NOT NULL
 model Attendance {
-  id            String           @id @default(cuid())
-  userId        String
-  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date          DateTime         @db.Date
-  checkIn       DateTime?
-  checkOut      DateTime?
-  status        AttendanceStatus
-  workedHours   Decimal?         @db.Decimal(6, 2)
-  overtimeHours Decimal?         @db.Decimal(6, 2)
-  notes         String?
-  manualEdit    Boolean          @default(false)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       EmployeeProfile  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date           DateTime         @db.Date
+  checkIn        DateTime?
+  checkOut       DateTime?
+  status         AttendanceStatus
+  workedHours    Decimal?         @db.Decimal(6, 2)
+  overtimeHours  Decimal?         @db.Decimal(6, 2)
+  notes          String?
+  manualEdit     Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@unique([userId, date])
   @@index([date])
   @@index([userId, date])
+  @@index([organizationId, date])
+  @@index([employeeId, date])
   @@index([date, status])
   @@map("attendance")
 }

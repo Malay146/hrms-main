@@ -552,13 +552,14 @@ export async function executeAssistantLookup(
     const rows = await prisma.attendance.findMany({
       where: {
         date: dateFromKey(today),
-        user: { profile: { organizationId: orgId, status: { not: "inactive" } } },
+        organizationId: orgId,
+        employee: { status: { not: "inactive" } },
       },
       select: {
         checkIn: true,
         checkOut: true,
         status: true,
-        user: { select: { profile: { select: { fullName: true, employeeId: true } } } },
+        employee: { select: { fullName: true, employeeId: true } },
       },
     });
     const kind = arg(plan.args, "kind");
@@ -576,7 +577,7 @@ export async function executeAssistantLookup(
       };
     }
     const names = matches
-      .map((row) => row.user.profile?.fullName ?? row.user.profile?.employeeId ?? "Employee")
+      .map((row) => row.employee.fullName ?? row.employee.employeeId ?? "Employee")
       .join("; ");
     return {
       answer: `${matches.length} ${kind === "missing_checkout" ? "missing checkout" : "late"}: ${names}.`,

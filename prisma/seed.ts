@@ -408,13 +408,24 @@ async function main() {
     console.log(`Seeded employees ${Math.min(start + BULK_BATCH, bulk.length)}/${bulk.length}`);
   }
 
+  const orgProfiles = await prisma.employeeProfile.findMany({
+    where: { organizationId: organization.id },
+    select: { id: true, userId: true, organizationId: true },
+  });
+  const profileByUserId = new Map(orgProfiles.map((row) => [row.userId, row]));
+  const leavePerson = (userId: string) => {
+    const profile = profileByUserId.get(userId);
+    if (!profile) throw new Error(`Missing employee profile for ${userId}`);
+    return { userId, organizationId: profile.organizationId, employeeId: profile.id };
+  };
+
   // Approved leave covering today → shows in "On Leave" kanban via leave overlay + status.
   for (let i = 0; i < leaveTodayUserIds.length; i += 1) {
     const userId = leaveTodayUserIds[i]!;
     const createdAt = new Date(Date.now() - (2 + (i % 18)) * 86_400_000 - (i % 9) * 3_600_000);
     await prisma.leaveRequest.create({
       data: {
-        userId,
+        ...leavePerson(userId),
         typeId: timeOffTypes.paid,
         startDate: dateFromKey(daysAgo(1)),
         endDate: dateFromKey(daysAgo(-2)),
@@ -569,7 +580,7 @@ async function main() {
     const createdAt = new Date(Date.now() - leave.hoursAgo * 3_600_000);
     await prisma.leaveRequest.create({
       data: {
-        userId: leave.userId,
+        ...leavePerson(leave.userId),
         typeId: timeOffTypes[leave.code],
         startDate: dateFromKey(leave.start),
         endDate: dateFromKey(leave.end),
@@ -609,7 +620,7 @@ async function main() {
     const createdAt = new Date(Date.now() - leave.hoursAgo * 3_600_000);
     await prisma.leaveRequest.create({
       data: {
-        userId: leave.userId,
+        ...leavePerson(leave.userId),
         typeId: timeOffTypes[leave.code],
         startDate: dateFromKey(leave.start),
         endDate: dateFromKey(leave.end),
@@ -689,10 +700,13 @@ async function main() {
   const todayKey = kolkataTodayKey();
   const attendancePool = await prisma.employeeProfile.findMany({
     where: { organizationId: organization.id, status: { not: "inactive" } },
-    select: { userId: true },
+    select: { id: true, userId: true, organizationId: true },
     orderBy: { employeeId: "asc" },
   });
   const poolIds = attendancePool.map((row) => row.userId);
+  for (const row of attendancePool) {
+    profileByUserId.set(row.userId, row);
+  }
   const poolSize = poolIds.length;
 
   const leaveOnDay = new Map<string, Set<string>>();
@@ -720,12 +734,19 @@ async function main() {
   const weekdayFactors = [0.62, 0.84, 0.71, 0.9, 0.78];
   const attendanceRows: {
     userId: string;
+    organizationId: string;
+    employeeId: string;
     date: Date;
     checkIn: Date | null;
     checkOut: Date | null;
     status: "present" | "absent" | "half_day" | "leave";
     workedHours: number | null;
   }[] = [];
+  const attendancePerson = (userId: string) => {
+    const profile = profileByUserId.get(userId);
+    if (!profile) throw new Error(`Missing employee profile for ${userId}`);
+    return { userId, organizationId: profile.organizationId, employeeId: profile.id };
+  };
 
   for (let dayIndex = 0; dayIndex < weekKeys.length; dayIndex += 1) {
     const key = weekKeys[dayIndex]!;
@@ -759,7 +780,7 @@ async function main() {
 
     for (const userId of onLeave) {
       attendanceRows.push({
-        userId,
+        ...attendancePerson(userId),
         date,
         checkIn: null,
         checkOut: null,
@@ -779,7 +800,7 @@ async function main() {
           ? null
           : new Date(`${key}T1${1 + (i % 3)}:${String(i % 50).padStart(2, "0")}:00.000Z`);
       attendanceRows.push({
-        userId,
+        ...attendancePerson(userId),
         date,
         checkIn,
         checkOut,
@@ -789,7 +810,7 @@ async function main() {
     }
     for (const [i, userId] of take(halfDayCount).entries()) {
       attendanceRows.push({
-        userId,
+        ...attendancePerson(userId),
         date,
         checkIn: new Date(`${key}T03:${String(i % 30).padStart(2, "0")}:00.000Z`),
         checkOut: new Date(`${key}T07:${String(20 + (i % 20)).padStart(2, "0")}:00.000Z`),
@@ -799,7 +820,7 @@ async function main() {
     }
     for (const userId of take(absentCount)) {
       attendanceRows.push({
-        userId,
+        ...attendancePerson(userId),
         date,
         checkIn: null,
         checkOut: null,
