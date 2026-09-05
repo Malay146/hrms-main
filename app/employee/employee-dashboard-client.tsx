@@ -5,8 +5,9 @@ import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { cn } from "@/utils/cn";
 import ShiftClockIcon from "@/components/icons/late";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import { clockInAction, clockOutAction } from "@/lib/actions/people/attendance";
+import { BarChartTooltip, chartCursor, chartTooltipWrapperStyle } from "@/components/charts/chart-tooltip";
 import type { EmployeeDashboardData } from "@/lib/shared/types";
 
 export function EmployeeDashboardClient({
@@ -16,7 +17,6 @@ export function EmployeeDashboardClient({
 }) {
   const [data, setData] = useState(initial);
   const [mounted] = useState(true);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [pending, setPending] = useState(false);
 
   async function toggleClock() {
@@ -24,7 +24,7 @@ export function EmployeeDashboardClient({
     const result = data.isClockedIn ? await clockOutAction() : await clockInAction();
     setPending(false);
     if (!result.ok) {
-      setToast({ message: result.error, type: "error" });
+      toast.error(result.error);
       return;
     }
     const payload = result.data;
@@ -35,7 +35,7 @@ export function EmployeeDashboardClient({
       const checkIn = payload.checkIn;
       setData((prev) => ({ ...prev, isClockedIn: true, checkInLabel: checkIn }));
     }
-    setToast({ message: data.isClockedIn ? "Clocked out." : "Clocked in.", type: "success" });
+    toast.success(data.isClockedIn ? "Clocked out." : "Clocked in.");
   }
 
   return (
@@ -111,15 +111,17 @@ export function EmployeeDashboardClient({
                   axisLine={false}
                   domain={[0, Math.max(1, ...data.weeklyHours.map((row) => row.hours))]}
                 />
-                <Tooltip />
+                <Tooltip
+                  content={<BarChartTooltip valueLabel="Hours" />}
+                  cursor={chartCursor}
+                  wrapperStyle={chartTooltipWrapperStyle}
+                />
                 <Bar dataKey="hours" fill="url(#hoursGrad)" radius={[4, 4, 0, 0]} maxBarSize={40} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </div>
       </div>
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }

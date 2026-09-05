@@ -5,13 +5,14 @@ import Link from "next/link";
 import { FileText, Plus, Search, Trash2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { Modal } from "@/components/ui/modal";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import {
   deleteContractAction,
   upsertContractAction,
   type ContractFormOptions,
   type ContractListItem,
 } from "@/lib/actions/people/contracts";
+import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
 
 const inputClass =
   "h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong";
@@ -27,12 +28,10 @@ export function ContractsClient({
 }) {
   const [contracts, setContracts] = useState(initialContracts);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "running" | "expired">("all");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<ContractListItem | null>(null);
   const [pending, startTransition] = useTransition();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null,
-  );
 
   const presetEmployee = useMemo(() => {
     if (!filterEmployeeCode) return null;
@@ -50,17 +49,43 @@ export function ContractsClient({
   const [status, setStatus] = useState<"running" | "expired">("running");
   const [notes, setNotes] = useState("");
 
+  const stats = useMemo(() => {
+    const running = contracts.filter((row) => row.status === "running").length;
+    const expired = contracts.length - running;
+    const endingSoon = contracts.filter((row) => {
+      if (row.status !== "running" || !row.endDate) return false;
+      const days =
+        (new Date(`${row.endDate}T00:00:00Z`).getTime() - Date.now()) / 86_400_000;
+      return days >= 0 && days <= 45;
+    }).length;
+    const wageMonthly = contracts
+      .filter((row) => row.status === "running")
+      .reduce((sum, row) => sum + row.wage, 0);
+    return { running, expired, endingSoon, wageMonthly, total: contracts.length };
+  }, [contracts]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return contracts;
-    return contracts.filter(
-      (row) =>
+    return contracts.filter((row) => {
+      if (statusFilter !== "all" && row.status !== statusFilter) return false;
+      if (!q) return true;
+      return (
         row.code.toLowerCase().includes(q) ||
         row.employeeName.toLowerCase().includes(q) ||
         row.employeeCode.toLowerCase().includes(q) ||
-        row.jobTitle.toLowerCase().includes(q),
-    );
-  }, [contracts, search]);
+        row.jobTitle.toLowerCase().includes(q) ||
+        (row.departmentName?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [contracts, search, statusFilter]);
+
+  const {
+    page,
+    setPage,
+    totalPages,
+    total,
+    pageItems: pagedContracts,
+  } = useClientPagination(filtered, 20, `${search}|${statusFilter}`);
 
   function resetForm(next?: ContractListItem | null) {
     if (next) {
@@ -128,7 +153,7 @@ export function ContractsClient({
         notes: notes || null,
       });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       setContracts((prev) => {
@@ -139,10 +164,7 @@ export function ContractsClient({
         });
       });
       setEditorOpen(false);
-      setToast({
-        message: editing ? `Updated ${result.data.code}.` : `Created ${result.data.code}.`,
-        type: "success",
-      });
+      toast.success(editing ? `Updated ${result.data.code}.` : `Created ${result.data.code}.`);
     });
   }
 
@@ -151,11 +173,11 @@ export function ContractsClient({
     startTransition(async () => {
       const result = await deleteContractAction(row.id);
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       setContracts((prev) => prev.filter((item) => item.id !== row.id));
-      setToast({ message: `Deleted ${row.code}.`, type: "success" });
+      toast.success(`Deleted ${row.code}.`);
     });
   }
 
@@ -193,14 +215,53 @@ export function ContractsClient({
         </button>
       </div>
 
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-3 size-4 text-zinc-400 pointer-events-none" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search code, employee, or position"
-          className="w-full h-10 pl-9 pr-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
-        />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          { label: "Total contracts", value: String(stats.total) },
+          { label: "Running", value: String(stats.running) },
+          { label: "Ending ≤45 days", value: String(stats.endingSoon) },
+          {
+            label: "Monthly wage (running)",
+            value: `₹${stats.wageMonthly.toLocaleString("en-IN")}`,
+          },
+        ].map((card) => (
+          <div
+            key={card.label}
+            className="border border-border rounded-xl px-4 py-3 bg-surface hover:bg-surface-hover/40 transition-colors"
+          >
+            <p className="text-xs font-semibold text-zinc-500">{card.label}</p>
+            <p className="text-lg font-semibold text-zinc-950 mt-1 tabular-nums">{card.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-3 size-4 text-zinc-400 pointer-events-none" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search code, employee, department, or position"
+            className="w-full h-10 pl-9 pr-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          {(["all", "running", "expired"] as const).map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setStatusFilter(key)}
+              className={cn(
+                "cursor-pointer h-9 px-3 rounded-lg text-xs font-semibold border transition-colors",
+                statusFilter === key
+                  ? "bg-zinc-900 text-white border-zinc-900"
+                  : "bg-surface text-zinc-600 border-border hover:bg-surface-hover",
+              )}
+            >
+              {key === "all" ? "All" : key === "running" ? "Running" : "Expired"}
+            </button>
+          ))}
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -215,6 +276,7 @@ export function ContractsClient({
               <tr>
                 <th className="px-4 py-3">Code</th>
                 <th className="px-4 py-3">Employee</th>
+                <th className="px-4 py-3">Department</th>
                 <th className="px-4 py-3">Start</th>
                 <th className="px-4 py-3">End</th>
                 <th className="px-4 py-3">Wage / month</th>
@@ -223,8 +285,8 @@ export function ContractsClient({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => (
-                <tr key={row.id} className="border-t border-border hover:bg-surface-hover/40">
+              {pagedContracts.map((row) => (
+                <tr key={row.id} className="border-t border-border hover:bg-surface-hover/40 transition-colors">
                   <td className="px-4 py-3">
                     <Link
                       href={`/admin/people/contracts/${row.id}`}
@@ -245,6 +307,7 @@ export function ContractsClient({
                       </p>
                     </button>
                   </td>
+                  <td className="px-4 py-3 text-zinc-600">{row.departmentName ?? "—"}</td>
                   <td className="px-4 py-3 text-zinc-600">{row.startLabel}</td>
                   <td className="px-4 py-3 text-zinc-600">{row.endLabel}</td>
                   <td className="px-4 py-3 font-semibold text-zinc-900">
@@ -279,6 +342,14 @@ export function ContractsClient({
           </table>
         </div>
       )}
+
+      <ListPagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        pageItemCount={pagedContracts.length}
+        onPageChange={setPage}
+      />
 
       <Modal
         open={editorOpen}
@@ -424,10 +495,6 @@ export function ContractsClient({
           </button>
         </form>
       </Modal>
-
-      {toast ? (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      ) : null}
     </div>
   );
 }

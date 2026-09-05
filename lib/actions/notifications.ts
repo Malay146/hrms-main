@@ -4,22 +4,13 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
 import { formatNotificationStamp, formatRelativeTime } from "@/lib/shared/dates";
-import { createNotifications, organizationUserIds } from "@/lib/shared/notify";
+import { createNotifications, organizationUserIds, NOTIFICATION_CATEGORIES } from "@/lib/shared/notify";
+import type { NotificationCategory } from "@/lib/shared/notify";
 import type { ActionResult } from "@/lib/shared/types";
 import { z } from "zod";
 import { firstZodError } from "@/lib/shared/validations";
 
-const NOTIFICATION_CATEGORIES = [
-  "leave",
-  "recruitment",
-  "performance",
-  "attendance",
-  "system",
-  "payroll",
-  "announcement",
-] as const;
-
-export type NotificationCategoryName = (typeof NOTIFICATION_CATEGORIES)[number];
+export type NotificationCategoryName = NotificationCategory;
 
 export type NotificationItem = {
   id: string;

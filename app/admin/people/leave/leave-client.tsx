@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import { decideLeaveAction } from "@/lib/actions/people/leave";
 import { summarizeLeaveForApprover } from "@/lib/actions/ai";
 import type { AiLeaveBrief, LeaveListItem } from "@/lib/shared/types";
+import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
 
 export function LeaveClient({
   initialRequests,
@@ -18,16 +19,27 @@ export function LeaveClient({
   const [status, setStatus] = useState("All");
   const [commentFor, setCommentFor] = useState<{ id: string; decision: "approved" | "rejected" } | null>(null);
   const [comment, setComment] = useState("");
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [pending, setPending] = useState(false);
   const [brief, setBrief] = useState<AiLeaveBrief | null>(null);
   const [briefLoadingId, setBriefLoadingId] = useState<string | null>(null);
 
-  const filtered = requests.filter((req) => {
-    const matchesSearch = req.name.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = status === "All" || req.status === status;
-    return matchesSearch && matchesStatus;
-  });
+  const filtered = useMemo(
+    () =>
+      requests.filter((req) => {
+        const matchesSearch = req.name.toLowerCase().includes(search.toLowerCase());
+        const matchesStatus = status === "All" || req.status === status;
+        return matchesSearch && matchesStatus;
+      }),
+    [requests, search, status],
+  );
+
+  const {
+    page,
+    setPage,
+    totalPages,
+    total,
+    pageItems: pagedRequests,
+  } = useClientPagination(filtered, 20, `${search}|${status}`);
 
   async function decide() {
     if (!commentFor) return;
@@ -39,7 +51,7 @@ export function LeaveClient({
     });
     setPending(false);
     if (!result.ok) {
-      setToast({ message: result.error, type: "error" });
+      toast.error(result.error);
       return;
     }
     setRequests((prev) =>
@@ -51,7 +63,7 @@ export function LeaveClient({
     );
     setCommentFor(null);
     setComment("");
-    setToast({ message: `Leave ${commentFor.decision}.`, type: "success" });
+    toast.success(`Leave ${commentFor.decision}.`);
   }
 
   async function summarize(leaveId: string) {
@@ -59,7 +71,7 @@ export function LeaveClient({
     const result = await summarizeLeaveForApprover(leaveId);
     setBriefLoadingId(null);
     if (!result.ok) {
-      setToast({ message: result.error, type: "error" });
+      toast.error(result.error);
       return;
     }
     setBrief(result.data);
@@ -103,7 +115,7 @@ export function LeaveClient({
                 <td colSpan={7} className="py-12 text-center text-sm font-medium text-zinc-400">No leave requests found</td>
               </tr>
             ) : (
-              filtered.map((req) => (
+              pagedRequests.map((req) => (
                 <tr key={req.id} className="hover:bg-zinc-50/50">
                   <td className="py-3.5 px-6">
                     <p className="font-semibold text-zinc-900">{req.name}</p>
@@ -152,6 +164,14 @@ export function LeaveClient({
         </table>
       </div>
 
+      <ListPagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        pageItemCount={pagedRequests.length}
+        onPageChange={setPage}
+      />
+
       {commentFor && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <div className="w-full max-w-md border border-border rounded-2xl p-6 bg-surface flex flex-col gap-4">
@@ -197,8 +217,6 @@ export function LeaveClient({
           </div>
         </div>
       )}
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }

@@ -1,8 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 import { nextEmployeeId } from "@/lib/people/employee-id";
 import { logger } from "@/lib/shared/logger";
 import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
@@ -62,32 +63,258 @@ export type EmployeeHubData = {
   options: EmployeeHubOptions;
 };
 
-export async function listEmployees(): Promise<ActionResult<EmployeeListItem[]>> {
+export type EmployeeSortKey =
+  | "name"
+  | "department"
+  | "designation"
+  | "joined"
+  | "status"
+  | "employeeId";
+
+export type EmployeeListQuery = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  department?: string;
+  status?: string;
+  sort?: EmployeeSortKey;
+  dir?: "asc" | "desc";
+};
+
+export type EmployeeListResult = {
+  employees: EmployeeListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  departments: string[];
+  sort: EmployeeSortKey;
+  dir: "asc" | "desc";
+  stats: {
+    total: number;
+    active: number;
+    onLeave: number;
+    inactive: number;
+    removedInactiveCount: number;
+  };
+};
+
+export type UpdateEmployeeResult =
+  | { kind: "updated"; employee: EmployeeHubRecord }
+  | { kind: "deactivated"; employeeId: string };
+
+const DEFAULT_PAGE_SIZE = 24;
+const MAX_PAGE_SIZE = 60;
+
+function clampPageSize(value: number | undefined) {
+  if (!value || Number.isNaN(value)) return DEFAULT_PAGE_SIZE;
+  return Math.min(MAX_PAGE_SIZE, Math.max(1, Math.floor(value)));
+}
+
+async function loadOnLeaveUserIds(organizationId: string, today: string) {
+  const rows = await prisma.leaveRequest.findMany({
+    where: {
+      status: "approved",
+      startDate: { lte: new Date(`${today}T00:00:00.000Z`) },
+      endDate: { gte: new Date(`${today}T00:00:00.000Z`) },
+      user: { profile: { organizationId } },
+    },
+    select: { userId: true },
+  });
+  return [...new Set(rows.map((row) => row.userId))];
+}
+
+async function loadEmployeeStats(organizationId: string, today: string) {
+  const onLeaveIds = await loadOnLeaveUserIds(organizationId, today);
+  const [org, total, inactive, onLeaveStatus, activeRows] = await Promise.all([
+    prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { inactiveEmployeeCount: true },
+    }),
+    prisma.employeeProfile.count({ where: { organizationId } }),
+    prisma.employeeProfile.count({ where: { organizationId, status: "inactive" } }),
+    prisma.employeeProfile.count({ where: { organizationId, status: "on_leave" } }),
+    prisma.employeeProfile.findMany({
+      where: { organizationId, status: "active" },
+      select: { userId: true },
+    }),
+  ]);
+
+  const onLeaveSet = new Set(onLeaveIds);
+  const activeOnLeave = activeRows.filter((row) => onLeaveSet.has(row.userId)).length;
+  const onLeave = onLeaveStatus + activeOnLeave;
+  const active = Math.max(0, activeRows.length - activeOnLeave);
+  const removedInactiveCount = org?.inactiveEmployeeCount ?? 0;
+
+  return {
+    total: total + removedInactiveCount,
+    active,
+    onLeave,
+    inactive: inactive + removedInactiveCount,
+    removedInactiveCount,
+    onLeaveIds,
+  };
+}
+
+const getCachedEmployeeStats = unstable_cache(
+  async (organizationId: string, today: string) => loadEmployeeStats(organizationId, today),
+  ["employee-directory-stats"],
+  { revalidate: 30, tags: ["employees"] },
+);
+
+function bumpEmployeesCache() {
+  revalidateTag("employees", "max");
+}
+
+function parseEmployeeSort(sort?: string): EmployeeSortKey {
+  switch (sort) {
+    case "department":
+    case "designation":
+    case "joined":
+    case "status":
+    case "employeeId":
+    case "name":
+      return sort;
+    default:
+      return "name";
+  }
+}
+
+function parseSortDir(dir?: string): "asc" | "desc" {
+  return dir === "desc" ? "desc" : "asc";
+}
+
+function employeeOrderBy(
+  sort: EmployeeSortKey,
+  dir: "asc" | "desc",
+): Prisma.EmployeeProfileOrderByWithRelationInput[] {
+  switch (sort) {
+    case "department":
+      return [{ department: { name: dir } }, { fullName: "asc" }];
+    case "designation":
+      return [{ jobTitle: dir }, { fullName: "asc" }];
+    case "joined":
+      return [{ joinDate: dir }, { fullName: "asc" }];
+    case "status":
+      return [{ status: dir }, { fullName: "asc" }];
+    case "employeeId":
+      return [{ employeeId: dir }];
+    case "name":
+    default:
+      return [{ fullName: dir }, { employeeId: "asc" }];
+  }
+}
+
+export async function listEmployees(
+  query: EmployeeListQuery = {},
+): Promise<ActionResult<EmployeeListResult>> {
   try {
-    await requirePermission("managePeople");
+    const viewer = await requirePermission("managePeople");
     const today = kolkataTodayKey();
-    const [profiles, leavesToday] = await Promise.all([
+    const page = Math.max(1, Math.floor(query.page ?? 1));
+    const pageSize = clampPageSize(query.pageSize);
+    const search = query.search?.trim() ?? "";
+    const department = query.department?.trim() || "All";
+    const status = query.status?.trim() || "All";
+    const sort = parseEmployeeSort(query.sort);
+    const dir = parseSortDir(query.dir);
+
+    const orgProfile = await prisma.employeeProfile.findUnique({
+      where: { userId: viewer.id },
+      select: { organizationId: true },
+    });
+    if (!orgProfile) {
+      return { ok: false, error: "Organization not found." };
+    }
+    const { organizationId } = orgProfile;
+
+    const stats = await getCachedEmployeeStats(organizationId, today);
+    const onLeaveSet = new Set(stats.onLeaveIds);
+
+    const departments = (
+      await prisma.department.findMany({
+        where: { organizationId },
+        select: { name: true },
+        orderBy: { name: "asc" },
+      })
+    ).map((row) => row.name);
+
+    const andFilters: Prisma.EmployeeProfileWhereInput[] = [];
+
+    if (department !== "All") {
+      andFilters.push({ department: { name: department } });
+    }
+
+    if (search) {
+      andFilters.push({
+        OR: [
+          { fullName: { contains: search, mode: "insensitive" } },
+          { employeeId: { contains: search, mode: "insensitive" } },
+          { user: { email: { contains: search, mode: "insensitive" } } },
+        ],
+      });
+    }
+
+    if (status === "Inactive") {
+      andFilters.push({ status: "inactive" });
+    } else if (status === "On Leave") {
+      andFilters.push({
+        OR: [
+          { status: "on_leave" },
+          ...(stats.onLeaveIds.length > 0
+            ? [{ status: "active" as const, userId: { in: stats.onLeaveIds } }]
+            : []),
+        ],
+      });
+    } else if (status === "Active") {
+      andFilters.push({
+        status: "active",
+        ...(stats.onLeaveIds.length > 0 ? { userId: { notIn: stats.onLeaveIds } } : {}),
+      });
+    }
+
+    const where: Prisma.EmployeeProfileWhereInput = {
+      organizationId,
+      ...(andFilters.length > 0 ? { AND: andFilters } : {}),
+    };
+
+    const [total, profiles] = await Promise.all([
+      prisma.employeeProfile.count({ where }),
       prisma.employeeProfile.findMany({
+        where,
         include: {
           user: { select: { email: true } },
           department: { select: { name: true } },
         },
-        orderBy: { employeeId: "asc" },
-      }),
-      prisma.leaveRequest.findMany({
-        where: {
-          status: "approved",
-          startDate: { lte: new Date(`${today}T00:00:00.000Z`) },
-          endDate: { gte: new Date(`${today}T00:00:00.000Z`) },
-        },
-        select: { userId: true },
+        orderBy: employeeOrderBy(sort, dir),
+        skip: (page - 1) * pageSize,
+        take: pageSize,
       }),
     ]);
 
-    const onLeave = new Set(leavesToday.map((leave) => leave.userId));
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
     return {
       ok: true,
-      data: profiles.map((profile) => mapEmployee(profile, onLeave.has(profile.userId))),
+      data: {
+        employees: profiles.map((profile) =>
+          mapEmployee(profile, onLeaveSet.has(profile.userId)),
+        ),
+        page,
+        pageSize,
+        total,
+        totalPages,
+        departments,
+        sort,
+        dir,
+        stats: {
+          total: stats.total,
+          active: stats.active,
+          onLeave: stats.onLeave,
+          inactive: stats.inactive,
+          removedInactiveCount: stats.removedInactiveCount,
+        },
+      },
     };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load employees.") };
@@ -249,9 +476,9 @@ export async function updateEmployeeAction(input: {
   address?: string | null;
   bankAccount?: string | null;
   joinDate?: string | null;
-}): Promise<ActionResult<EmployeeHubRecord>> {
+}): Promise<ActionResult<UpdateEmployeeResult>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requirePermission("managePeople");
     const parsed = updateEmployeeSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
@@ -259,10 +486,48 @@ export async function updateEmployeeAction(input: {
 
     const existing = await prisma.employeeProfile.findUnique({
       where: { employeeId: parsed.data.employeeId },
-      select: { id: true, organizationId: true, userId: true },
+      select: {
+        id: true,
+        organizationId: true,
+        userId: true,
+        status: true,
+        role: true,
+      },
     });
     if (!existing) {
       return { ok: false, error: "Employee not found." };
+    }
+
+    if (parsed.data.status === "inactive") {
+      if (existing.userId === actor.id) {
+        return { ok: false, error: "You cannot deactivate your own account." };
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.employeeProfile.updateMany({
+          where: { managerId: existing.id },
+          data: { managerId: null },
+        });
+        await tx.organization.update({
+          where: { id: existing.organizationId },
+          data: { inactiveEmployeeCount: { increment: 1 } },
+        });
+        // Cascades profile, contracts, allocations, payslips, attendance, leave, sessions, accounts.
+        await tx.user.delete({ where: { id: existing.userId } });
+      });
+
+      logger.info("employee.deactivated_deleted", {
+        employeeId: parsed.data.employeeId,
+        by: actor.id,
+      });
+      revalidatePath("/admin");
+      revalidatePath("/admin/people/employees");
+      bumpEmployeesCache();
+      revalidatePath("/admin/users");
+      return {
+        ok: true,
+        data: { kind: "deactivated", employeeId: parsed.data.employeeId },
+      };
     }
 
     if (parsed.data.managerId === existing.id) {
@@ -337,13 +602,14 @@ export async function updateEmployeeAction(input: {
     logger.info("employee.updated", { employeeId: parsed.data.employeeId });
     revalidatePath("/admin");
     revalidatePath("/admin/people/employees");
+    bumpEmployeesCache();
     revalidatePath(`/admin/people/employees/${parsed.data.employeeId}`);
 
     const hub = await getEmployeeHub(parsed.data.employeeId);
     if (!hub.ok) {
       return { ok: false, error: hub.error };
     }
-    return { ok: true, data: hub.data.employee };
+    return { ok: true, data: { kind: "updated", employee: hub.data.employee } };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not update employee.") };
   }
@@ -499,6 +765,7 @@ export async function createEmployeeAction(input: {
     });
     revalidatePath("/admin");
     revalidatePath("/admin/people/employees");
+    bumpEmployeesCache();
     return {
       ok: true,
       data: {
@@ -715,6 +982,7 @@ export async function importEmployeesFromSpreadsheetAction(input: {
     });
     revalidatePath("/admin");
     revalidatePath("/admin/people/employees");
+    bumpEmployeesCache();
     revalidatePath("/admin/people/department");
 
     return {

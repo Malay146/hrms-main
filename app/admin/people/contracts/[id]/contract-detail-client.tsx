@@ -4,7 +4,7 @@ import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import {
   deleteContractAction,
   upsertContractAction,
@@ -24,9 +24,6 @@ export function ContractDetailClient({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null,
-  );
 
   const [departmentId, setDepartmentId] = useState(contract.departmentId ?? "");
   const [scheduleId, setScheduleId] = useState(contract.scheduleId ?? "");
@@ -57,10 +54,10 @@ export function ContractDetailClient({
         notes: notes || null,
       });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
-      setToast({ message: `Saved ${result.data.code}.`, type: "success" });
+      toast.success(`Saved ${result.data.code}.`);
       router.refresh();
     });
   }
@@ -70,7 +67,7 @@ export function ContractDetailClient({
     startTransition(async () => {
       const result = await deleteContractAction(contract.id);
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       router.push("/admin/people/contracts");
@@ -229,10 +226,6 @@ export function ContractDetailClient({
           </button>
         </div>
       </form>
-
-      {toast ? (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      ) : null}
     </div>
   );
 }

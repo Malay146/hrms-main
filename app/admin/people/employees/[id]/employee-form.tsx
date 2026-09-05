@@ -2,10 +2,11 @@
 
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Mail, Phone } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { PersonAvatar } from "@/components/ui/person-avatar";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import {
   updateEmployeeAction,
   type EmployeeHubData,
@@ -18,12 +19,10 @@ const inputClass =
   "h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong";
 
 export function EmployeeForm({ initial }: { initial: EmployeeHubData }) {
+  const router = useRouter();
   const [employee, setEmployee] = useState(initial.employee);
   const [tab, setTab] = useState<Tab>("work");
   const [pending, startTransition] = useTransition();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null,
-  );
 
   const [fullName, setFullName] = useState(employee.fullName);
   const [departmentId, setDepartmentId] = useState(employee.departmentId);
@@ -60,6 +59,12 @@ export function EmployeeForm({ initial }: { initial: EmployeeHubData }) {
 
   function handleSave(event: React.FormEvent) {
     event.preventDefault();
+    if (status === "inactive") {
+      const confirmed = window.confirm(
+        "Marking this employee inactive permanently deletes their account and related records. Continue?",
+      );
+      if (!confirmed) return;
+    }
     startTransition(async () => {
       const result = await updateEmployeeAction({
         employeeId: employee.employeeId,
@@ -79,11 +84,23 @@ export function EmployeeForm({ initial }: { initial: EmployeeHubData }) {
         joinDate: joinDate || null,
       });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
-      applySaved(result.data);
-      setToast({ message: "Employee saved.", type: "success" });
+      if (result.data.kind === "deactivated") {
+        sessionStorage.setItem(
+          "hrms-employee-create-toast",
+          JSON.stringify({
+            message: "Employee deactivated. Account deleted and inactive count updated.",
+            type: "success",
+          }),
+        );
+        router.push("/admin/people/employees");
+        router.refresh();
+        return;
+      }
+      applySaved(result.data.employee);
+      toast.success("Employee saved.");
     });
   }
 
@@ -384,10 +401,6 @@ export function EmployeeForm({ initial }: { initial: EmployeeHubData }) {
           </button>
         </div>
       </form>
-
-      {toast ? (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      ) : null}
     </div>
   );
 }

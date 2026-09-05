@@ -10,6 +10,7 @@ import {
   dateFromKey,
   formatDisplayDate,
   formatHours,
+  formatRelativeTime,
   kolkataGreeting,
   kolkataTodayKey,
   toDateKey,
@@ -48,7 +49,7 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
       prisma.leaveRequest.count({ where: { status: "pending" } }),
       weeklyAttendanceCounts(),
       prisma.leaveRequest.findMany({
-        take: 4,
+        take: 8,
         orderBy: { createdAt: "desc" },
         include: {
           type: { select: { code: true, name: true } },
@@ -75,12 +76,31 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
       const name = profile.department.name;
       counts.set(name, (counts.get(name) ?? 0) + 1);
     }
-    const distribution = [...counts.entries()].map(([name, value], index) => ({
-      name,
-      value,
-      color: PIE_COLORS[index % PIE_COLORS.length],
-      percentage: totalEmployees === 0 ? "0%" : `${Math.round((value / totalEmployees) * 100)}%`,
-    }));
+    const distribution = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, value], index) => ({
+        name,
+        value,
+        color: PIE_COLORS[index % PIE_COLORS.length],
+        percentage: totalEmployees === 0 ? "0%" : `${Math.round((value / totalEmployees) * 100)}%`,
+      }));
+
+    const activityLeaves = (() => {
+      const picked: typeof recentLeaves = [];
+      const seenStatus = new Set<string>();
+      for (const row of recentLeaves) {
+        if (!seenStatus.has(row.status)) {
+          picked.push(row);
+          seenStatus.add(row.status);
+        }
+        if (picked.length >= 4) break;
+      }
+      for (const row of recentLeaves) {
+        if (picked.length >= 4) break;
+        if (!picked.includes(row)) picked.push(row);
+      }
+      return picked;
+    })();
 
     const rated = reviewRows.filter((row) => row.overallRating != null && row.status !== "draft");
     const performance = hasPermission(admin.role, "managePerformance")
@@ -108,11 +128,11 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
         leaveToday,
         pendingApprovals,
         weeklyAttendance,
-        recentLeaves: recentLeaves.map((row) => mapLeave(row)),
+        recentLeaves: activityLeaves.map((row) => mapLeave(row)),
         distribution,
-        activities: recentLeaves.map((row) => ({
+        activities: activityLeaves.map((row) => ({
           text: `${row.user.profile?.fullName ?? "Employee"} ${row.status} ${row.type.name} leave`,
-          time: formatDisplayDate(row.createdAt),
+          time: formatRelativeTime(row.createdAt),
         })),
         performance,
       },

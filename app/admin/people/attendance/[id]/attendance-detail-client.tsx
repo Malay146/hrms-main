@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import { upsertAttendanceAction } from "@/lib/actions/people/attendance";
 import type { AttendanceLogItem, AttendanceStatus } from "@/lib/shared/types";
 
@@ -18,9 +18,6 @@ function timeFromDisplay(value: string) {
 export function AttendanceDetailClient({ initial }: { initial: AttendanceLogItem }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null,
-  );
   const [checkIn, setCheckIn] = useState(timeFromDisplay(initial.checkIn));
   const [checkOut, setCheckOut] = useState(timeFromDisplay(initial.checkOut));
   const [status, setStatus] = useState<AttendanceStatus>(
@@ -47,10 +44,10 @@ export function AttendanceDetailClient({ initial }: { initial: AttendanceLogItem
         notes: notes || null,
       });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
-      setToast({ message: "Attendance updated.", type: "success" });
+      toast.success("Attendance updated.");
       router.refresh();
     });
   }
@@ -122,10 +119,6 @@ export function AttendanceDetailClient({ initial }: { initial: AttendanceLogItem
           </button>
         </div>
       </form>
-
-      {toast ? (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      ) : null}
     </>
   );
 }

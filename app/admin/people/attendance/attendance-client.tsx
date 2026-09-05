@@ -9,12 +9,13 @@ import LeaveTodayIcon from "@/components/icons/leave-today";
 import LateIcon from "@/components/icons/late";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { Modal } from "@/components/ui/modal";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import {
   listAttendanceEmployees,
   upsertAttendanceAction,
 } from "@/lib/actions/people/attendance";
 import type { AttendanceLogItem, AttendanceStatus } from "@/lib/shared/types";
+import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
 
 const inputClass =
   "h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong";
@@ -34,18 +35,27 @@ export function AttendanceClient({
     { userId: string; employeeId: string; name: string }[]
   >([]);
   const [pending, startTransition] = useTransition();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null,
+
+  const filtered = useMemo(
+    () =>
+      logs.filter((log) => {
+        const matchesSearch =
+          log.name.toLowerCase().includes(search.toLowerCase()) ||
+          log.email.toLowerCase().includes(search.toLowerCase()) ||
+          (log.employeeCode ?? "").toLowerCase().includes(search.toLowerCase());
+        const matchesStatus = status === "All" || log.status === status;
+        return matchesSearch && matchesStatus;
+      }),
+    [logs, search, status],
   );
 
-  const filtered = logs.filter((log) => {
-    const matchesSearch =
-      log.name.toLowerCase().includes(search.toLowerCase()) ||
-      log.email.toLowerCase().includes(search.toLowerCase()) ||
-      (log.employeeCode ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = status === "All" || log.status === status;
-    return matchesSearch && matchesStatus;
-  });
+  const {
+    page,
+    setPage,
+    totalPages,
+    total,
+    pageItems: pagedLogs,
+  } = useClientPagination(filtered, 20, `${search}|${status}`);
 
   const present = logs.filter((log) => log.status === "Present" || log.status === "Late").length;
   const late = logs.filter((log) => log.late).length;
@@ -75,12 +85,12 @@ export function AttendanceClient({
         notes: String(form.get("notes") ?? "") || null,
       });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       setLogs((prev) => [result.data, ...prev.filter((row) => row.id !== result.data.id)]);
       setShowCreate(false);
-      setToast({ message: "Attendance saved.", type: "success" });
+      toast.success("Attendance saved.");
     });
   }
 
@@ -182,7 +192,7 @@ export function AttendanceClient({
                 </td>
               </tr>
             ) : (
-              filtered.map((log) => (
+              pagedLogs.map((log) => (
                 <tr key={log.id} className="hover:bg-zinc-50/50">
                   <td className="py-3.5 px-6">
                     <Link
@@ -230,6 +240,14 @@ export function AttendanceClient({
           </tbody>
         </table>
       </div>
+
+      <ListPagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        pageItemCount={pagedLogs.length}
+        onPageChange={setPage}
+      />
 
       <Modal
         open={showCreate}
@@ -294,10 +312,6 @@ export function AttendanceClient({
           </button>
         </form>
       </Modal>
-
-      {toast ? (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      ) : null}
     </div>
   );
 }

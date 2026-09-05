@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useTransition } from "react";
+import React, { useState, useEffect, useMemo, useRef, useTransition } from "react";
 import {
   Plus,
   Search,
@@ -20,6 +20,8 @@ import { PersonAvatar } from "@/components/ui/person-avatar";
 import { Modal } from "@/components/ui/modal";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "sonner";
+import { PieChartTooltip, chartTooltipWrapperStyle } from "@/components/charts/chart-tooltip";
+import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
 import {
   createJobOpeningAction,
   moveCandidateStageAction,
@@ -34,23 +36,6 @@ import {
   type PipelineStageLabel,
 } from "@/lib/recruitment/stages";
 import { kolkataTodayKey } from "@/lib/shared/dates";
-
-// Custom Tooltip component for Donut Chart
-const ChartTooltip = ({ active, payload }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    return (
-      <div className="bg-surface border border-border px-3 py-1.5 rounded-lg shadow-md text-xs font-semibold">
-        <p className="text-zinc-900 font-bold">{data.name}</p>
-        <p className="text-zinc-600 mt-0.5">
-          Applicants:{" "}
-          <span className="text-zinc-950 font-bold">{data.value}</span>
-        </p>
-      </div>
-    );
-  }
-  return null;
-};
 
 type Applicant = RecruitmentCandidate;
 type JobOpening = RecruitmentJob;
@@ -334,19 +319,35 @@ export default function RecruitmentClient({
   );
 
   // Filter Logic
-  const filteredApplicants = applicants.filter((app) => {
-    const matchesSearch =
-      app.name.toLowerCase().includes(search.toLowerCase()) ||
-      app.id.toLowerCase().includes(search.toLowerCase()) ||
-      app.code.toLowerCase().includes(search.toLowerCase());
+  const filteredApplicants = useMemo(
+    () =>
+      applicants.filter((app) => {
+        const matchesSearch =
+          app.name.toLowerCase().includes(search.toLowerCase()) ||
+          app.id.toLowerCase().includes(search.toLowerCase()) ||
+          app.code.toLowerCase().includes(search.toLowerCase());
 
-    const matchesPosition =
-      selectedPosition === "All" || app.position === selectedPosition;
-    const matchesStage = selectedStage === "All" || app.stage === selectedStage;
-    const matchesExp = selectedExp === "All" || app.exp.includes(selectedExp);
+        const matchesPosition =
+          selectedPosition === "All" || app.position === selectedPosition;
+        const matchesStage = selectedStage === "All" || app.stage === selectedStage;
+        const matchesExp = selectedExp === "All" || app.exp.includes(selectedExp);
 
-    return matchesSearch && matchesPosition && matchesStage && matchesExp;
-  });
+        return matchesSearch && matchesPosition && matchesStage && matchesExp;
+      }),
+    [applicants, search, selectedPosition, selectedStage, selectedExp],
+  );
+
+  const {
+    page: applicantPage,
+    setPage: setApplicantPage,
+    totalPages: applicantTotalPages,
+    total: applicantTotal,
+    pageItems: pagedApplicants,
+  } = useClientPagination(
+    filteredApplicants,
+    15,
+    `${search}|${selectedPosition}|${selectedStage}|${selectedExp}`,
+  );
 
   // Clear Filters
   const handleClearFilters = () => {
@@ -797,7 +798,7 @@ export default function RecruitmentClient({
                     </td>
                   </tr>
                 ) : (
-                  filteredApplicants.map((app) => (
+                  pagedApplicants.map((app) => (
                     <tr
                       key={app.id}
                       className="hover:bg-zinc-50/40 transition-colors"
@@ -888,6 +889,14 @@ export default function RecruitmentClient({
               </tbody>
             </table>
           </div>
+          <ListPagination
+            className="px-4 py-3 border-t border-border"
+            page={applicantPage}
+            totalPages={applicantTotalPages}
+            total={applicantTotal}
+            pageItemCount={pagedApplicants.length}
+            onPageChange={setApplicantPage}
+          />
         </div>
       </div>
 
@@ -934,8 +943,8 @@ export default function RecruitmentClient({
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Tooltip
-                      content={<ChartTooltip />}
-                      wrapperStyle={{ zIndex: 50 }}
+                      content={<PieChartTooltip valueLabel="Applicants" />}
+                      wrapperStyle={chartTooltipWrapperStyle}
                     />
                     <Pie
                       data={sourceData}
@@ -944,9 +953,12 @@ export default function RecruitmentClient({
                       paddingAngle={3}
                       cornerRadius={4}
                       dataKey="value"
+                      nameKey="name"
+                      stroke="none"
+                      className="outline-none cursor-pointer"
                     >
                       {sourceData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Cell key={`cell-${index}`} fill={entry.color} className="outline-none" />
                       ))}
                     </Pie>
                   </PieChart>
@@ -957,7 +969,7 @@ export default function RecruitmentClient({
               {sourceData.map((item, index) => (
                 <div
                   key={index}
-                  className="flex items-center justify-between text-sm font-semibold"
+                  className="flex items-center justify-between text-sm font-semibold rounded-lg px-1.5 py-1 -mx-1.5 transition-colors hover:bg-zinc-50"
                 >
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span
@@ -990,10 +1002,11 @@ export default function RecruitmentClient({
                   <span>Applied &rarr; Screening</span>
                   <span className="font-bold">{appliedToScreeningPct}% Conversion</span>
                 </div>
-                <div className="w-full h-2 bg-zinc-100 rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-zinc-100 rounded-full overflow-hidden group">
                   <div
-                    className="h-full bg-zinc-950 rounded-full"
+                    className="h-full bg-zinc-950 rounded-full transition-all group-hover:bg-zinc-800"
                     style={{ width: `${appliedToScreeningPct}%` }}
+                    title={`${appliedToScreeningPct}% Applied → Screening`}
                   />
                 </div>
               </div>
@@ -1002,10 +1015,11 @@ export default function RecruitmentClient({
                   <span>Screening &rarr; Offer</span>
                   <span className="font-bold">{screeningToOfferPct}% Conversion</span>
                 </div>
-                <div className="w-full h-2 bg-zinc-100 rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-zinc-100 rounded-full overflow-hidden group">
                   <div
-                    className="h-full bg-zinc-700 rounded-full"
+                    className="h-full bg-zinc-700 rounded-full transition-all group-hover:bg-zinc-600"
                     style={{ width: `${screeningToOfferPct}%` }}
+                    title={`${screeningToOfferPct}% Screening → Offer`}
                   />
                 </div>
               </div>
