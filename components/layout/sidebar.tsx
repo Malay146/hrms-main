@@ -19,7 +19,7 @@ import BookIcon from "@/components/icons/book";
 import PenIcon from "@/components/icons/pen";
 import CreditCardIcon from "@/components/icons/credit-card";
 import { useSessionUser } from "@/components/providers/session-context";
-import { canAccessAdminPath } from "@/lib/permissions";
+import { canAccessAdminPath } from "@/lib/auth/permissions";
 import CollapsibleIcon from "@/components/icons/sidebar/collapsible";
 
 // Dynamic Branch Connector SVG Component

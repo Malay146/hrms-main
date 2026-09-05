@@ -1,4 +1,4 @@
-import { listSchedules } from "@/lib/actions/schedules";
+import { listSchedules } from "@/lib/actions/people/schedules";
 import { SchedulesClient } from "./schedules-client";
 
 export default async function SchedulesPage() {

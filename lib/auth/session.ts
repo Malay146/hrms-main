@@ -1,11 +1,11 @@
 import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { auth } from "@/lib/auth/server";
 import { prisma } from "@/lib/db";
-import type { Role, SessionUser } from "@/lib/types";
-import type { Permission } from "@/lib/permissions";
-import { hasPermission, homePath, isStaffRole } from "@/lib/permissions";
+import type { Role, SessionUser } from "@/lib/shared/types";
+import type { Permission } from "@/lib/auth/permissions";
+import { hasPermission, homePath, isStaffRole } from "@/lib/auth/permissions";
 
 export class AuthError extends Error {
   constructor(message = "You need to sign in.") {

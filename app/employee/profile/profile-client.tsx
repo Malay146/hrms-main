@@ -6,8 +6,8 @@ import { PersonAvatar } from "@/components/ui/person-avatar";
 import { Modal } from "@/components/ui/modal";
 import { toast } from "sonner";
 import { updateMyProfileAction } from "@/lib/actions/profile";
-import type { EmployeeListItem } from "@/lib/types";
-import type { SessionUser } from "@/lib/types";
+import type { EmployeeListItem } from "@/lib/shared/types";
+import type { SessionUser } from "@/lib/shared/types";
 
 export function EmployeeProfileClient({
   profile,

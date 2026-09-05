@@ -1,8 +1,8 @@
 import Dashboard from "@/components/section/dashboard";
 import { getAdminDashboard } from "@/lib/actions/dashboard";
-import { getPayrollDashboard } from "@/lib/actions/payroll-dashboard";
-import { getCurrentUser } from "@/lib/session";
-import { kolkataTodayKey } from "@/lib/dates";
+import { getPayrollDashboard } from "@/lib/actions/payroll/payroll-dashboard";
+import { getCurrentUser } from "@/lib/auth/session";
+import { kolkataTodayKey } from "@/lib/shared/dates";
 
 const emptyStats = {
   firstName: "Admin",

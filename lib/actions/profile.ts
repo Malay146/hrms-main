@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requireUser } from "@/lib/session";
-import type { ActionResult } from "@/lib/types";
+import { actionErrorMessage, requireUser } from "@/lib/auth/session";
+import type { ActionResult } from "@/lib/shared/types";
 import { z } from "zod";
 
 const profileSchema = z.object({

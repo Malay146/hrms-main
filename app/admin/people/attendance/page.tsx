@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listAttendanceLogs } from "@/lib/actions/attendance";
+import { listAttendanceLogs } from "@/lib/actions/people/attendance";
 import { AttendanceClient } from "./attendance-client";
 
 export default async function AttendancePage({

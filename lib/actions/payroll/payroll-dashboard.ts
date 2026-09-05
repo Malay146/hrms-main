@@ -1,11 +1,11 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission } from "@/lib/session";
-import { hasPermission } from "@/lib/permissions";
-import { dateFromKey, inclusiveDayCount, isLateCheckIn, toDateKey } from "@/lib/dates";
-import type { ActionResult } from "@/lib/types";
-import type { SessionUser } from "@/lib/types";
+import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { hasPermission } from "@/lib/auth/permissions";
+import { dateFromKey, inclusiveDayCount, isLateCheckIn, toDateKey } from "@/lib/shared/dates";
+import type { ActionResult } from "@/lib/shared/types";
+import type { SessionUser } from "@/lib/shared/types";
 
 export type PayrollDashboardData = {
   canViewPayroll: boolean;

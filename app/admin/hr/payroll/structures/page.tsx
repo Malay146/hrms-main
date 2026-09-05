@@ -1,6 +1,6 @@
-import { getSalaryStructure, listSalaryStructures } from "@/lib/actions/salary";
-import { getCurrentUser } from "@/lib/session";
-import { hasPermission } from "@/lib/permissions";
+import { getSalaryStructure, listSalaryStructures } from "@/lib/actions/payroll/salary";
+import { getCurrentUser } from "@/lib/auth/session";
+import { hasPermission } from "@/lib/auth/permissions";
 import { StructuresClient } from "./structures-client";
 
 export default async function SalaryStructuresPage({

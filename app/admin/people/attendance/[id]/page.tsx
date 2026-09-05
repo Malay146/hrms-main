@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getAttendanceAction } from "@/lib/actions/attendance";
+import { getAttendanceAction } from "@/lib/actions/people/attendance";
 import { AttendanceDetailClient } from "./attendance-detail-client";
 
 export default async function AttendanceDetailPage({

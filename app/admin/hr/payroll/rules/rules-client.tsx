@@ -8,7 +8,7 @@ import {
   saveSalaryRuleAction,
   type SalaryRuleListItem,
   type SalaryStructureListItem,
-} from "@/lib/actions/salary";
+} from "@/lib/actions/payroll/salary";
 import type { RuleComputation, SalaryCategory } from "@/lib/payroll/compute";
 
 const CATEGORIES: SalaryCategory[] = ["basic", "allowance", "gross", "deduction", "net", "contribution"];

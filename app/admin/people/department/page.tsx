@@ -1,4 +1,4 @@
-import { listDepartments } from "@/lib/actions/departments";
+import { listDepartments } from "@/lib/actions/people/departments";
 import { DepartmentsClient } from "./departments-client";
 
 export default async function DepartmentsPage() {

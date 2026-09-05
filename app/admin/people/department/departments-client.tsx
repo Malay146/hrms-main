@@ -9,7 +9,7 @@ import {
   createDepartmentAction,
   renameDepartmentAction,
   type DepartmentListItem,
-} from "@/lib/actions/departments";
+} from "@/lib/actions/people/departments";
 
 export function DepartmentsClient({
   initialDepartments,

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import {
   getContractAction,
   getContractFormOptions,
-} from "@/lib/actions/contracts";
+} from "@/lib/actions/people/contracts";
 import { ContractDetailClient } from "./contract-detail-client";
 
 export default async function ContractDetailPage({

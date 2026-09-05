@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
-import { firstZodError } from "@/lib/validations";
-import type { ActionResult, Role } from "@/lib/types";
-import { ASSIGNABLE_ROLES } from "@/lib/permissions";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { firstZodError } from "@/lib/shared/validations";
+import type { ActionResult, Role } from "@/lib/shared/types";
+import { ASSIGNABLE_ROLES } from "@/lib/auth/permissions";
 import { z } from "zod";
 
 const updateSchema = z.object({

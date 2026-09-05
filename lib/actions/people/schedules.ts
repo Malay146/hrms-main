@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission } from "@/lib/session";
-import { daysPerWeek, lineHours, weeklyHours } from "@/lib/schedule-hours";
-import { firstZodError, upsertScheduleSchema } from "@/lib/validations";
-import type { ActionResult } from "@/lib/types";
+import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { daysPerWeek, lineHours, weeklyHours } from "@/lib/people/schedule-hours";
+import { firstZodError, upsertScheduleSchema } from "@/lib/shared/validations";
+import type { ActionResult } from "@/lib/shared/types";
 
 export type ScheduleListItem = {
   id: string;

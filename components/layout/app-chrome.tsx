@@ -3,7 +3,7 @@
 import Sidebar from "@/components/layout/sidebar";
 import Navbar from "@/components/layout/navbar";
 import { SessionProvider } from "@/components/providers/session-context";
-import type { SessionUser } from "@/lib/types";
+import type { SessionUser } from "@/lib/shared/types";
 
 export function AppChrome({
   user,

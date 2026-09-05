@@ -1,4 +1,4 @@
-import { getContractFormOptions, listContracts } from "@/lib/actions/contracts";
+import { getContractFormOptions, listContracts } from "@/lib/actions/people/contracts";
 import { ContractsClient } from "./contracts-client";
 
 export default async function ContractsPage({

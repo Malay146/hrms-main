@@ -2,12 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { logger } from "@/lib/logger";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
-import { mapPayroll } from "@/lib/mappers";
-import { currentPayrollMonth } from "@/lib/dates";
-import { firstZodError, upsertPayrollSchema } from "@/lib/validations";
-import type { ActionResult, PayrollListItem } from "@/lib/types";
+import { logger } from "@/lib/shared/logger";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { mapPayroll } from "@/lib/shared/mappers";
+import { currentPayrollMonth } from "@/lib/shared/dates";
+import { firstZodError, upsertPayrollSchema } from "@/lib/shared/validations";
+import type { ActionResult, PayrollListItem } from "@/lib/shared/types";
 
 export async function listPayroll(): Promise<ActionResult<PayrollListItem[]>> {
   try {

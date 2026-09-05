@@ -1,6 +1,6 @@
-import { listSalaryRules, listSalaryStructures } from "@/lib/actions/salary";
-import { getCurrentUser } from "@/lib/session";
-import { hasPermission } from "@/lib/permissions";
+import { listSalaryRules, listSalaryStructures } from "@/lib/actions/payroll/salary";
+import { getCurrentUser } from "@/lib/auth/session";
+import { hasPermission } from "@/lib/auth/permissions";
 import { RulesClient } from "./rules-client";
 
 export default async function SalaryRulesPage({

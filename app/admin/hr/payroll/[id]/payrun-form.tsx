@@ -10,7 +10,7 @@ import {
   sendPayslipsAction,
   validatePayrunAction,
   type PayrunDetail,
-} from "@/lib/actions/payruns";
+} from "@/lib/actions/payroll/payruns";
 
 export function PayrunForm({
   payrun,

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
-import type { PayrunListItem } from "@/lib/actions/payruns";
-import type { SalaryStructureListItem } from "@/lib/actions/salary";
+import type { PayrunListItem } from "@/lib/actions/payroll/payruns";
+import type { SalaryStructureListItem } from "@/lib/actions/payroll/salary";
 import { PayrunWizard } from "./payrun-wizard";
 
 export function PayrunListClient({

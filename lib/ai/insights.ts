@@ -1,4 +1,4 @@
-import type { AiInsightCard } from "@/lib/types";
+import type { AiInsightCard } from "@/lib/shared/types";
 
 export const ALLOWED_INSIGHT_HREFS = [
   "/admin/people/leave",

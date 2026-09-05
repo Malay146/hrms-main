@@ -1,13 +1,13 @@
 "use server";
 
 import { headers } from "next/headers";
-import { auth } from "@/lib/auth";
-import { logger } from "@/lib/logger";
-import { firstZodError, loginSchema, changePasswordSchema } from "@/lib/validations";
-import { homePath } from "@/lib/permissions";
-import { actionErrorMessage, requireUser } from "@/lib/session";
+import { auth } from "@/lib/auth/server";
+import { logger } from "@/lib/shared/logger";
+import { firstZodError, loginSchema, changePasswordSchema } from "@/lib/shared/validations";
+import { homePath } from "@/lib/auth/permissions";
+import { actionErrorMessage, requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import type { ActionResult, Role } from "@/lib/types";
+import type { ActionResult, Role } from "@/lib/shared/types";
 
 export async function signInAction(input: {
   email: string;

@@ -7,12 +7,12 @@ import { classifyCopilotQuestion, COPILOT_NO_PAYROLL, COPILOT_REFUSAL } from "@/
 import { mapInsightCards } from "@/lib/ai/insights";
 import { addDaysToKey, leaveClashCount } from "@/lib/ai/metrics";
 import { toModelSnapshot } from "@/lib/ai/sanitize";
-import { hasPermission } from "@/lib/permissions";
-import { actionErrorMessage, requirePermission } from "@/lib/session";
-import { dateFromKey, inclusiveDayCount, kolkataTodayKey, toDateKey, weekDayKeys } from "@/lib/dates";
-import { leaveTypeFromCode } from "@/lib/mappers";
-import { copilotQuestionSchema, firstZodError } from "@/lib/validations";
-import type { ActionResult, AiAnalyticsData, AiCopilotResult, AiInsightCard, AiLeaveBrief } from "@/lib/types";
+import { hasPermission } from "@/lib/auth/permissions";
+import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { dateFromKey, inclusiveDayCount, kolkataTodayKey, toDateKey, weekDayKeys } from "@/lib/shared/dates";
+import { leaveTypeFromCode } from "@/lib/shared/mappers";
+import { copilotQuestionSchema, firstZodError } from "@/lib/shared/validations";
+import type { ActionResult, AiAnalyticsData, AiCopilotResult, AiInsightCard, AiLeaveBrief } from "@/lib/shared/types";
 
 const PERIOD_DAYS = 30;
 const INSIGHT_TTL_MS = 6 * 60 * 60 * 1000;

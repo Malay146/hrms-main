@@ -21,8 +21,8 @@ import LeaveTodayIcon from "@/components/icons/leave-today";
 import OpenPositionIcon from "@/components/icons/open-position";
 import PendingApprovalIcon from "@/components/icons/pending-approval";
 import { cn } from "@/utils/cn";
-import type { DashboardStats } from "@/lib/types";
-import type { PayrollDashboardData } from "@/lib/actions/payroll-dashboard";
+import type { DashboardStats } from "@/lib/shared/types";
+import type { PayrollDashboardData } from "@/lib/actions/payroll/payroll-dashboard";
 
 const AttendanceTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
   if (active && payload && payload.length) {

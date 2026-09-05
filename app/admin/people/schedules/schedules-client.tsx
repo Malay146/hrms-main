@@ -4,11 +4,11 @@ import React, { useMemo, useState, useTransition } from "react";
 import { CalendarClock, Plus, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Toast } from "@/components/ui/toast";
-import { daysPerWeek, lineHours, weeklyHours } from "@/lib/schedule-hours";
+import { daysPerWeek, lineHours, weeklyHours } from "@/lib/people/schedule-hours";
 import {
   upsertScheduleAction,
   type ScheduleListItem,
-} from "@/lib/actions/schedules";
+} from "@/lib/actions/people/schedules";
 
 const WEEKDAYS = [
   { value: 1, label: "Mon" },

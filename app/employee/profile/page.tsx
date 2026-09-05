@@ -1,5 +1,5 @@
-import { getProfileAction } from "@/lib/actions/employees";
-import { getCurrentUser } from "@/lib/session";
+import { getProfileAction } from "@/lib/actions/people/employees";
+import { getCurrentUser } from "@/lib/auth/session";
 import { EmployeeProfileClient } from "./profile-client";
 
 export default async function EmployeeProfilePage() {

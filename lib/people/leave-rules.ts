@@ -1,5 +1,5 @@
-import { compareDateKeys, inclusiveDayCount } from "@/lib/dates";
-import type { LeaveType } from "@/lib/types";
+import { compareDateKeys, inclusiveDayCount } from "@/lib/shared/dates";
+import type { LeaveType } from "@/lib/shared/types";
 
 export type LeaveWindow = {
   startDate: string;

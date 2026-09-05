@@ -1,4 +1,4 @@
-import { dateFromKey, eachDateKey } from "@/lib/dates";
+import { dateFromKey, eachDateKey } from "@/lib/shared/dates";
 
 export function weekdayCount(periodStart: string, periodEnd: string) {
   return eachDateKey(periodStart, periodEnd).filter((key) => {

@@ -7,7 +7,7 @@ import {
   type LeaveListItem,
   type LeaveType,
   type PayrollListItem,
-} from "@/lib/types";
+} from "@/lib/shared/types";
 import {
   formatDisplayDate,
   formatDisplayTime,
@@ -18,9 +18,9 @@ import {
   kolkataTodayKey,
   toDateKey,
   workingHours,
-} from "@/lib/dates";
-import { deriveAttendanceMetrics } from "@/lib/attendance-metrics";
-import { initialsFromName } from "@/lib/employee-id";
+} from "@/lib/shared/dates";
+import { deriveAttendanceMetrics } from "@/lib/people/attendance-metrics";
+import { initialsFromName } from "@/lib/people/employee-id";
 
 export function departmentName(
   department: string | { name: string } | null | undefined,

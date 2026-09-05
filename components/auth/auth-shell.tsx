@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Logo from "@/components/icons/logo";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/shared/utils";
 
 type AuthShellProps = {
   title: string;

@@ -1,5 +1,5 @@
 import { EmployeesClient } from "./employees-client";
-import { listEmployees } from "@/lib/actions/employees";
+import { listEmployees } from "@/lib/actions/people/employees";
 
 export default async function EmployeesPage() {
   const result = await listEmployees();

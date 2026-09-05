@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission } from "@/lib/session";
-import { firstZodError } from "@/lib/validations";
+import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { firstZodError } from "@/lib/shared/validations";
 import { z } from "zod";
-import type { ActionResult } from "@/lib/types";
+import type { ActionResult } from "@/lib/shared/types";
 
 export type TimeOffTypeItem = {
   id: string;

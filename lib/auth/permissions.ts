@@ -1,4 +1,4 @@
-import type { Role } from "@/lib/types";
+import type { Role } from "@/lib/shared/types";
 
 export const ROLE_LABELS: Record<Role, string> = {
   admin: "Admin",

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { saveSalaryStructureAction, type SalaryRuleListItem, type SalaryStructureListItem } from "@/lib/actions/salary";
+import { saveSalaryStructureAction, type SalaryRuleListItem, type SalaryStructureListItem } from "@/lib/actions/payroll/salary";
 
 type Selected = SalaryStructureListItem & { rules: SalaryRuleListItem[] };
 

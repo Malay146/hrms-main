@@ -4,9 +4,9 @@ import { useMemo, useState } from "react";
 import { DayPicker } from "react-day-picker";
 import { cn } from "@/utils/cn";
 import { Toast } from "@/components/ui/toast";
-import { applyLeaveAction } from "@/lib/actions/leave";
-import { dateFromKey, kolkataTodayKey } from "@/lib/dates";
-import type { CalendarMarker, LeaveListItem, LeaveType } from "@/lib/types";
+import { applyLeaveAction } from "@/lib/actions/people/leave";
+import { dateFromKey, kolkataTodayKey } from "@/lib/shared/dates";
+import type { CalendarMarker, LeaveListItem, LeaveType } from "@/lib/shared/types";
 
 export function EmployeeLeaveClient({
   initialRequests,

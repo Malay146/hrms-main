@@ -4,7 +4,7 @@ import {
   getPaidLeaveBalance,
   listMyLeaveFormOptions,
   listMyLeaves,
-} from "@/lib/actions/leave";
+} from "@/lib/actions/people/leave";
 
 export default async function EmployeeLeavePage() {
   const [requests, markers, balances, options] = await Promise.all([

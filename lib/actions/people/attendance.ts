@@ -1,12 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma } from "../../generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
-import { logger } from "@/lib/logger";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
-import { mapAttendance } from "@/lib/mappers";
-import { deriveAttendanceMetrics } from "@/lib/attendance-metrics";
+import { logger } from "@/lib/shared/logger";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { mapAttendance } from "@/lib/shared/mappers";
+import { deriveAttendanceMetrics } from "@/lib/people/attendance-metrics";
 import {
   dateFromKey,
   formatDisplayTime,
@@ -14,10 +14,10 @@ import {
   kolkataTodayKey,
   weekDayKeys,
   workingHours,
-} from "@/lib/dates";
-import { firstZodError } from "@/lib/validations";
+} from "@/lib/shared/dates";
+import { firstZodError } from "@/lib/shared/validations";
 import { z } from "zod";
-import type { ActionResult, AttendanceLogItem, AttendanceStatus } from "@/lib/types";
+import type { ActionResult, AttendanceLogItem, AttendanceStatus } from "@/lib/shared/types";
 
 const attendanceInclude = {
   user: {

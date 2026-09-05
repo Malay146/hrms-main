@@ -1,5 +1,5 @@
 import { LeaveClient } from "./leave-client";
-import { listLeaveRequests } from "@/lib/actions/leave";
+import { listLeaveRequests } from "@/lib/actions/people/leave";
 
 export default async function LeavePage() {
   const result = await listLeaveRequests();

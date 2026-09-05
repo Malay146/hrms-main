@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { Toast } from "@/components/ui/toast";
-import { decideLeaveAction } from "@/lib/actions/leave";
+import { decideLeaveAction } from "@/lib/actions/people/leave";
 import { summarizeLeaveForApprover } from "@/lib/actions/ai";
-import type { AiLeaveBrief, LeaveListItem } from "@/lib/types";
+import type { AiLeaveBrief, LeaveListItem } from "@/lib/shared/types";
 
 export function LeaveClient({
   initialRequests,

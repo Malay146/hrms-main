@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission } from "@/lib/session";
-import { remaining } from "@/lib/time-off-balance";
-import { firstZodError } from "@/lib/validations";
+import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { remaining } from "@/lib/people/time-off-balance";
+import { firstZodError } from "@/lib/shared/validations";
 import { z } from "zod";
-import type { ActionResult } from "@/lib/types";
+import type { ActionResult } from "@/lib/shared/types";
 
 export type AllocationListItem = {
   id: string;

@@ -3,16 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "@/lib/db";
-import { nextEmployeeId } from "@/lib/employee-id";
-import { logger } from "@/lib/logger";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
-import { mapEmployee } from "@/lib/mappers";
-import { kolkataParts, kolkataTodayKey, currentPayrollMonth, dateFromKey, toDateKey } from "@/lib/dates";
-import { createEmployeeSchema, firstZodError, updateEmployeeSchema } from "@/lib/validations";
-import { departmentCodeFromName } from "@/lib/department-code";
-import { generateTemporaryPassword, sendAccountCredentialsEmail } from "@/lib/mail";
-import { initialsFromName } from "@/lib/employee-id";
-import type { ActionResult, EmployeeListItem, EmployeeStatus, Role } from "@/lib/types";
+import { nextEmployeeId } from "@/lib/people/employee-id";
+import { logger } from "@/lib/shared/logger";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { mapEmployee } from "@/lib/shared/mappers";
+import { kolkataParts, kolkataTodayKey, currentPayrollMonth, dateFromKey, toDateKey } from "@/lib/shared/dates";
+import { createEmployeeSchema, firstZodError, updateEmployeeSchema } from "@/lib/shared/validations";
+import { departmentCodeFromName } from "@/lib/people/department-code";
+import { generateTemporaryPassword, sendAccountCredentialsEmail } from "@/lib/shared/mail";
+import { initialsFromName } from "@/lib/people/employee-id";
+import type { ActionResult, EmployeeListItem, EmployeeStatus, Role } from "@/lib/shared/types";
 
 function randomId() {
   return crypto.randomUUID();

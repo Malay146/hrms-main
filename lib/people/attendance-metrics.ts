@@ -1,5 +1,5 @@
-import { lineHours } from "@/lib/schedule-hours";
-import { minutesSinceMidnightKolkata, toDateKey } from "@/lib/dates";
+import { lineHours } from "@/lib/people/schedule-hours";
+import { minutesSinceMidnightKolkata, toDateKey } from "@/lib/shared/dates";
 
 export type ScheduleLineInput = {
   weekday: number; // 1=Mon … 7=Sun

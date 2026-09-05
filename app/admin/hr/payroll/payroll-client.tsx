@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { Play } from "lucide-react";
 import { Toast } from "@/components/ui/toast";
-import { upsertPayrollAction } from "@/lib/actions/payroll";
-import { currentPayrollMonth } from "@/lib/dates";
-import type { PayrollListItem } from "@/lib/types";
+import { upsertPayrollAction } from "@/lib/actions/payroll/payroll";
+import { currentPayrollMonth } from "@/lib/shared/dates";
+import type { PayrollListItem } from "@/lib/shared/types";
 
 export function PayrollClient({
   initialRows,

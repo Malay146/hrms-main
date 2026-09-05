@@ -1,4 +1,4 @@
-import { listMyPayslips } from "@/lib/actions/payruns";
+import { listMyPayslips } from "@/lib/actions/payroll/payruns";
 
 export default async function EmployeePayrollPage() {
   const result = await listMyPayslips();

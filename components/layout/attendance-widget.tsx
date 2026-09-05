@@ -6,7 +6,7 @@ import {
   clockInAction,
   clockOutAction,
   getTodayAttendance,
-} from "@/lib/actions/attendance";
+} from "@/lib/actions/people/attendance";
 
 function formatElapsed(ms: number) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));

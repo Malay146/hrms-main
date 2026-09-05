@@ -1,4 +1,4 @@
-import { listPayslips } from "@/lib/actions/payruns";
+import { listPayslips } from "@/lib/actions/payroll/payruns";
 import Link from "next/link";
 
 export default async function PayslipsPage() {

@@ -10,10 +10,10 @@ import LeaveTodayIcon from "@/components/icons/leave-today";
 import InactiveIcon from "@/components/icons/inactive";
 import { Toast } from "@/components/ui/toast";
 import { PersonAvatar } from "@/components/ui/person-avatar";
-import { createEmployeeAction } from "@/lib/actions/employees";
-import { ASSIGNABLE_ROLES, hasPermission, ROLE_LABELS } from "@/lib/permissions";
+import { createEmployeeAction } from "@/lib/actions/people/employees";
+import { ASSIGNABLE_ROLES, hasPermission, ROLE_LABELS } from "@/lib/auth/permissions";
 import { useSessionUser } from "@/components/providers/session-context";
-import type { EmployeeListItem, Role } from "@/lib/types";
+import type { EmployeeListItem, Role } from "@/lib/shared/types";
 
 type ViewMode = "kanban" | "list";
 

@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
-import { firstZodError } from "@/lib/validations";
-import { hasPermission } from "@/lib/permissions";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { firstZodError } from "@/lib/shared/validations";
+import { hasPermission } from "@/lib/auth/permissions";
 import { REGULAR_SALARY_RULES } from "@/lib/payroll/regular-salary";
-import type { ActionResult } from "@/lib/types";
+import type { ActionResult } from "@/lib/shared/types";
 import type { RuleComputation, SalaryCategory } from "@/lib/payroll/compute";
 import { z } from "zod";
 

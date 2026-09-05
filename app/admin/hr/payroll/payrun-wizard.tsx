@@ -3,8 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { createPayrunAction, listEligibleEmployees, type EligibleEmployee } from "@/lib/actions/payruns";
-import type { SalaryStructureListItem } from "@/lib/actions/salary";
+import { createPayrunAction, listEligibleEmployees, type EligibleEmployee } from "@/lib/actions/payroll/payruns";
+import type { SalaryStructureListItem } from "@/lib/actions/payroll/salary";
 
 type EmployeeType = "full_time" | "intern" | "contractor";
 

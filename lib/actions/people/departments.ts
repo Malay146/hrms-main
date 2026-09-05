@@ -2,15 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission } from "@/lib/session";
-import { kolkataTodayKey } from "@/lib/dates";
+import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { kolkataTodayKey } from "@/lib/shared/dates";
 import {
   createDepartmentSchema,
   firstZodError,
   renameDepartmentSchema,
-} from "@/lib/validations";
-import { departmentCodeFromName } from "@/lib/department-code";
-import type { ActionResult } from "@/lib/types";
+} from "@/lib/shared/validations";
+import { departmentCodeFromName } from "@/lib/people/department-code";
+import type { ActionResult } from "@/lib/shared/types";
 
 export type DepartmentListItem = {
   id: string;

@@ -6,8 +6,8 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { cn } from "@/utils/cn";
 import ShiftClockIcon from "@/components/icons/late";
 import { Toast } from "@/components/ui/toast";
-import { clockInAction, clockOutAction } from "@/lib/actions/attendance";
-import type { EmployeeDashboardData } from "@/lib/types";
+import { clockInAction, clockOutAction } from "@/lib/actions/people/attendance";
+import type { EmployeeDashboardData } from "@/lib/shared/types";
 
 export function EmployeeDashboardClient({
   initial,

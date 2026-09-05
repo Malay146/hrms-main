@@ -3,8 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Toast } from "@/components/ui/toast";
-import { upsertAttendanceAction } from "@/lib/actions/attendance";
-import type { AttendanceLogItem, AttendanceStatus } from "@/lib/types";
+import { upsertAttendanceAction } from "@/lib/actions/people/attendance";
+import type { AttendanceLogItem, AttendanceStatus } from "@/lib/shared/types";
 
 const inputClass =
   "h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong";

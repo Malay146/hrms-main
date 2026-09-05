@@ -1,6 +1,6 @@
-import { PIE_COLORS } from "@/lib/mappers";
-import { inclusiveDayCount } from "@/lib/dates";
-import { LEAVE_TYPE_LABELS, type AiAnalyticsData, type AiFlightRiskRow, type AiInsightCard } from "@/lib/types";
+import { PIE_COLORS } from "@/lib/shared/mappers";
+import { inclusiveDayCount } from "@/lib/shared/dates";
+import { LEAVE_TYPE_LABELS, type AiAnalyticsData, type AiFlightRiskRow, type AiInsightCard } from "@/lib/shared/types";
 import {
   addDaysToKey,
   attendanceRate,

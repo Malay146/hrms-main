@@ -9,7 +9,7 @@ import {
   upsertContractAction,
   type ContractFormOptions,
   type ContractListItem,
-} from "@/lib/actions/contracts";
+} from "@/lib/actions/people/contracts";
 
 const inputClass =
   "h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong";

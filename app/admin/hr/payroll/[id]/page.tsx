@@ -1,6 +1,6 @@
-import { getPayrun } from "@/lib/actions/payruns";
-import { getCurrentUser } from "@/lib/session";
-import { hasPermission } from "@/lib/permissions";
+import { getPayrun } from "@/lib/actions/payroll/payruns";
+import { getCurrentUser } from "@/lib/auth/session";
+import { hasPermission } from "@/lib/auth/permissions";
 import { PayrunForm } from "./payrun-form";
 
 export default async function PayrunDetailPage({

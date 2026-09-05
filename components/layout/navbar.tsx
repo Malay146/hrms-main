@@ -11,7 +11,7 @@ import LogoutIcon from "@/components/icons/logout";
 import { cn } from "@/utils/cn";
 import Link from "next/link";
 import { useSessionUser } from "@/components/providers/session-context";
-import { firstAllowedAdminPath, isStaffRole, ROLE_LABELS } from "@/lib/permissions";
+import { firstAllowedAdminPath, isStaffRole, ROLE_LABELS } from "@/lib/auth/permissions";
 import { AttendanceWidget } from "@/components/layout/attendance-widget";
 
 // ChevronsUpDown Icon

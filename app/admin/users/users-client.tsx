@@ -3,8 +3,8 @@
 import { useTransition } from "react";
 import { toast } from "sonner";
 import { updateManagedUserAction, type ManagedUser } from "@/lib/actions/users";
-import { ASSIGNABLE_ROLES, ROLE_LABELS } from "@/lib/permissions";
-import type { Role } from "@/lib/types";
+import { ASSIGNABLE_ROLES, ROLE_LABELS } from "@/lib/auth/permissions";
+import type { Role } from "@/lib/shared/types";
 import { useRouter } from "next/navigation";
 
 export function UsersClient({ users }: { users: ManagedUser[] }) {

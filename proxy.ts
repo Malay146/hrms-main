@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
-import { canAccessAdminPath, firstAllowedAdminPath, homePath, isStaffRole } from "@/lib/permissions";
+import { auth } from "@/lib/auth/server";
+import { canAccessAdminPath, firstAllowedAdminPath, homePath, isStaffRole } from "@/lib/auth/permissions";
 
 const PUBLIC_PATHS = new Set(["/", "/login", "/logout"]);
 

@@ -2,18 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { logger } from "@/lib/logger";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
-import { dateFromKey, toDateKey } from "@/lib/dates";
+import { logger } from "@/lib/shared/logger";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { dateFromKey, toDateKey } from "@/lib/shared/dates";
 import { computePayslip } from "@/lib/payroll/compute";
 import { payslipWarning } from "@/lib/payroll/warnings";
 import { stubHasContract, stubWage } from "@/lib/payroll/period-wage";
 import { stubWorkedDays, unpaidDaysInPeriod, weekdayCount } from "@/lib/payroll/worked-days";
-import { ensureRegularSalaryStructure } from "@/lib/actions/salary";
-import { sendPayslipEmail } from "@/lib/mail";
-import type { ActionResult } from "@/lib/types";
+import { ensureRegularSalaryStructure } from "@/lib/actions/payroll/salary";
+import { sendPayslipEmail } from "@/lib/shared/mail";
+import type { ActionResult } from "@/lib/shared/types";
 import { z } from "zod";
-import { firstZodError } from "@/lib/validations";
+import { firstZodError } from "@/lib/shared/validations";
 
 type EmployeeType = "full_time" | "intern" | "contractor";
 type PayrunStatus = "draft" | "computed" | "validated" | "paid";

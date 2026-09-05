@@ -10,7 +10,7 @@ import {
   updateEmployeeAction,
   type EmployeeHubData,
   type EmployeeHubRecord,
-} from "@/lib/actions/employees";
+} from "@/lib/actions/people/employees";
 
 type Tab = "work" | "private" | "hr";
 

@@ -1,10 +1,10 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
-import { mapLeave } from "@/lib/mappers";
-import { PIE_COLORS } from "@/lib/mappers";
-import { weeklyAttendanceCounts } from "@/lib/actions/attendance";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { mapLeave } from "@/lib/shared/mappers";
+import { PIE_COLORS } from "@/lib/shared/mappers";
+import { weeklyAttendanceCounts } from "@/lib/actions/people/attendance";
 import {
   dateFromKey,
   formatDisplayDate,
@@ -12,8 +12,8 @@ import {
   kolkataTodayKey,
   weekDayKeys,
   workingHours,
-} from "@/lib/dates";
-import type { ActionResult, DashboardStats, EmployeeDashboardData } from "@/lib/types";
+} from "@/lib/shared/dates";
+import type { ActionResult, DashboardStats, EmployeeDashboardData } from "@/lib/shared/types";
 
 export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>> {
   try {

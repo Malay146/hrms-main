@@ -1,5 +1,5 @@
-import { listAllocations } from "@/lib/actions/allocations";
-import { listTimeOffTypes } from "@/lib/actions/time-off-types";
+import { listAllocations } from "@/lib/actions/people/allocations";
+import { listTimeOffTypes } from "@/lib/actions/people/time-off-types";
 import { prisma } from "@/lib/db";
 import { AllocationsClient } from "./allocations-client";
 

@@ -2,7 +2,7 @@ import type { ComponentProps } from "react"
 import type { VariantProps } from "class-variance-authority"
 
 import { Badge, badgeVariants } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/shared/utils"
 
 type StatusTone = NonNullable<VariantProps<typeof badgeVariants>["variant"]>
 

@@ -2,29 +2,29 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { logger } from "@/lib/logger";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
-import { leaveTypeFromCode, mapLeave } from "@/lib/mappers";
+import { logger } from "@/lib/shared/logger";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { leaveTypeFromCode, mapLeave } from "@/lib/shared/mappers";
 import {
   dateFromKey,
   eachDateKey,
   inclusiveDayCount,
   kolkataTodayKey,
   toDateKey,
-} from "@/lib/dates";
+} from "@/lib/shared/dates";
 import {
   findOverlappingLeave,
   paidLeaveDays,
   validateLeaveDates,
-} from "@/lib/leave-rules";
+} from "@/lib/people/leave-rules";
 import {
   canSubmitRequest,
   remaining,
   takenAfterApproval,
   takenAfterRefusal,
-} from "@/lib/time-off-balance";
-import { applyLeaveSchema, decideLeaveSchema, firstZodError } from "@/lib/validations";
-import type { ActionResult, CalendarMarker, LeaveListItem, LeaveType } from "@/lib/types";
+} from "@/lib/people/time-off-balance";
+import { applyLeaveSchema, decideLeaveSchema, firstZodError } from "@/lib/shared/validations";
+import type { ActionResult, CalendarMarker, LeaveListItem, LeaveType } from "@/lib/shared/types";
 
 function revalidateLeave() {
   revalidatePath("/employee/leave");

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getPayslip } from "@/lib/actions/payruns";
+import { getPayslip } from "@/lib/actions/payroll/payruns";
 
 export default async function PayslipDetailPage({
   params,

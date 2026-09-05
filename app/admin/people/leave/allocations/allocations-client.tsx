@@ -9,8 +9,8 @@ import {
   decideAllocationAction,
   upsertAllocationAction,
   type AllocationListItem,
-} from "@/lib/actions/allocations";
-import type { TimeOffTypeItem } from "@/lib/actions/time-off-types";
+} from "@/lib/actions/people/allocations";
+import type { TimeOffTypeItem } from "@/lib/actions/people/time-off-types";
 
 const inputClass =
   "h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong";

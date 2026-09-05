@@ -1,4 +1,4 @@
-import { createNotionAvatarSvg } from "@/lib/notion-avatar";
+import { createNotionAvatarSvg } from "@/lib/shared/notion-avatar";
 import { cn } from "@/utils/cn";
 
 /** Canonical avatar sizes — prefer these over one-off values. */

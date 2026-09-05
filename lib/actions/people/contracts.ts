@@ -2,21 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission } from "@/lib/session";
+import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
 import {
   assertSingleRunning,
   type ContractWindow,
-} from "@/lib/contract-period";
-import { nextContractCode } from "@/lib/employee-id";
+} from "@/lib/people/contract-period";
+import { nextContractCode } from "@/lib/people/employee-id";
 import {
   dateFromKey,
   formatDisplayDate,
   kolkataParts,
   kolkataTodayKey,
   toDateKey,
-} from "@/lib/dates";
-import { firstZodError, upsertContractSchema } from "@/lib/validations";
-import type { ActionResult } from "@/lib/types";
+} from "@/lib/shared/dates";
+import { firstZodError, upsertContractSchema } from "@/lib/shared/validations";
+import type { ActionResult } from "@/lib/shared/types";
 
 export type ContractListItem = {
   id: string;

@@ -1,4 +1,4 @@
-import { listMyAttendance } from "@/lib/actions/attendance";
+import { listMyAttendance } from "@/lib/actions/people/attendance";
 import { cn } from "@/utils/cn";
 
 export default async function EmployeeAttendancePage() {

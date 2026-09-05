@@ -24,7 +24,7 @@ import TotalPayrollIcon from "@/components/icons/total-payroll";
 import AiIcon from "@/components/icons/sidebar/ai";
 import { cn } from "@/utils/cn";
 import { generateAiInsights, askHrCopilot } from "@/lib/actions/ai";
-import type { AiAnalyticsData, AiInsightCard } from "@/lib/types";
+import type { AiAnalyticsData, AiInsightCard } from "@/lib/shared/types";
 
 const HEALTH_BADGE = {
   healthy: { variant: "success" as const, label: "Healthy" },

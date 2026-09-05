@@ -1,5 +1,5 @@
 import { AppChrome } from "@/components/layout/app-chrome";
-import { requireStaffPage } from "@/lib/session";
+import { requireStaffPage } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 

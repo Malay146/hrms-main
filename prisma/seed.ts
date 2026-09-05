@@ -6,7 +6,7 @@ import {
   dateFromKey,
   inclusiveDayCount,
   kolkataTodayKey,
-} from "../lib/dates";
+} from "../lib/shared/dates";
 import { computePayslip } from "../lib/payroll/compute";
 import { REGULAR_SALARY_RULES } from "../lib/payroll/regular-salary";
 

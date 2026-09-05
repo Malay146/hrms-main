@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getEmployeeHub } from "@/lib/actions/employees";
+import { getEmployeeHub } from "@/lib/actions/people/employees";
 import { EmployeeForm } from "./employee-form";
 
 export default async function EmployeeDetailPage({
