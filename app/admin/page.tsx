@@ -1,5 +1,8 @@
 import Dashboard from "@/components/section/dashboard";
 import { getAdminDashboard } from "@/lib/actions/dashboard";
+import { getPayrollDashboard } from "@/lib/actions/payroll-dashboard";
+import { getCurrentUser } from "@/lib/session";
+import { kolkataTodayKey } from "@/lib/dates";
 
 const emptyStats = {
   firstName: "Admin",
@@ -14,7 +17,38 @@ const emptyStats = {
   activities: [],
 };
 
-export default async function AdminPage() {
-  const result = await getAdminDashboard();
-  return <Dashboard stats={result.ok ? result.data : emptyStats} />;
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string; to?: string; department?: string; type?: string }>;
+}) {
+  const params = await searchParams;
+  const today = kolkataTodayKey();
+  const periodStart = params.from ?? `${today.slice(0, 8)}01`;
+  const periodEnd = params.to ?? today;
+  const user = await getCurrentUser();
+  const [result, payroll] = await Promise.all([
+    getAdminDashboard(),
+    user
+      ? getPayrollDashboard({
+          user,
+          periodStart,
+          periodEnd,
+          department: params.department || undefined,
+          employeeType: (params.type as "full_time" | "intern" | "contractor" | undefined) || undefined,
+        })
+      : Promise.resolve({ ok: false as const, error: "Not signed in" }),
+  ]);
+  return (
+    <Dashboard
+      stats={result.ok ? result.data : emptyStats}
+      payroll={payroll.ok ? payroll.data : undefined}
+      filters={{
+        periodStart,
+        periodEnd,
+        department: params.department ?? "",
+        employeeType: params.type ?? "",
+      }}
+    />
+  );
 }

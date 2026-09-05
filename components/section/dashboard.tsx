@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Info } from "lucide-react";
+import { ChevronRight, Info } from "lucide-react";
 import React from "react";
 import Link from "next/link";
 import {
@@ -22,6 +22,7 @@ import OpenPositionIcon from "@/components/icons/open-position";
 import PendingApprovalIcon from "@/components/icons/pending-approval";
 import { cn } from "@/utils/cn";
 import type { DashboardStats } from "@/lib/types";
+import type { PayrollDashboardData } from "@/lib/actions/payroll-dashboard";
 
 const AttendanceTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
   if (active && payload && payload.length) {
@@ -37,7 +38,15 @@ const AttendanceTooltip = ({ active, payload, label }: { active?: boolean; paylo
   return null;
 };
 
-export default function Dashboard({ stats }: { stats: DashboardStats }) {
+export default function Dashboard({
+  stats,
+  payroll,
+  filters,
+}: {
+  stats: DashboardStats;
+  payroll?: PayrollDashboardData;
+  filters?: { periodStart: string; periodEnd: string; department: string; employeeType: string };
+}) {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
     setMounted(true);
@@ -47,7 +56,9 @@ export default function Dashboard({ stats }: { stats: DashboardStats }) {
     { icon: TotalEmployeeIcon, value: String(stats.totalEmployees), subtext: "Headcount", subtextColor: "text-[#16A34A]", label: "Total employee" },
     { icon: PresentTodayIcon, value: String(stats.presentToday), subtext: "Checked in", subtextColor: "text-[#16A34A]", label: "Present Today" },
     { icon: LeaveTodayIcon, value: String(stats.leaveToday), subtext: "Approved leave", subtextColor: "text-[#DC2626]", label: "Leave Today" },
-    { icon: OpenPositionIcon, value: "—", subtext: "Recruitment mock", subtextColor: "text-zinc-500", label: "Open Position" },
+    payroll?.canViewPayroll
+      ? { icon: OpenPositionIcon, value: `₹${Math.round(payroll.totalNetPaid).toLocaleString("en-IN")}`, subtext: `${payroll.payslipsPaid} paid`, subtextColor: "text-[#16A34A]", label: "Total net salary paid" }
+      : { icon: OpenPositionIcon, value: "—", subtext: "No payroll access", subtextColor: "text-zinc-500", label: "Total net salary paid" },
     { icon: PendingApprovalIcon, value: String(stats.pendingApprovals), subtext: "Leave requests", subtextColor: "text-[#D97706]", label: "Pending Approvals" },
   ];
 
@@ -66,10 +77,37 @@ export default function Dashboard({ stats }: { stats: DashboardStats }) {
             Here what’s happening to your organisation today
           </p>
         </div>
-        <button className="cursor-pointer flex gap-4 items-center justify-between pr-1 pl-1.5 py-1 border border-border rounded-sm text-body-lg text-zinc-700">
-          {stats.todayLabel}
-          <ChevronDown className="size-6 text-zinc-800" />
-        </button>
+        <form className="flex flex-wrap gap-2 items-end" method="get">
+          <label className="text-xs font-semibold text-zinc-500">
+            From
+            <input type="date" name="from" defaultValue={filters?.periodStart} className="ml-2 h-9 px-2 border border-border rounded-lg text-sm" />
+          </label>
+          <label className="text-xs font-semibold text-zinc-500">
+            To
+            <input type="date" name="to" defaultValue={filters?.periodEnd} className="ml-2 h-9 px-2 border border-border rounded-lg text-sm" />
+          </label>
+          <label className="text-xs font-semibold text-zinc-500">
+            Department
+            <select name="department" defaultValue={filters?.department ?? ""} className="ml-2 h-9 px-2 border border-border rounded-lg text-sm">
+              <option value="">All Departments</option>
+              {(payroll?.departments ?? []).map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-semibold text-zinc-500">
+            Type
+            <select name="type" defaultValue={filters?.employeeType ?? ""} className="ml-2 h-9 px-2 border border-border rounded-lg text-sm">
+              <option value="">All Types</option>
+              <option value="full_time">Full time</option>
+              <option value="intern">Intern</option>
+              <option value="contractor">Contractor</option>
+            </select>
+          </label>
+          <button type="submit" className="h-9 px-3 rounded-lg bg-zinc-900 text-white text-sm font-semibold">
+            Apply
+          </button>
+        </form>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-8">
@@ -210,6 +248,48 @@ export default function Dashboard({ stats }: { stats: DashboardStats }) {
                 </div>
                 <span className="text-xs text-zinc-400 shrink-0">{activity.time}</span>
               </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-12 gap-6 mt-6">
+        <div className="col-span-12 lg:col-span-6 border border-border rounded-2xl p-6 bg-surface">
+          <h2 className="text-h3 font-semibold text-zinc-900 mb-4">Salary cost by department</h2>
+          <div className="h-[220px]">
+            {!payroll?.canViewPayroll ? (
+              <p className="py-12 text-center text-sm font-medium text-zinc-400">No payroll access</p>
+            ) : !mounted ? (
+              <div className="h-full bg-zinc-50 rounded-xl animate-pulse" />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={payroll.salaryByDepartment} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="salaryGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#E4E4E7" />
+                      <stop offset="100%" stopColor="#18181B" />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--divider)" />
+                  <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} />
+                  <YAxis tickLine={false} axisLine={false} tick={{ fill: "var(--text-disabled)", fontSize: 12 }} />
+                  <Bar dataKey="value" fill="url(#salaryGrad)" radius={[12, 12, 0, 0]} maxBarSize={60} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+        <div className="col-span-12 lg:col-span-6 border border-border rounded-2xl p-6 bg-surface flex flex-col gap-3">
+          <h2 className="text-h3 font-semibold text-zinc-900">Payroll alerts & attendance</h2>
+          <p className="text-sm text-zinc-500">
+            Attendance health {payroll?.attendanceHealth ?? 0}% · Present {payroll?.present ?? 0} · Late {payroll?.late ?? 0} · Missing check-outs {payroll?.missingCheckout ?? 0}
+          </p>
+          <p className="text-sm text-zinc-500">Approved time off days: {payroll?.approvedTimeOffDays ?? 0}</p>
+          {(payroll?.alerts.length ?? 0) === 0 ? (
+            <p className="text-sm font-medium text-zinc-400">No payroll alerts</p>
+          ) : (
+            payroll?.alerts.map((alert) => (
+              <p key={alert} className="text-sm font-medium text-zinc-800">• {alert}</p>
             ))
           )}
         </div>
