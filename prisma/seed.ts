@@ -6,9 +6,13 @@ import {
   dateFromKey,
   inclusiveDayCount,
   kolkataTodayKey,
+  weekDayKeys,
 } from "../lib/shared/dates";
 import { computePayslip } from "../lib/payroll/compute";
 import { REGULAR_SALARY_RULES } from "../lib/payroll/regular-salary";
+import { lineHours } from "../lib/people/schedule-hours";
+import { BULK_DEPARTMENTS, buildBulkEmployees } from "./seed-bulk-employees";
+import { seedRecruitment } from "./seed-recruitment";
 
 const ADMIN_EMAIL = "admin@oddo.com";
 const ADMIN_PASSWORD = "admin@oddo@1234";
@@ -48,7 +52,11 @@ async function createUser(opts: {
   wage?: number | null;
   bankAccount?: string | null;
   employeeType?: "full_time" | "intern" | "contractor";
+  status?: "active" | "inactive" | "on_leave";
+  joinDate?: string | null;
+  scheduleId?: string | null;
   mustChangePassword?: boolean;
+  withPayroll?: boolean;
 }) {
   const now = new Date();
   const userId = id();
@@ -82,22 +90,28 @@ async function createUser(opts: {
           departmentId: opts.departmentId,
           jobTitle: opts.jobTitle,
           phone: opts.phone ?? null,
-          status: "active",
+          status: opts.status ?? "active",
           paidLeaveBalance: 20,
           employeeType: opts.employeeType ?? "full_time",
           bankAccount: opts.bankAccount ?? null,
           wage: opts.wage ?? (opts.basic || null),
+          joinDate: opts.joinDate ? dateFromKey(opts.joinDate) : null,
+          scheduleId: opts.scheduleId ?? null,
         },
       },
-      payrolls: {
-        create: {
-          month: currentPayrollMonth(),
-          basic: opts.basic,
-          hraPct: 20,
-          allowancePct: 10,
-          deductions: Math.round(opts.basic * 0.05),
-        },
-      },
+      ...(opts.withPayroll === false
+        ? {}
+        : {
+            payrolls: {
+              create: {
+                month: currentPayrollMonth(),
+                basic: opts.basic,
+                hraPct: 20,
+                allowancePct: 10,
+                deductions: Math.round(opts.basic * 0.05),
+              },
+            },
+          }),
     },
   });
   return userId;
@@ -116,6 +130,10 @@ async function main() {
   await prisma.timeOffType.deleteMany();
   await prisma.attendance.deleteMany();
   await prisma.payroll.deleteMany();
+  await prisma.candidate.deleteMany();
+  await prisma.jobOpening.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.notificationPreference.deleteMany();
   await prisma.session.deleteMany();
   await prisma.account.deleteMany();
   await prisma.employeeProfile.deleteMany();
@@ -138,7 +156,7 @@ async function main() {
     },
   });
 
-  const departmentNames = ["Human Resources", "Engineering", "Sales", "Finance"];
+  const departmentNames = [...BULK_DEPARTMENTS];
   const departments: Record<string, string> = {};
   for (const name of departmentNames) {
     const dept = await prisma.department.create({
@@ -171,6 +189,63 @@ async function main() {
     timeOffTypes[def.code] = row.id;
   }
 
+  function weekdayLines(
+    weekdays: number[],
+    startMin: number,
+    endMin: number,
+    breakMin: number,
+  ) {
+    return weekdays.map((weekday) => ({
+      weekday,
+      startMin,
+      endMin,
+      breakMin,
+      hours: lineHours(startMin, endMin, breakMin),
+    }));
+  }
+
+  const standardLines = weekdayLines([1, 2, 3, 4, 5], 9 * 60, 18 * 60, 60);
+  const flexibleLines = weekdayLines([1, 2, 3, 4, 5], 10 * 60, 19 * 60, 45);
+  const supportLines = weekdayLines([1, 2, 3, 4, 5, 6], 8 * 60, 16 * 60, 45);
+
+  const scheduleStandard = await prisma.workingSchedule.create({
+    data: {
+      organizationId: organization.id,
+      name: "Standard Office (Mon–Fri)",
+      calendarType: "fixed",
+      timezone: "Asia/Kolkata",
+      active: true,
+      hoursPerWeek: standardLines.reduce((sum, line) => sum + Number(line.hours), 0),
+      daysPerWeek: 5,
+      lines: { create: standardLines },
+    },
+  });
+  const scheduleFlexible = await prisma.workingSchedule.create({
+    data: {
+      organizationId: organization.id,
+      name: "Flexible Core Hours",
+      calendarType: "variable",
+      timezone: "Asia/Kolkata",
+      active: true,
+      hoursPerWeek: flexibleLines.reduce((sum, line) => sum + Number(line.hours), 0),
+      daysPerWeek: 5,
+      lines: { create: flexibleLines },
+    },
+  });
+  const scheduleSupport = await prisma.workingSchedule.create({
+    data: {
+      organizationId: organization.id,
+      name: "Customer Support (Mon–Sat)",
+      calendarType: "fixed",
+      timezone: "Asia/Kolkata",
+      active: true,
+      hoursPerWeek: supportLines.reduce((sum, line) => sum + Number(line.hours), 0),
+      daysPerWeek: 6,
+      lines: { create: supportLines },
+    },
+  });
+  const scheduleIds = [scheduleStandard.id, scheduleFlexible.id, scheduleSupport.id];
+
   const adminId = await createUser({
     name: "Admin",
     email: ADMIN_EMAIL,
@@ -181,6 +256,7 @@ async function main() {
     jobTitle: "Administrator",
     passwordHash: adminHash,
     basic: 0,
+    scheduleId: scheduleStandard.id,
   });
 
   const people = [
@@ -269,7 +345,7 @@ async function main() {
   ];
 
   const userIds: Record<string, string> = { admin: adminId };
-  for (const person of people) {
+  for (const [index, person] of people.entries()) {
     userIds[person.email] = await createUser({
       name: person.name,
       email: person.email,
@@ -281,117 +357,88 @@ async function main() {
       phone: person.phone,
       passwordHash: demoHash,
       basic: person.basic,
+      wage: "wage" in person ? person.wage : undefined,
+      bankAccount: "bankAccount" in person ? person.bankAccount : undefined,
+      scheduleId: scheduleIds[index % scheduleIds.length],
     });
   }
 
-  const attendees = [
-    userIds["william.joseph@oddo.com"],
-    userIds["bruce.banner@oddo.com"],
-    userIds["sarah.mills@oddo.com"],
-    userIds["john.cena@oddo.com"],
-    userIds["kimi.nowa@oddo.com"],
-  ];
-
-  for (const dayOffset of [0, 1, 2, 3, 4]) {
-    const key = daysAgo(dayOffset);
-    for (const [index, userId] of attendees.entries()) {
-      const late = index === 3 && dayOffset === 1;
-      const checkInHour = late ? 9 : 8;
-      const checkInMin = late ? 25 : 52 + index;
-      await prisma.attendance.create({
-        data: {
-          userId,
-          date: dateFromKey(key),
-          checkIn: new Date(
-            `${key}T${String(checkInHour).padStart(2, "0")}:${String(checkInMin).padStart(2, "0")}:00.000Z`,
-          ),
-          checkOut: dayOffset === 0 ? null : new Date(`${key}T17:0${index}:00.000Z`),
-          status: "present",
-        },
-      });
-    }
+  // Bulk roster for demos (~300). Shared password hash keeps seeding fast.
+  const bulk = buildBulkEmployees(300);
+  const leaveTodayUserIds: string[] = [];
+  const BULK_BATCH = 40;
+  for (let start = 0; start < bulk.length; start += BULK_BATCH) {
+    const slice = bulk.slice(start, start + BULK_BATCH);
+    const created = await Promise.all(
+      slice.map((row, index) =>
+        createUser({
+          name: row.name,
+          email: row.email,
+          role: "employee",
+          organizationId: organization.id,
+          departmentId: departments[row.department],
+          employeeId: row.employeeId,
+          jobTitle: row.jobTitle,
+          phone: row.phone,
+          passwordHash: demoHash,
+          basic: row.basic,
+          wage: row.basic,
+          bankAccount: row.bankAccount,
+          employeeType: row.employeeType,
+          status: row.status,
+          joinDate: daysAgo(row.joinOffsetDays),
+          scheduleId:
+            row.status === "inactive" ? null : scheduleIds[(start + index) % scheduleIds.length],
+          withPayroll: row.status !== "inactive",
+        }),
+      ),
+    );
+    slice.forEach((row, index) => {
+      userIds[row.email] = created[index]!;
+      if (row.leaveToday) leaveTodayUserIds.push(created[index]!);
+    });
+    console.log(`Seeded employees ${Math.min(start + BULK_BATCH, bulk.length)}/${bulk.length}`);
   }
 
-  const leaveSeeds = [
-    {
-      userId: userIds["john.cena@oddo.com"],
-      code: "sick",
-      start: daysAgo(-2),
-      end: daysAgo(-1),
-      remarks: "Medical checkup",
-      status: "pending" as const,
-    },
-    {
-      userId: userIds["sarah.mills@oddo.com"],
-      code: "paid",
-      start: daysAgo(-10),
-      end: daysAgo(-8),
-      remarks: "Family vacation",
-      status: "approved" as const,
-      adminComment: "Approved",
-    },
-    {
-      userId: userIds["mark.lou@oddo.com"],
-      code: "unpaid",
-      start: daysAgo(5),
-      end: daysAgo(5),
-      remarks: "Personal errand",
-      status: "rejected" as const,
-      adminComment: "Insufficient notice",
-    },
-  ];
-
-  for (const leave of leaveSeeds) {
+  // Approved leave covering today → shows in "On Leave" kanban via leave overlay + status.
+  for (let i = 0; i < leaveTodayUserIds.length; i += 1) {
+    const userId = leaveTodayUserIds[i]!;
+    const createdAt = new Date(Date.now() - (2 + (i % 18)) * 86_400_000 - (i % 9) * 3_600_000);
     await prisma.leaveRequest.create({
       data: {
-        userId: leave.userId,
-        typeId: timeOffTypes[leave.code],
-        startDate: dateFromKey(leave.start),
-        endDate: dateFromKey(leave.end),
-        duration: inclusiveDayCount(leave.start, leave.end),
-        remarks: leave.remarks,
-        status: leave.status,
-        adminComment: leave.adminComment ?? null,
+        userId,
+        typeId: timeOffTypes.paid,
+        startDate: dateFromKey(daysAgo(1)),
+        endDate: dateFromKey(daysAgo(-2)),
+        duration: inclusiveDayCount(daysAgo(1), daysAgo(-2)),
+        remarks: "Seeded PTO overlapping today",
+        status: "approved",
+        adminComment: "Seed approved",
+        createdAt,
+        updatedAt: createdAt,
       },
     });
   }
 
-  const clashLeaves = [
-    {
-      userId: userIds["bruce.banner@oddo.com"],
-      code: "paid",
-      start: daysAgo(1),
-      end: daysAgo(-1),
-      remarks: "On-site workshop with the frontend team",
-      status: "approved" as const,
-      adminComment: "Approved",
+  // Contracts for active / on-leave staff (skip inactive).
+  const contractProfiles = await prisma.employeeProfile.findMany({
+    where: {
+      organizationId: organization.id,
+      status: { not: "inactive" },
     },
-    {
-      userId: userIds["john.cena@oddo.com"],
-      code: "paid",
-      start: daysAgo(1),
-      end: daysAgo(-1),
-      remarks: "Family in town overlapping the workshop week",
-      status: "pending" as const,
+    select: {
+      id: true,
+      departmentId: true,
+      jobTitle: true,
+      wage: true,
+      scheduleId: true,
+      joinDate: true,
+      employeeType: true,
     },
-  ];
+    orderBy: { employeeId: "asc" },
+  });
 
-  for (const leave of clashLeaves) {
-    await prisma.leaveRequest.create({
-      data: {
-        userId: leave.userId,
-        typeId: timeOffTypes[leave.code],
-        startDate: dateFromKey(leave.start),
-        endDate: dateFromKey(leave.end),
-        duration: inclusiveDayCount(leave.start, leave.end),
-        remarks: leave.remarks,
-        status: leave.status,
-        adminComment: leave.adminComment ?? null,
-      },
-    });
-  }
-
-  const structure = await prisma.salaryStructure.create({
+  const structureEarly = await prisma.salaryStructure.create({
     data: {
       organizationId: organization.id,
       name: "Regular Salary",
@@ -410,8 +457,266 @@ async function main() {
         })),
       },
     },
-    include: { rules: true },
   });
+
+  const CONTRACT_BATCH = 50;
+  let contractSeq = 1;
+  for (let start = 0; start < contractProfiles.length; start += CONTRACT_BATCH) {
+    const slice = contractProfiles.slice(start, start + CONTRACT_BATCH);
+    await prisma.contract.createMany({
+      data: slice.map((profile, index) => {
+        const seq = contractSeq + index;
+        const wage = Number(profile.wage ?? 40000);
+        const roll = seq % 12;
+        // Mix: open-ended running, fixed-term running, ending soon, and truly expired.
+        let status: "running" | "expired" = "running";
+        let endDate: Date | null = null;
+        if (roll === 0) {
+          status = "expired";
+          endDate = dateFromKey(daysAgo(45 + (seq % 40)));
+        } else if (roll === 1) {
+          endDate = dateFromKey(daysAgo(-(14 + (seq % 21)))); // ends within ~5 weeks
+        } else if (roll === 2 || profile.employeeType === "intern") {
+          endDate = dateFromKey(daysAgo(-(90 + (seq % 60))));
+        } else if (roll === 3 && profile.employeeType === "contractor") {
+          endDate = dateFromKey(daysAgo(-(60 + (seq % 30))));
+        }
+
+        return {
+          code: `CON/2026/${String(seq).padStart(4, "0")}`,
+          employeeId: profile.id,
+          departmentId: profile.departmentId,
+          scheduleId: profile.scheduleId,
+          salaryStructureId: structureEarly.id,
+          jobTitle: profile.jobTitle,
+          wage,
+          startDate:
+            status === "expired"
+              ? dateFromKey(daysAgo(200 + (seq % 100)))
+              : (profile.joinDate ?? dateFromKey(daysAgo(120))),
+          endDate,
+          status,
+          notes:
+            profile.employeeType === "intern"
+              ? "Internship agreement"
+              : profile.employeeType === "contractor"
+                ? "Fixed-term contractor"
+                : status === "expired"
+                  ? "Prior term — superseded or not renewed"
+                  : "Full-time employment",
+        };
+      }),
+    });
+    contractSeq += slice.length;
+    console.log(
+      `Seeded contracts ${Math.min(start + CONTRACT_BATCH, contractProfiles.length)}/${contractProfiles.length}`,
+    );
+  }
+
+  // Diverse attendance for the current week (drives Attendance Overview + payroll alerts).
+  const weekKeys = weekDayKeys();
+  const todayKey = kolkataTodayKey();
+  const attendancePool = await prisma.employeeProfile.findMany({
+    where: { organizationId: organization.id, status: { not: "inactive" } },
+    select: { userId: true },
+    orderBy: { employeeId: "asc" },
+  });
+  const poolIds = attendancePool.map((row) => row.userId);
+  const poolSize = poolIds.length;
+
+  // Scale to headcount so dashboard present/late match ~300 roster (not a tiny sample).
+  const weekdayFactors = [0.62, 0.84, 0.71, 0.9, 0.78];
+  const presentTargets = weekKeys.map((key, dayIndex) => {
+    if (key === todayKey) return Math.max(40, Math.floor(poolSize * 0.78));
+    const utcDay = dateFromKey(key).getUTCDay();
+    if (utcDay === 0 || utcDay === 6) return Math.max(12, Math.floor(poolSize * 0.14));
+    const factor = weekdayFactors[dayIndex] ?? 0.75;
+    return Math.max(20, Math.floor(poolSize * factor));
+  });
+
+  const attendanceRows: {
+    userId: string;
+    date: Date;
+    checkIn: Date | null;
+    checkOut: Date | null;
+    status: "present" | "absent" | "half_day" | "leave";
+    workedHours: number | null;
+  }[] = [];
+
+  for (let dayIndex = 0; dayIndex < weekKeys.length; dayIndex += 1) {
+    const key = weekKeys[dayIndex]!;
+    const presentCount = Math.min(presentTargets[dayIndex]!, poolSize);
+    const halfDayCount = Math.max(2, Math.floor(presentCount * 0.1));
+    const afterPresent = Math.max(0, poolSize - presentCount);
+    const leaveCount = Math.min(
+      afterPresent,
+      Math.max(8, Math.floor(poolSize * 0.06) + (dayIndex % 4) * 4),
+    );
+    const absentCount = Math.max(0, afterPresent - leaveCount);
+    const date = dateFromKey(key);
+
+    // Rotate starting offset so the same people aren't always "present".
+    const offset = (dayIndex * 17) % poolSize;
+    const rotated = [...poolIds.slice(offset), ...poolIds.slice(0, offset)];
+    let cursor = 0;
+    const take = (n: number) => {
+      const slice = rotated.slice(cursor, cursor + n);
+      cursor += n;
+      return slice;
+    };
+
+    for (const [i, userId] of take(presentCount - halfDayCount).entries()) {
+      // Mix on-time (IST morning) and late check-ins for Late metric.
+      const late = i % 4 === 0;
+      const hourUtc = late ? 4 + (i % 2) : 2 + (i % 2); // ~07:30–09:30 IST on-time vs ~09:30–11:30 late-ish
+      const minute = late ? 45 + (i % 10) : 5 + (i % 40);
+      const checkIn = new Date(
+        `${key}T${String(hourUtc).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`,
+      );
+      const checkOut =
+        key === todayKey && i % 7 === 0
+          ? null
+          : new Date(`${key}T1${1 + (i % 3)}:${String(i % 50).padStart(2, "0")}:00.000Z`);
+      attendanceRows.push({
+        userId,
+        date,
+        checkIn,
+        checkOut,
+        status: "present",
+        workedHours: checkOut ? 8.5 : null,
+      });
+    }
+    for (const [i, userId] of take(halfDayCount).entries()) {
+      attendanceRows.push({
+        userId,
+        date,
+        checkIn: new Date(`${key}T03:${String(i % 30).padStart(2, "0")}:00.000Z`),
+        checkOut: new Date(`${key}T07:${String(20 + (i % 20)).padStart(2, "0")}:00.000Z`),
+        status: "half_day",
+        workedHours: 4,
+      });
+    }
+    for (const userId of take(leaveCount)) {
+      attendanceRows.push({
+        userId,
+        date,
+        checkIn: null,
+        checkOut: null,
+        status: "leave",
+        workedHours: 0,
+      });
+    }
+    for (const userId of take(absentCount)) {
+      attendanceRows.push({
+        userId,
+        date,
+        checkIn: null,
+        checkOut: null,
+        status: "absent",
+        workedHours: 0,
+      });
+    }
+  }
+
+  for (let start = 0; start < attendanceRows.length; start += 200) {
+    await prisma.attendance.createMany({
+      data: attendanceRows.slice(start, start + 200),
+      skipDuplicates: true,
+    });
+  }
+  console.log(`Seeded attendance rows: ${attendanceRows.length}`);
+
+  const leaveSeeds = [
+    {
+      userId: userIds["john.cena@oddo.com"],
+      code: "sick",
+      start: daysAgo(-2),
+      end: daysAgo(-1),
+      remarks: "Medical checkup",
+      status: "pending" as const,
+      hoursAgo: 2,
+    },
+    {
+      userId: userIds["sarah.mills@oddo.com"],
+      code: "paid",
+      start: daysAgo(-10),
+      end: daysAgo(-8),
+      remarks: "Family vacation",
+      status: "approved" as const,
+      adminComment: "Approved",
+      hoursAgo: 28,
+    },
+    {
+      userId: userIds["mark.lou@oddo.com"],
+      code: "unpaid",
+      start: daysAgo(5),
+      end: daysAgo(5),
+      remarks: "Personal errand",
+      status: "rejected" as const,
+      adminComment: "Insufficient notice",
+      hoursAgo: 6,
+    },
+  ];
+
+  for (const leave of leaveSeeds) {
+    const createdAt = new Date(Date.now() - leave.hoursAgo * 3_600_000);
+    await prisma.leaveRequest.create({
+      data: {
+        userId: leave.userId,
+        typeId: timeOffTypes[leave.code],
+        startDate: dateFromKey(leave.start),
+        endDate: dateFromKey(leave.end),
+        duration: inclusiveDayCount(leave.start, leave.end),
+        remarks: leave.remarks,
+        status: leave.status,
+        adminComment: leave.adminComment ?? null,
+        createdAt,
+        updatedAt: createdAt,
+      },
+    });
+  }
+
+  const clashLeaves = [
+    {
+      userId: userIds["bruce.banner@oddo.com"],
+      code: "paid",
+      start: daysAgo(1),
+      end: daysAgo(-1),
+      remarks: "On-site workshop with the frontend team",
+      status: "approved" as const,
+      adminComment: "Approved",
+      hoursAgo: 4,
+    },
+    {
+      userId: userIds["john.cena@oddo.com"],
+      code: "paid",
+      start: daysAgo(1),
+      end: daysAgo(-1),
+      remarks: "Family in town overlapping the workshop week",
+      status: "pending" as const,
+      hoursAgo: 1,
+    },
+  ];
+
+  for (const leave of clashLeaves) {
+    const createdAt = new Date(Date.now() - leave.hoursAgo * 3_600_000);
+    await prisma.leaveRequest.create({
+      data: {
+        userId: leave.userId,
+        typeId: timeOffTypes[leave.code],
+        startDate: dateFromKey(leave.start),
+        endDate: dateFromKey(leave.end),
+        duration: inclusiveDayCount(leave.start, leave.end),
+        remarks: leave.remarks,
+        status: leave.status,
+        adminComment: leave.adminComment ?? null,
+        createdAt,
+        updatedAt: createdAt,
+      },
+    });
+  }
+
+  const structure = structureEarly;
 
   const aaravProfile = await prisma.employeeProfile.findUnique({
     where: { employeeId: "ODDO-2026-008" },
@@ -476,10 +781,16 @@ async function main() {
     });
   }
 
+  const recruitment = await seedRecruitment(prisma, organization.id);
+
   console.log("Seed complete.");
   console.log(`Admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   console.log(`Demo employees password: ${DEMO_PASSWORD}`);
   console.log(`Example employee: william.joseph@oddo.com`);
+  console.log(`Bulk employees: ${bulk.length} (+ ${people.length} named + admin)`);
+  console.log(`On-leave today (seeded): ${leaveTodayUserIds.length}`);
+  console.log(`Schedules: 3 · Contracts: ${contractProfiles.length}`);
+  console.log(`Recruitment: ${recruitment.jobs} jobs · ${recruitment.candidates} candidates`);
   console.log(`Seeded at ${now.toISOString()}`);
 }
 

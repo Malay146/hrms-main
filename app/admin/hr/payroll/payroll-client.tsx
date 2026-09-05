@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { Play } from "lucide-react";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import { upsertPayrollAction } from "@/lib/actions/payroll/payroll";
 import { currentPayrollMonth } from "@/lib/shared/dates";
 import type { PayrollListItem } from "@/lib/shared/types";
+import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
 
 export function PayrollClient({
   initialRows,
@@ -15,9 +16,15 @@ export function PayrollClient({
   canEdit: boolean;
 }) {
   const [rows, setRows] = useState(initialRows);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const month = currentPayrollMonth();
+  const {
+    page,
+    setPage,
+    totalPages,
+    total,
+    pageItems: pagedRows,
+  } = useClientPagination(rows, 20);
 
   async function save(row: PayrollListItem) {
     setSavingId(row.userId);
@@ -31,11 +38,11 @@ export function PayrollClient({
     });
     setSavingId(null);
     if (!result.ok) {
-      setToast({ message: result.error, type: "error" });
+      toast.error(result.error);
       return;
     }
     setRows((prev) => prev.map((item) => (item.userId === row.userId ? result.data : item)));
-    setToast({ message: `Saved payroll for ${row.name}`, type: "success" });
+    toast.success(`Saved payroll for ${row.name}`);
   }
 
   const totalNet = rows.reduce((sum, row) => sum + Number(row.netSalary || 0), 0);
@@ -97,7 +104,7 @@ export function PayrollClient({
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
+              pagedRows.map((row) => (
                 <tr key={row.userId}>
                   <td className="py-3 px-6">
                     <p className="font-semibold text-zinc-900">{row.name}</p>
@@ -157,8 +164,13 @@ export function PayrollClient({
           </tbody>
         </table>
       </div>
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <ListPagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        pageItemCount={pagedRows.length}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

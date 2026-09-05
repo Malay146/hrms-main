@@ -63,8 +63,7 @@ export default function HeroSection() {
                 href="/login"
                 className="group relative inline-flex items-center justify-center gap-2.5 px-4 py-3 rounded-md bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 font-semibold text-md shadow-lg shadow-zinc-950/10 dark:shadow-white/5 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
               >
-                <span>Login</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                <span>Get Started</span>
               </Link>
             </div>
 

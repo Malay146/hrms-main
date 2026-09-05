@@ -11,6 +11,7 @@ import {
   type PayslipListItem,
 } from "@/lib/actions/payroll/payruns";
 import { formatPayrollMonth, payslipIssueMonth } from "@/lib/shared/dates";
+import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
 
 export function PayslipsClient({
   rows,
@@ -23,6 +24,13 @@ export function PayslipsClient({
   const [pending, startTransition] = useTransition();
   const month = payslipIssueMonth();
   const monthLabel = formatPayrollMonth(month);
+  const {
+    page,
+    setPage,
+    totalPages,
+    total,
+    pageItems: pagedRows,
+  } = useClientPagination(rows, 20);
 
   function issueMonth() {
     startTransition(async () => {
@@ -91,7 +99,7 @@ export function PayslipsClient({
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
+              pagedRows.map((row) => (
                 <tr key={row.id}>
                   <td className="py-3 px-6">
                     <Link href={`/admin/hr/payroll/payslips/${row.id}`} className="font-semibold text-zinc-900">
@@ -126,6 +134,13 @@ export function PayslipsClient({
           </tbody>
         </table>
       </div>
+      <ListPagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        pageItemCount={pagedRows.length}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

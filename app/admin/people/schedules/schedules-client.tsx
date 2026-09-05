@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useTransition } from "react";
 import { CalendarClock, Plus, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import { daysPerWeek, lineHours, weeklyHours } from "@/lib/people/schedule-hours";
 import {
   upsertScheduleAction,
@@ -72,9 +72,6 @@ export function SchedulesClient({
   const [active, setActive] = useState(true);
   const [lines, setLines] = useState<DraftLine[]>(defaultLines);
   const [pending, startTransition] = useTransition();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null,
-  );
 
   const totals = useMemo(
     () => ({
@@ -123,7 +120,7 @@ export function SchedulesClient({
         })),
       });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       setSchedules((prev) => {
@@ -134,10 +131,7 @@ export function SchedulesClient({
         });
       });
       setEditorOpen(false);
-      setToast({
-        message: editingId ? `Updated ${result.data.name}.` : `Created ${result.data.name}.`,
-        type: "success",
-      });
+      toast.success(editingId ? `Updated ${result.data.name}.` : `Created ${result.data.name}.`);
     });
   }
 
@@ -359,10 +353,6 @@ export function SchedulesClient({
           </button>
         </form>
       </Modal>
-
-      {toast ? (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      ) : null}
     </div>
   );
 }

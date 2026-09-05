@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { Pencil, Plus, Search, Trash2, Users } from "lucide-react";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { Modal } from "@/components/ui/modal";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import {
   createDepartmentAction,
   deleteDepartmentAction,
@@ -42,9 +42,6 @@ export function DepartmentsClient({
   const [renameTarget, setRenameTarget] = useState<DepartmentListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DepartmentListItem | null>(null);
   const [pending, startTransition] = useTransition();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null,
-  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -110,14 +107,14 @@ export function DepartmentsClient({
         code: String(form.get("code") ?? "") || undefined,
       });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       setDepartments((prev) =>
         [...prev, result.data].sort((a, b) => a.name.localeCompare(b.name)),
       );
       setShowCreate(false);
-      setToast({ message: `Created ${result.data.name}.`, type: "success" });
+      toast.success(`Created ${result.data.name}.`);
     });
   }
 
@@ -131,7 +128,7 @@ export function DepartmentsClient({
         name: String(form.get("name") ?? ""),
       });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       setDepartments((prev) =>
@@ -141,7 +138,7 @@ export function DepartmentsClient({
       );
       if (selected?.id === result.data.id) setSelected(result.data);
       setRenameTarget(null);
-      setToast({ message: `Renamed to ${result.data.name}.`, type: "success" });
+      toast.success(`Renamed to ${result.data.name}.`);
     });
   }
 
@@ -150,13 +147,13 @@ export function DepartmentsClient({
     startTransition(async () => {
       const result = await deleteDepartmentAction({ id: deleteTarget.id });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       setDepartments((prev) => prev.filter((dept) => dept.id !== result.data.id));
       if (selected?.id === result.data.id) setSelected(null);
       setDeleteTarget(null);
-      setToast({ message: "Department deleted.", type: "success" });
+      toast.success("Department deleted.");
     });
   }
 
@@ -165,7 +162,7 @@ export function DepartmentsClient({
     startTransition(async () => {
       const result = await moveEmployeeDepartmentAction({ employeeId, departmentId });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       const { fromDepartmentId, toDepartmentId, member } = result.data;
@@ -195,7 +192,7 @@ export function DepartmentsClient({
           prev.members.filter((row) => row.employeeId !== member.employeeId),
         );
       });
-      setToast({ message: `Moved ${member.name} to ${targetName}.`, type: "success" });
+      toast.success(`Moved ${member.name} to ${targetName}.`);
     });
   }
 
@@ -493,10 +490,6 @@ export function DepartmentsClient({
           </div>
         ) : null}
       </Modal>
-
-      {toast ? (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      ) : null}
     </div>
   );
 }

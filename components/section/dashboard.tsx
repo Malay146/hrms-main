@@ -22,22 +22,30 @@ import OpenPositionIcon from "@/components/icons/open-position";
 import PendingApprovalIcon from "@/components/icons/pending-approval";
 import { cn } from "@/utils/cn";
 import { PersonAvatar } from "@/components/ui/person-avatar";
+import { BarChartTooltip, PieChartTooltip, chartCursor, chartTooltipWrapperStyle } from "@/components/charts/chart-tooltip";
 import type { DashboardStats } from "@/lib/shared/types";
 import type { PayrollDashboardData } from "@/lib/actions/payroll/payroll-dashboard";
 
-const AttendanceTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-surface backdrop-blur-md border border-border px-3 py-1.5 rounded-md shadow-md text-xs font-semibold">
-        <p className="text-zinc-900 font-bold">{label}</p>
-        <p className="text-zinc-600">
-          Attendance: <span className="text-zinc-950 font-bold">{payload[0].value}</span>
-        </p>
-      </div>
-    );
-  }
-  return null;
-};
+function SalaryTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: { value?: number }[];
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const value = Number(payload[0]?.value ?? 0);
+  return (
+    <BarChartTooltip
+      active
+      label={label}
+      payload={[{ value: `₹${value.toLocaleString("en-IN")}` }]}
+      valueLabel="Monthly wage cost"
+    />
+  );
+}
 
 export default function Dashboard({
   stats,
@@ -194,7 +202,11 @@ export default function Dashboard({
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--divider)" />
                   <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} />
                   <YAxis tickLine={false} axisLine={false} tick={{ fill: "var(--text-disabled)", fontSize: 12 }} domain={[0, maxAttendance]} />
-                  <Tooltip content={<AttendanceTooltip />} cursor={{ fill: "rgba(0, 0, 0, 0.04)", radius: 6 }} />
+                  <Tooltip
+                    content={<BarChartTooltip valueLabel="Present / half-day" />}
+                    cursor={chartCursor}
+                    wrapperStyle={chartTooltipWrapperStyle}
+                  />
                   <Bar dataKey="attendance" fill="url(#attendanceGrad)" radius={[12, 12, 0, 0]} maxBarSize={60} />
                 </BarChart>
               </ResponsiveContainer>
@@ -244,18 +256,34 @@ export default function Dashboard({
                 <div className="w-[180px] h-[180px] rounded-full bg-zinc-50 animate-pulse" />
               ) : (
                 <>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={stats.distribution} innerRadius={60} outerRadius={85} paddingAngle={4} cornerRadius={6} dataKey="value">
-                        {stats.distribution.map((entry, index) => (
-                          <Cell key={entry.name} fill={entry.color} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <div className="absolute inset-0 z-0 flex flex-col items-center justify-center pointer-events-none">
                     <span className="text-3xl font-bold text-zinc-950">{stats.totalEmployees}</span>
                     <span className="text-xs text-zinc-400 font-semibold">Employees</span>
+                  </div>
+                  <div className="relative z-10 h-full w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Tooltip
+                          content={<PieChartTooltip valueLabel="Employees" />}
+                          wrapperStyle={chartTooltipWrapperStyle}
+                        />
+                        <Pie
+                          data={stats.distribution}
+                          innerRadius={60}
+                          outerRadius={85}
+                          paddingAngle={4}
+                          cornerRadius={6}
+                          dataKey="value"
+                          nameKey="name"
+                          stroke="none"
+                          className="outline-none cursor-pointer"
+                        >
+                          {stats.distribution.map((entry) => (
+                            <Cell key={entry.name} fill={entry.color} className="outline-none transition-opacity hover:opacity-90" />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
                   </div>
                 </>
               )}
@@ -265,7 +293,10 @@ export default function Dashboard({
                 <p className="text-sm font-medium text-zinc-400">No employees to distribute yet</p>
               ) : (
                 stats.distribution.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between text-sm">
+                  <div
+                    key={item.name}
+                    className="flex items-center justify-between text-sm rounded-lg px-2 py-1.5 -mx-2 transition-colors hover:bg-zinc-50"
+                  >
                     <div className="flex items-center gap-2">
                       <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
                       <span className="text-zinc-700 font-medium">{item.name}</span>
@@ -304,9 +335,11 @@ export default function Dashboard({
               <p className="py-12 text-center text-sm font-medium text-zinc-400">No payroll access</p>
             ) : !mounted ? (
               <div className="h-full bg-zinc-50 rounded-xl animate-pulse" />
+            ) : payroll.salaryByDepartment.length === 0 ? (
+              <p className="py-12 text-center text-sm font-medium text-zinc-400">No salary cost data yet</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={payroll.salaryByDepartment} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <BarChart data={payroll.salaryByDepartment} margin={{ top: 10, right: 10, left: -10, bottom: 40 }}>
                   <defs>
                     <linearGradient id="salaryGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#E4E4E7" />
@@ -314,9 +347,28 @@ export default function Dashboard({
                     </linearGradient>
                   </defs>
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--divider)" />
-                  <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} />
-                  <YAxis tickLine={false} axisLine={false} tick={{ fill: "var(--text-disabled)", fontSize: 12 }} />
-                  <Bar dataKey="value" fill="url(#salaryGrad)" radius={[12, 12, 0, 0]} maxBarSize={60} />
+                  <XAxis
+                    dataKey="name"
+                    tickLine={false}
+                    axisLine={false}
+                    interval={0}
+                    angle={-28}
+                    textAnchor="end"
+                    height={50}
+                    tick={{ fill: "var(--text-secondary)", fontSize: 10 }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fill: "var(--text-disabled)", fontSize: 12 }}
+                    tickFormatter={(v) => (v >= 100000 ? `${Math.round(v / 100000) / 10}L` : `${Math.round(v / 1000)}k`)}
+                  />
+                  <Tooltip
+                    content={<SalaryTooltip />}
+                    cursor={chartCursor}
+                    wrapperStyle={chartTooltipWrapperStyle}
+                  />
+                  <Bar dataKey="value" fill="url(#salaryGrad)" radius={[12, 12, 0, 0]} maxBarSize={48} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -325,9 +377,11 @@ export default function Dashboard({
         <div className="col-span-12 lg:col-span-6 border border-border rounded-2xl p-6 bg-surface flex flex-col gap-3">
           <h2 className="text-h3 font-semibold text-zinc-900">Payroll alerts & attendance</h2>
           <p className="text-sm text-zinc-500">
-            Attendance health {payroll?.attendanceHealth ?? 0}% · Present {payroll?.present ?? 0} · Late {payroll?.late ?? 0} · Missing check-outs {payroll?.missingCheckout ?? 0}
+            Attendance health {payroll?.attendanceHealth ?? 0}% · Present {payroll?.present ?? 0} · Late{" "}
+            {payroll?.late ?? 0} · Absent {payroll?.absent ?? 0} · On leave {payroll?.leaveToday ?? 0} · Missing
+            check-outs {payroll?.missingCheckout ?? 0}
           </p>
-          <p className="text-sm text-zinc-500">Approved time off days: {payroll?.approvedTimeOffDays ?? 0}</p>
+          <p className="text-sm text-zinc-500">Approved time off days (period): {payroll?.approvedTimeOffDays ?? 0}</p>
           {(payroll?.alerts.length ?? 0) === 0 ? (
             <p className="text-sm font-medium text-zinc-400">No payroll alerts</p>
           ) : (

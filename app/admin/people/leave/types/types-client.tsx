@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Pencil, Plus, Tags, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import {
   deleteTimeOffTypeAction,
   upsertTimeOffTypeAction,
@@ -19,9 +19,6 @@ export function TimeOffTypesClient({ initialTypes }: { initialTypes: TimeOffType
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TimeOffTypeItem | null>(null);
   const [pending, startTransition] = useTransition();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null,
-  );
 
   const formOpen = creating || Boolean(editing);
 
@@ -45,7 +42,7 @@ export function TimeOffTypesClient({ initialTypes }: { initialTypes: TimeOffType
         payrollNote: String(form.get("payrollNote") ?? "") || null,
       });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       setTypes((prev) =>
@@ -54,10 +51,7 @@ export function TimeOffTypesClient({ initialTypes }: { initialTypes: TimeOffType
         ),
       );
       closeForm();
-      setToast({
-        message: editing ? `Updated ${result.data.name}.` : `Created ${result.data.name}.`,
-        type: "success",
-      });
+      toast.success(editing ? `Updated ${result.data.name}.` : `Created ${result.data.name}.`);
     });
   }
 
@@ -66,12 +60,12 @@ export function TimeOffTypesClient({ initialTypes }: { initialTypes: TimeOffType
     startTransition(async () => {
       const result = await deleteTimeOffTypeAction({ id: deleteTarget.id });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       setTypes((prev) => prev.filter((row) => row.id !== result.data.id));
       setDeleteTarget(null);
-      setToast({ message: "Type deleted.", type: "success" });
+      toast.success("Type deleted.");
     });
   }
 
@@ -253,10 +247,6 @@ export function TimeOffTypesClient({ initialTypes }: { initialTypes: TimeOffType
           </div>
         ) : null}
       </Modal>
-
-      {toast ? (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      ) : null}
     </div>
   );
 }

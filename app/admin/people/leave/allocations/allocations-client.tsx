@@ -4,13 +4,14 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { Layers, Plus } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import {
   decideAllocationAction,
   upsertAllocationAction,
   type AllocationListItem,
 } from "@/lib/actions/people/allocations";
 import type { TimeOffTypeItem } from "@/lib/actions/people/time-off-types";
+import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
 
 const inputClass =
   "h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong";
@@ -29,9 +30,13 @@ export function AllocationsClient({
   const [rows, setRows] = useState(initialAllocations);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null,
-  );
+  const {
+    page,
+    setPage,
+    totalPages,
+    total,
+    pageItems: pagedRows,
+  } = useClientPagination(rows, 20);
 
   const preset = useMemo(
     () => employees.find((row) => row.employeeId === filterEmployeeCode) ?? null,
@@ -50,12 +55,12 @@ export function AllocationsClient({
         description: String(form.get("description") ?? "") || null,
       });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       setRows((prev) => [result.data, ...prev]);
       setOpen(false);
-      setToast({ message: "Allocation created (draft).", type: "success" });
+      toast.success("Allocation created (draft).");
     });
   }
 
@@ -63,11 +68,11 @@ export function AllocationsClient({
     startTransition(async () => {
       const result = await decideAllocationAction({ id, decision });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       setRows((prev) => prev.map((row) => (row.id === id ? result.data : row)));
-      setToast({ message: `Allocation ${decision}.`, type: "success" });
+      toast.success(`Allocation ${decision}.`);
     });
   }
 
@@ -126,7 +131,7 @@ export function AllocationsClient({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {pagedRows.map((row) => (
                 <tr key={row.id} className="border-t border-border">
                   <td className="px-4 py-3">
                     <p className="font-semibold text-zinc-950">{row.employeeName}</p>
@@ -168,6 +173,14 @@ export function AllocationsClient({
           </table>
         </div>
       )}
+
+      <ListPagination
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        pageItemCount={pagedRows.length}
+        onPageChange={setPage}
+      />
 
       <Modal open={open} onClose={() => setOpen(false)} title="Add allocation">
         <form onSubmit={handleCreate} className="flex flex-col gap-3 text-left">
@@ -221,10 +234,6 @@ export function AllocationsClient({
           </button>
         </form>
       </Modal>
-
-      {toast ? (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      ) : null}
     </div>
   );
 }

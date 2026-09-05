@@ -20,6 +20,14 @@ function transporter() {
   if (!user || !pass) {
     throw new Error("SMTP_USER and SMTP_PASS are not set.");
   }
+  if (
+    (process.env.SMTP_HOST ?? "smtp.gmail.com").includes("gmail") &&
+    pass.length !== 16
+  ) {
+    throw new Error(
+      `Gmail SMTP_PASS must be a 16-character App Password (got ${pass.length} after removing spaces). Create one at https://myaccount.google.com/apppasswords`,
+    );
+  }
 
   const port = Number(process.env.SMTP_PORT ?? 587);
   return nodemailer.createTransport({

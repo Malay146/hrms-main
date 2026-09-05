@@ -25,6 +25,7 @@ import AiIcon from "@/components/icons/sidebar/ai";
 import { cn } from "@/utils/cn";
 import { generateAiInsights, askHrCopilot } from "@/lib/actions/ai";
 import type { AiAnalyticsData, AiInsightCard } from "@/lib/shared/types";
+import { BarChartTooltip, PieChartTooltip, chartCursor, chartTooltipWrapperStyle } from "@/components/charts/chart-tooltip";
 
 const HEALTH_BADGE = {
   healthy: { variant: "success" as const, label: "Healthy" },
@@ -37,28 +38,6 @@ const INSIGHT_BADGE = {
   watch: "warning" as const,
   alert: "destructive" as const,
 };
-
-function AttendanceTooltip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: { value: number }[];
-  label?: string;
-}) {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-surface backdrop-blur-md border border-border px-3 py-1.5 rounded-md shadow-md text-xs font-semibold">
-        <p className="text-zinc-900 font-bold">{label}</p>
-        <p className="text-zinc-600">
-          Attendance: <span className="text-zinc-950 font-bold">{payload[0].value}</span>
-        </p>
-      </div>
-    );
-  }
-  return null;
-}
 
 export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
   const [mounted, setMounted] = useState(false);
@@ -220,7 +199,11 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--divider)" />
                   <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} />
                   <YAxis tickLine={false} axisLine={false} tick={{ fill: "var(--text-disabled)", fontSize: 12 }} domain={[0, maxAttendance]} />
-                  <Tooltip content={<AttendanceTooltip />} cursor={{ fill: "rgba(0, 0, 0, 0.04)", radius: 6 }} />
+                  <Tooltip
+                    content={<BarChartTooltip valueLabel="Present / half-day" />}
+                    cursor={chartCursor}
+                    wrapperStyle={chartTooltipWrapperStyle}
+                  />
                   <Bar dataKey="attendance" fill="url(#aiAttendanceGrad)" radius={[12, 12, 0, 0]} maxBarSize={60} />
                 </BarChart>
               </ResponsiveContainer>
@@ -237,9 +220,23 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={data.leaveByType} innerRadius={60} outerRadius={85} paddingAngle={4} cornerRadius={6} dataKey="value">
+                    <Tooltip
+                      content={<PieChartTooltip valueLabel="Requests" />}
+                      wrapperStyle={chartTooltipWrapperStyle}
+                    />
+                    <Pie
+                      data={data.leaveByType}
+                      innerRadius={60}
+                      outerRadius={85}
+                      paddingAngle={4}
+                      cornerRadius={6}
+                      dataKey="value"
+                      nameKey="name"
+                      stroke="none"
+                      className="outline-none cursor-pointer"
+                    >
                       {data.leaveByType.map((entry) => (
-                        <Cell key={entry.name} fill={entry.color} />
+                        <Cell key={entry.name} fill={entry.color} className="outline-none" />
                       ))}
                     </Pie>
                   </PieChart>
@@ -248,7 +245,10 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
             </div>
             <div className="flex-1 flex flex-col justify-center gap-4 pl-6">
               {data.leaveByType.map((item) => (
-                <div key={item.name} className="flex items-center justify-between text-sm">
+                <div
+                  key={item.name}
+                  className="flex items-center justify-between text-sm rounded-lg px-2 py-1.5 -mx-2 transition-colors hover:bg-zinc-50"
+                >
                   <div className="flex items-center gap-2">
                     <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
                     <span className="text-zinc-700 font-medium">{item.name}</span>

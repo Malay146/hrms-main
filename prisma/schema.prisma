@@ -320,6 +320,9 @@ model EmployeeProfile {
   updatedAt        DateTime            @updatedAt
 
   @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, departmentId])
+  @@index([organizationId, employeeId])
   @@index([departmentId])
   @@index([scheduleId])
   @@index([managerId])
@@ -413,6 +416,7 @@ model LeaveRequest {
   updatedAt    DateTime           @updatedAt
 
   @@index([userId, status])
+  @@index([status, startDate, endDate])
   @@index([startDate, endDate])
   @@index([typeId])
   @@index([allocationId])
@@ -436,6 +440,7 @@ model Attendance {
 
   @@unique([userId, date])
   @@index([date])
+  @@index([userId, date])
   @@map("attendance")
 }
 

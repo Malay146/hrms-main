@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { cn } from "@/utils/cn";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import { AttendanceCalendar } from "@/components/leave/attendance-calendar";
 import { applyLeaveAction } from "@/lib/actions/people/leave";
 import { kolkataTodayKey } from "@/lib/shared/dates";
@@ -38,7 +38,6 @@ export function EmployeeLeaveClient({
   const [to, setTo] = useState("");
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const selectedType = options.types.find((row) => row.code === type);
   const matchingAllocations = options.allocations.filter(
@@ -57,12 +56,12 @@ export function EmployeeLeaveClient({
     });
     setPending(false);
     if (!result.ok) {
-      setToast({ message: result.error, type: "error" });
+      toast.error(result.error);
       return;
     }
     setRequests((prev) => [result.data, ...prev]);
     setReason("");
-    setToast({ message: "Leave request submitted.", type: "success" });
+    toast.success("Leave request submitted.");
   }
 
   return (
@@ -193,8 +192,6 @@ export function EmployeeLeaveClient({
           </div>
         </div>
       </div>
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }

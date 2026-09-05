@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Mail, Phone } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { PersonAvatar } from "@/components/ui/person-avatar";
-import { Toast } from "@/components/ui/toast";
+import { toast } from "sonner";
 import {
   updateEmployeeAction,
   type EmployeeHubData,
@@ -23,9 +23,6 @@ export function EmployeeForm({ initial }: { initial: EmployeeHubData }) {
   const [employee, setEmployee] = useState(initial.employee);
   const [tab, setTab] = useState<Tab>("work");
   const [pending, startTransition] = useTransition();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null,
-  );
 
   const [fullName, setFullName] = useState(employee.fullName);
   const [departmentId, setDepartmentId] = useState(employee.departmentId);
@@ -87,7 +84,7 @@ export function EmployeeForm({ initial }: { initial: EmployeeHubData }) {
         joinDate: joinDate || null,
       });
       if (!result.ok) {
-        setToast({ message: result.error, type: "error" });
+        toast.error(result.error);
         return;
       }
       if (result.data.kind === "deactivated") {
@@ -103,7 +100,7 @@ export function EmployeeForm({ initial }: { initial: EmployeeHubData }) {
         return;
       }
       applySaved(result.data.employee);
-      setToast({ message: "Employee saved.", type: "success" });
+      toast.success("Employee saved.");
     });
   }
 
@@ -404,10 +401,6 @@ export function EmployeeForm({ initial }: { initial: EmployeeHubData }) {
           </button>
         </div>
       </form>
-
-      {toast ? (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      ) : null}
     </div>
   );
 }

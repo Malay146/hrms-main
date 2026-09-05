@@ -2,14 +2,17 @@ import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
 import { sendNotificationEmail } from "@/lib/shared/mail";
 
-export type NotificationCategory =
-  | "leave"
-  | "recruitment"
-  | "performance"
-  | "attendance"
-  | "system"
-  | "payroll"
-  | "announcement";
+export const NOTIFICATION_CATEGORIES = [
+  "leave",
+  "recruitment",
+  "performance",
+  "attendance",
+  "system",
+  "payroll",
+  "announcement",
+] as const;
+
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 const EMAIL_PREF: Partial<
   Record<NotificationCategory, "emailLeave" | "emailRecruitment" | "emailPerformance" | "emailPayroll">
