@@ -24,7 +24,7 @@ export const INVARIANT_SQL = {
 
     workingScheduleLineWeekday: `ALTER TABLE "working_schedule_line"
   ADD CONSTRAINT "working_schedule_line_weekday"
-  CHECK ("weekday" >= 0 AND "weekday" <= 6);`,
+  CHECK ("weekday" >= 1 AND "weekday" <= 7);`,
 
     workingScheduleLineRange: `ALTER TABLE "working_schedule_line"
   ADD CONSTRAINT "working_schedule_line_range"

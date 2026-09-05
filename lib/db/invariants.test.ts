@@ -24,7 +24,9 @@ describe("db invariants catalog", () => {
   });
 
   it("includes a schedule line weekday check", () => {
-    assert.match(INVARIANT_SQL.checks.workingScheduleLineWeekday, /weekday["\s]*>=["\s]*0/i);
+    const sql = INVARIANT_SQL.checks.workingScheduleLineWeekday;
+    assert.match(sql, /weekday["\s]*>=["\s]*1/i);
+    assert.match(sql, /weekday["\s]*<=["\s]*7/i);
   });
 
   it("includes a schedule line range check", () => {

@@ -81,7 +81,7 @@ Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariant
 
 ### `schedule_line_weekday`
 
-- **SQL:** `CHECK ("weekday" >= 0 AND "weekday" <= 6)` on `working_schedule_line` (`working_schedule_line_weekday`)
+- **SQL:** `CHECK ("weekday" >= 1 AND "weekday" <= 7)` on `working_schedule_line` (`working_schedule_line_weekday`)
 - **Status:** `missing`
 
 ### `schedule_line_range`
@@ -170,7 +170,7 @@ ALTER TABLE "attendance"
 
 ALTER TABLE "working_schedule_line"
   ADD CONSTRAINT "working_schedule_line_weekday"
-  CHECK ("weekday" >= 0 AND "weekday" <= 6);
+  CHECK ("weekday" >= 1 AND "weekday" <= 7);
 
 ALTER TABLE "working_schedule_line"
   ADD CONSTRAINT "working_schedule_line_range"
