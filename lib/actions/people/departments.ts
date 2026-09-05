@@ -6,7 +6,9 @@ import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
 import { kolkataTodayKey } from "@/lib/shared/dates";
 import {
   createDepartmentSchema,
+  deleteDepartmentSchema,
   firstZodError,
+  moveEmployeeDepartmentSchema,
   renameDepartmentSchema,
 } from "@/lib/shared/validations";
 import { departmentCodeFromName } from "@/lib/people/department-code";
@@ -193,5 +195,118 @@ export async function renameDepartmentAction(input: {
     return { ok: true, data: mapDepartment(updated, await leaveUserIdsToday()) };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not rename department.") };
+  }
+}
+
+export async function deleteDepartmentAction(input: {
+  id: string;
+}): Promise<ActionResult<{ id: string }>> {
+  try {
+    await requirePermission("managePeople");
+    const parsed = deleteDepartmentSchema.safeParse(input);
+    if (!parsed.success) {
+      return { ok: false, error: firstZodError(parsed.error) };
+    }
+
+    const department = await prisma.department.findUnique({
+      where: { id: parsed.data.id },
+      include: {
+        _count: { select: { profiles: true, contracts: true } },
+      },
+    });
+    if (!department) {
+      return { ok: false, error: "Department not found." };
+    }
+    if (department._count.profiles > 0) {
+      return {
+        ok: false,
+        error: `Cannot delete ${department.name}. Reassign its ${department._count.profiles} employee(s) first.`,
+      };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (department._count.contracts > 0) {
+        await tx.contract.updateMany({
+          where: { departmentId: department.id },
+          data: { departmentId: null },
+        });
+      }
+      await tx.department.delete({ where: { id: department.id } });
+    });
+
+    revalidatePath("/admin/people/department");
+    revalidatePath("/admin/people/employees");
+    revalidatePath("/admin/people/contracts");
+    return { ok: true, data: { id: department.id } };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not delete department.") };
+  }
+}
+
+export async function moveEmployeeDepartmentAction(input: {
+  employeeId: string;
+  departmentId: string;
+}): Promise<
+  ActionResult<{
+    employeeId: string;
+    fromDepartmentId: string;
+    toDepartmentId: string;
+    member: DepartmentListItem["members"][number];
+  }>
+> {
+  try {
+    await requirePermission("managePeople");
+    const parsed = moveEmployeeDepartmentSchema.safeParse(input);
+    if (!parsed.success) {
+      return { ok: false, error: firstZodError(parsed.error) };
+    }
+
+    const profile = await prisma.employeeProfile.findUnique({
+      where: { employeeId: parsed.data.employeeId },
+      include: { user: { select: { email: true } } },
+    });
+    if (!profile) {
+      return { ok: false, error: "Employee not found." };
+    }
+    if (profile.departmentId === parsed.data.departmentId) {
+      return { ok: false, error: "Employee is already in that department." };
+    }
+
+    const target = await prisma.department.findFirst({
+      where: {
+        id: parsed.data.departmentId,
+        organizationId: profile.organizationId,
+      },
+    });
+    if (!target) {
+      return { ok: false, error: "Target department not found." };
+    }
+
+    const fromDepartmentId = profile.departmentId;
+    await prisma.employeeProfile.update({
+      where: { id: profile.id },
+      data: { departmentId: target.id },
+    });
+
+    revalidatePath("/admin/people/department");
+    revalidatePath("/admin/people/employees");
+    revalidatePath(`/admin/people/employees/${profile.employeeId}`);
+
+    return {
+      ok: true,
+      data: {
+        employeeId: profile.employeeId,
+        fromDepartmentId,
+        toDepartmentId: target.id,
+        member: {
+          name: profile.fullName,
+          email: profile.user.email,
+          jobTitle: profile.jobTitle,
+          employeeId: profile.employeeId,
+        },
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not move employee.") };
   }
 }

@@ -86,6 +86,13 @@ export async function upsertTimeOffTypeAction(input: {
       payrollNote: parsed.data.payrollNote?.trim() || null,
     };
 
+    if (parsed.data.id) {
+      const existing = await prisma.timeOffType.findFirst({
+        where: { id: parsed.data.id, organizationId: profile.organizationId },
+      });
+      if (!existing) return { ok: false, error: "Time off type not found." };
+    }
+
     const row = parsed.data.id
       ? await prisma.timeOffType.update({ where: { id: parsed.data.id }, data })
       : await prisma.timeOffType.create({
@@ -93,6 +100,7 @@ export async function upsertTimeOffTypeAction(input: {
         });
 
     revalidatePath("/admin/people/leave/types");
+    revalidatePath("/admin/people/leave");
     return {
       ok: true,
       data: {
@@ -108,5 +116,49 @@ export async function upsertTimeOffTypeAction(input: {
     };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not save time off type.") };
+  }
+}
+
+export async function deleteTimeOffTypeAction(input: {
+  id: string;
+}): Promise<ActionResult<{ id: string }>> {
+  try {
+    const user = await requirePermission("manageTimeOffTypes");
+    const id = String(input.id ?? "").trim();
+    if (!id) return { ok: false, error: "Type id is required." };
+
+    const profile = await prisma.employeeProfile.findUnique({
+      where: { userId: user.id },
+      select: { organizationId: true },
+    });
+    if (!profile) return { ok: false, error: "Your employee profile is missing." };
+
+    const existing = await prisma.timeOffType.findFirst({
+      where: { id, organizationId: profile.organizationId },
+      include: {
+        _count: { select: { leaveRequests: true, allocations: true } },
+      },
+    });
+    if (!existing) return { ok: false, error: "Time off type not found." };
+    if (existing._count.leaveRequests > 0) {
+      return {
+        ok: false,
+        error: `Cannot delete ${existing.name}. It is used by ${existing._count.leaveRequests} leave request(s).`,
+      };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (existing._count.allocations > 0) {
+        await tx.timeOffAllocation.deleteMany({ where: { typeId: existing.id } });
+      }
+      await tx.timeOffType.delete({ where: { id: existing.id } });
+    });
+
+    revalidatePath("/admin/people/leave/types");
+    revalidatePath("/admin/people/leave");
+    revalidatePath("/admin/people/leave/allocations");
+    return { ok: true, data: { id: existing.id } };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not delete time off type.") };
   }
 }

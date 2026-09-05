@@ -61,6 +61,15 @@ export const renameDepartmentSchema = z.object({
   name: z.string().min(2, "Department name is required.").max(80),
 });
 
+export const deleteDepartmentSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const moveEmployeeDepartmentSchema = z.object({
+  employeeId: z.string().min(1),
+  departmentId: z.string().min(1),
+});
+
 export const updateEmployeeSchema = z.object({
   employeeId: z.string().min(1),
   fullName: z.string().min(2, "Full name is required."),

@@ -1,17 +1,21 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FilterX, LayoutGrid, List, Plus, Search } from "lucide-react";
+import { FilterX, LayoutGrid, List, Plus, Search, Upload } from "lucide-react";
 import { cn } from "@/utils/cn";
 import TotalEmployeeIcon from "@/components/icons/total-employee";
 import PresentTodayIcon from "@/components/icons/present-today";
 import LeaveTodayIcon from "@/components/icons/leave-today";
 import InactiveIcon from "@/components/icons/inactive";
 import { Toast } from "@/components/ui/toast";
+import { Modal } from "@/components/ui/modal";
 import { PersonAvatar } from "@/components/ui/person-avatar";
-import { createEmployeeAction } from "@/lib/actions/people/employees";
+import {
+  createEmployeeAction,
+  importEmployeesFromSpreadsheetAction,
+} from "@/lib/actions/people/employees";
 import { ASSIGNABLE_ROLES, hasPermission, ROLE_LABELS } from "@/lib/auth/permissions";
 import { useSessionUser } from "@/components/providers/session-context";
 import type { EmployeeListItem, Role } from "@/lib/shared/types";
@@ -32,11 +36,20 @@ export function EmployeesClient({
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [view, setView] = useState<ViewMode>("kanban");
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importPending, setImportPending] = useState(false);
+  const [importSummary, setImportSummary] = useState<{
+    created: number;
+    failed: number;
+    errors: string[];
+    createdRows: { employeeId: string; email: string; temporaryPassword: string }[];
+  } | null>(null);
   const [pending, setPending] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const user = useSessionUser();
   const canCreateUsers = hasPermission(user.role, "createUsers");
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const raw = sessionStorage.getItem(CREATE_TOAST_KEY);
@@ -100,6 +113,43 @@ export function EmployeesClient({
     window.location.reload();
   }
 
+  async function handleImportFile(file: File | null) {
+    if (!file) return;
+    setImportPending(true);
+    setImportSummary(null);
+    try {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 1) {
+        binary += String.fromCharCode(bytes[i]!);
+      }
+      const base64 = btoa(binary);
+      const result = await importEmployeesFromSpreadsheetAction({
+        fileName: file.name,
+        base64,
+      });
+      if (!result.ok) {
+        setToast({ message: result.error, type: "error" });
+        setImportPending(false);
+        return;
+      }
+      setImportSummary(result.data);
+      setToast({
+        message: `Imported ${result.data.created} user(s)${
+          result.data.failed ? `, ${result.data.failed} issue(s)` : ""
+        }.`,
+        type: result.data.created > 0 ? "success" : "error",
+      });
+      if (result.data.created > 0) {
+        window.setTimeout(() => window.location.reload(), 1200);
+      }
+    } catch {
+      setToast({ message: "Could not read that file.", type: "error" });
+    }
+    setImportPending(false);
+  }
+
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
@@ -139,13 +189,26 @@ export function EmployeesClient({
             </button>
           </div>
           {canCreateUsers ? (
-            <button
-              onClick={() => setShowCreate(true)}
-              className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all"
-            >
-              <Plus className="size-4" />
-              Add User
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setImportSummary(null);
+                  setShowImport(true);
+                }}
+                className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border bg-surface hover:bg-surface-hover text-sm font-semibold text-zinc-800 shadow-2xs active:scale-98 transition-all"
+              >
+                <Upload className="size-4" />
+                Import Excel
+              </button>
+              <button
+                onClick={() => setShowCreate(true)}
+                className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all"
+              >
+                <Plus className="size-4" />
+                Add User
+              </button>
+            </>
           ) : null}
         </div>
       </div>
@@ -415,6 +478,77 @@ export function EmployeesClient({
           </form>
         </div>
       )}
+
+      <Modal
+        open={showImport}
+        onClose={() => {
+          if (!importPending) setShowImport(false);
+        }}
+        title="Import users from Excel"
+        description="Supports .xlsx, .xls, .csv, .ods and similar spreadsheet files."
+        className="max-w-xl"
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <p className="text-xs text-zinc-500 font-medium leading-relaxed">
+            First sheet, header row required. Columns:{" "}
+            <span className="text-zinc-800">Full Name</span>,{" "}
+            <span className="text-zinc-800">Email</span>,{" "}
+            <span className="text-zinc-800">Department</span>,{" "}
+            <span className="text-zinc-800">Job Title</span>. Optional:{" "}
+            <span className="text-zinc-800">Role</span>,{" "}
+            <span className="text-zinc-800">Phone</span>.
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.ods,.xml,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+            className="block w-full text-xs text-zinc-600 file:mr-3 file:h-9 file:px-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:text-white file:text-xs file:font-semibold"
+            disabled={importPending}
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null;
+              void handleImportFile(file);
+              event.target.value = "";
+            }}
+          />
+          {importPending ? (
+            <p className="text-sm font-semibold text-zinc-600">Importing…</p>
+          ) : null}
+          {importSummary ? (
+            <div className="border border-border rounded-xl p-3 flex flex-col gap-2 max-h-64 overflow-y-auto">
+              <p className="text-sm font-semibold text-zinc-900">
+                Created {importSummary.created} · Issues {importSummary.failed}
+              </p>
+              {importSummary.createdRows.length > 0 ? (
+                <div className="text-[11px] text-zinc-600 space-y-1">
+                  <p className="font-semibold text-zinc-800">
+                    Temporary passwords (share securely — emails were not sent for bulk import):
+                  </p>
+                  {importSummary.createdRows.slice(0, 25).map((row) => (
+                    <p key={row.employeeId} className="font-mono">
+                      {row.email} · {row.temporaryPassword}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+              {importSummary.errors.length > 0 ? (
+                <div className="text-[11px] text-red-600 space-y-0.5">
+                  {importSummary.errors.map((error) => (
+                    <p key={error}>{error}</p>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setShowImport(false)}
+            disabled={importPending}
+            className="cursor-pointer h-10 rounded-lg border border-border bg-surface hover:bg-surface-hover text-sm font-semibold text-zinc-700 disabled:opacity-60"
+          >
+            Close
+          </button>
+        </div>
+      </Modal>
 
       {toast && (
         <Toast

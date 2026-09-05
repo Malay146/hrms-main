@@ -12,7 +12,9 @@ import { createEmployeeSchema, firstZodError, updateEmployeeSchema } from "@/lib
 import { departmentCodeFromName } from "@/lib/people/department-code";
 import { generateTemporaryPassword, sendAccountCredentialsEmail } from "@/lib/shared/mail";
 import { initialsFromName } from "@/lib/people/employee-id";
+import { mapSheetRowsToEmployeeImports } from "@/lib/people/employee-import";
 import type { ActionResult, EmployeeListItem, EmployeeStatus, Role } from "@/lib/shared/types";
+import * as XLSX from "xlsx";
 
 function randomId() {
   return crypto.randomUUID();
@@ -496,6 +498,224 @@ export async function createEmployeeAction(input: {
       return { ok: false, error: "Duplicate email or employee ID." };
     }
     return { ok: false, error: actionErrorMessage(error, "Could not create employee.") };
+  }
+}
+
+export type EmployeeImportResult = {
+  created: number;
+  failed: number;
+  errors: string[];
+  createdRows: { employeeId: string; email: string; temporaryPassword: string }[];
+};
+
+const MAX_IMPORT_ROWS = 200;
+
+export async function importEmployeesFromSpreadsheetAction(input: {
+  fileName: string;
+  base64: string;
+}): Promise<ActionResult<EmployeeImportResult>> {
+  try {
+    const admin = await requirePermission("createUsers");
+    if (!input.base64?.trim()) {
+      return { ok: false, error: "No file data received." };
+    }
+
+    const buffer = Buffer.from(input.base64, "base64");
+    const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) {
+      return { ok: false, error: "The spreadsheet has no sheets." };
+    }
+    const sheet = workbook.Sheets[sheetName];
+    const records = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: "",
+      raw: false,
+    });
+    if (records.length === 0) {
+      return { ok: false, error: "No data rows found. Add a header row and at least one employee." };
+    }
+    if (records.length > MAX_IMPORT_ROWS) {
+      return {
+        ok: false,
+        error: `Too many rows (${records.length}). Import up to ${MAX_IMPORT_ROWS} at a time.`,
+      };
+    }
+
+    const mapped = mapSheetRowsToEmployeeImports(records);
+    const errors = [...mapped.errors];
+    if (mapped.rows.length === 0) {
+      return {
+        ok: false,
+        error:
+          errors[0] ??
+          "Could not map columns. Use headers like Full Name, Email, Department, Job Title (Role and Phone optional).",
+      };
+    }
+
+    const adminProfile = await prisma.employeeProfile.findUnique({
+      where: { userId: admin.id },
+      include: { organization: true },
+    });
+    if (!adminProfile) {
+      return { ok: false, error: "Admin profile is missing." };
+    }
+
+    const year = kolkataParts().year;
+    const existingIds = (
+      await prisma.employeeProfile.findMany({
+        where: { organizationId: adminProfile.organizationId },
+        select: { employeeId: true },
+      })
+    ).map((row) => row.employeeId);
+
+    const createdRows: EmployeeImportResult["createdRows"] = [];
+    const usedEmails = new Set<string>();
+
+    for (const row of mapped.rows) {
+      const parsed = createEmployeeSchema.safeParse({
+        fullName: row.fullName,
+        email: row.email,
+        role: row.role,
+        department: row.department,
+        jobTitle: row.jobTitle,
+        phone: row.phone,
+      });
+      if (!parsed.success) {
+        errors.push(`Row ${row.rowNumber}: ${firstZodError(parsed.error)}`);
+        continue;
+      }
+
+      const emailKey = parsed.data.email.toLowerCase();
+      if (usedEmails.has(emailKey)) {
+        errors.push(`Row ${row.rowNumber}: duplicate email in this file (${parsed.data.email}).`);
+        continue;
+      }
+
+      const duplicate = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+      if (duplicate) {
+        errors.push(`Row ${row.rowNumber}: account already exists for ${parsed.data.email}.`);
+        continue;
+      }
+
+      usedEmails.add(emailKey);
+      const employeeId = nextEmployeeId(
+        adminProfile.organization.slug,
+        year,
+        [...existingIds, ...createdRows.map((item) => item.employeeId)],
+      );
+      const password = generateTemporaryPassword();
+      const now = new Date();
+      const userId = randomId();
+      const passwordHash = await hashPassword(password);
+      const deptName = parsed.data.department.trim();
+      const deptCode = departmentCodeFromName(deptName);
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          const department = await tx.department.upsert({
+            where: {
+              organizationId_code: {
+                organizationId: adminProfile.organizationId,
+                code: deptCode,
+              },
+            },
+            create: {
+              organizationId: adminProfile.organizationId,
+              name: deptName,
+              code: deptCode,
+            },
+            update: { name: deptName },
+          });
+
+          await tx.user.create({
+            data: {
+              id: userId,
+              name: parsed.data.fullName,
+              email: parsed.data.email,
+              emailVerified: true,
+              createdAt: now,
+              updatedAt: now,
+              role: parsed.data.role,
+              mustChangePassword: true,
+              accounts: {
+                create: {
+                  id: randomId(),
+                  accountId: userId,
+                  providerId: "credential",
+                  issuer: "local:credential",
+                  password: passwordHash,
+                  createdAt: now,
+                  updatedAt: now,
+                },
+              },
+            },
+          });
+
+          await tx.employeeProfile.create({
+            data: {
+              userId,
+              organizationId: adminProfile.organizationId,
+              employeeId,
+              fullName: parsed.data.fullName,
+              role: parsed.data.role,
+              departmentId: department.id,
+              jobTitle: parsed.data.jobTitle,
+              phone: parsed.data.phone || null,
+              status: "active",
+              paidLeaveBalance: 20,
+            },
+          });
+
+          await tx.payroll.create({
+            data: {
+              userId,
+              month: currentPayrollMonth(),
+              basic: 0,
+              hraPct: 20,
+              allowancePct: 10,
+              deductions: 0,
+            },
+          });
+        });
+
+        createdRows.push({
+          employeeId,
+          email: parsed.data.email,
+          temporaryPassword: password,
+        });
+      } catch (error) {
+        errors.push(
+          `Row ${row.rowNumber}: ${
+            error instanceof Error ? error.message : "could not create user"
+          }`,
+        );
+      }
+    }
+
+    logger.info("employee.import", {
+      fileName: input.fileName,
+      created: createdRows.length,
+      failed: errors.length,
+      adminId: admin.id,
+    });
+    revalidatePath("/admin");
+    revalidatePath("/admin/people/employees");
+    revalidatePath("/admin/people/department");
+
+    return {
+      ok: true,
+      data: {
+        created: createdRows.length,
+        failed: errors.length,
+        errors: errors.slice(0, 40),
+        createdRows,
+      },
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: actionErrorMessage(error, "Could not import spreadsheet."),
+    };
   }
 }
 
