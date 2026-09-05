@@ -2,6 +2,8 @@ import "dotenv/config";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "../lib/db";
 import { currentPayrollMonth, dateFromKey, kolkataTodayKey } from "../lib/dates";
+import { computePayslip } from "../lib/payroll/compute";
+import { REGULAR_SALARY_RULES } from "../lib/payroll/regular-salary";
 
 const ADMIN_EMAIL = "admin@oddo.com";
 const ADMIN_PASSWORD = "admin@oddo@1234";
@@ -22,7 +24,7 @@ function daysAgo(n: number) {
 async function createUser(opts: {
   name: string;
   email: string;
-  role: "admin" | "hr_manager" | "hr_payroll_manager" | "employee";
+  role: "admin" | "hr_manager" | "hr_payroll_user" | "hr_payroll_manager" | "employee";
   organizationId: string;
   employeeId: string;
   department: string;
@@ -30,6 +32,9 @@ async function createUser(opts: {
   phone?: string;
   passwordHash: string;
   basic: number;
+  wage?: number | null;
+  bankAccount?: string | null;
+  employeeType?: "full_time" | "intern" | "contractor";
   mustChangePassword?: boolean;
 }) {
   const now = new Date();
@@ -66,6 +71,9 @@ async function createUser(opts: {
           phone: opts.phone ?? null,
           status: "active",
           paidLeaveBalance: 20,
+          employeeType: opts.employeeType ?? "full_time",
+          bankAccount: opts.bankAccount ?? null,
+          wage: opts.wage ?? (opts.basic || null),
         },
       },
       payrolls: {
@@ -83,6 +91,11 @@ async function createUser(opts: {
 }
 
 async function main() {
+  await prisma.payslipLine.deleteMany();
+  await prisma.payslip.deleteMany();
+  await prisma.payrun.deleteMany();
+  await prisma.salaryRule.deleteMany();
+  await prisma.salaryStructure.deleteMany();
   await prisma.payroll.deleteMany();
   await prisma.leaveRequest.deleteMany();
   await prisma.attendance.deleteMany();
@@ -162,7 +175,9 @@ async function main() {
       employeeId: "ODDO-2026-006",
       department: "Sales",
       jobTitle: "Sales Executive",
-      basic: 4800,
+      basic: 0,
+      wage: null,
+      bankAccount: null,
     },
     {
       name: "Kimi Nowa",
@@ -172,6 +187,31 @@ async function main() {
       department: "Finance",
       jobTitle: "Payroll Manager",
       basic: 8000,
+      wage: 8000,
+      bankAccount: "SBIN0001111",
+    },
+    {
+      name: "Aarav Mehta",
+      email: "aarav.mehta@oddo.com",
+      role: "employee" as const,
+      employeeId: "ODDO-2026-008",
+      department: "Finance",
+      jobTitle: "Payroll Specialist",
+      phone: "+91 98765 43210",
+      basic: 50000,
+      wage: 50000,
+      bankAccount: "HDFC0001234",
+    },
+    {
+      name: "Priya Shah",
+      email: "priya.shah@oddo.com",
+      role: "hr_payroll_user" as const,
+      employeeId: "ODDO-2026-009",
+      department: "Finance",
+      jobTitle: "Payroll Officer",
+      basic: 7000,
+      wage: 7000,
+      bankAccount: "ICIC0009876",
     },
   ];
 
@@ -245,6 +285,91 @@ async function main() {
       },
     ],
   });
+
+  const structure = await prisma.salaryStructure.create({
+    data: {
+      organizationId: organization.id,
+      name: "Regular Salary",
+      active: true,
+      rules: {
+        create: REGULAR_SALARY_RULES.map((rule) => ({
+          name: rule.name,
+          code: rule.code,
+          category: rule.category,
+          sequence: rule.sequence,
+          computation: rule.computation,
+          amount: rule.amount ?? null,
+          percentage: rule.percentage ?? null,
+          percentBaseCode: rule.percentBaseCode ?? null,
+          formula: rule.formula ?? null,
+        })),
+      },
+    },
+    include: { rules: true },
+  });
+
+  const aaravProfile = await prisma.employeeProfile.findUnique({
+    where: { employeeId: "ODDO-2026-008" },
+  });
+  const markProfile = await prisma.employeeProfile.findUnique({
+    where: { employeeId: "ODDO-2026-006" },
+  });
+  if (aaravProfile) {
+    const computed = computePayslip(REGULAR_SALARY_RULES, {
+      wage: 50000,
+      workedDays: 22,
+      scheduledDays: 22,
+      unpaidLeaveDays: 0,
+    });
+    await prisma.payrun.create({
+      data: {
+        organizationId: organization.id,
+        name: "January 2026",
+        structureId: structure.id,
+        periodStart: dateFromKey("2026-01-01"),
+        periodEnd: dateFromKey("2026-01-31"),
+        status: "paid",
+        payslips: {
+          create: {
+            employeeId: aaravProfile.id,
+            workedDays: 22,
+            status: "paid",
+            wage: 50000,
+            gross: computed.gross,
+            net: computed.net,
+            lines: {
+              create: computed.lines.map((line) => ({
+                name: line.name,
+                code: line.code,
+                category: line.category,
+                amount: line.amount,
+              })),
+            },
+          },
+        },
+      },
+    });
+  }
+  if (markProfile) {
+    await prisma.payrun.create({
+      data: {
+        organizationId: organization.id,
+        name: "March 2026",
+        structureId: structure.id,
+        periodStart: dateFromKey("2026-03-01"),
+        periodEnd: dateFromKey("2026-03-31"),
+        status: "draft",
+        payslips: {
+          create: {
+            employeeId: markProfile.id,
+            workedDays: 0,
+            status: "draft",
+            warning: "No contract for this period",
+          },
+        },
+      },
+    });
+  }
 
   console.log("Seed complete.");
   console.log(`Admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);

@@ -7,7 +7,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test lib/leave-rules.test.ts",
+    "test": "tsx --test lib/leave-rules.test.ts lib/permissions.test.ts lib/payroll/compute.test.ts lib/payroll/warnings.test.ts",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
