@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { getPayslip } from "@/lib/actions/payroll/payruns";
+import { getCurrentUser } from "@/lib/auth/session";
+import { hasPermission } from "@/lib/auth/permissions";
+import { PayslipEmailButton } from "./payslip-actions";
 
 export default async function PayslipDetailPage({
   params,
@@ -7,7 +10,7 @@ export default async function PayslipDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const result = await getPayslip(id);
+  const [result, user] = await Promise.all([getPayslip(id), getCurrentUser()]);
   if (!result.ok) {
     return (
       <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface">
@@ -28,12 +31,17 @@ export default async function PayslipDetailPage({
             {slip.structureName} · {slip.payrunName} · {slip.workedDays} worked days · {slip.status}
           </p>
         </div>
-        <Link
-          href={`/admin/hr/payroll/payslips/${slip.id}/print`}
-          className="rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 px-3.5 py-2"
-        >
-          Print payslip
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {hasPermission(user?.role, "editPayroll") ? (
+            <PayslipEmailButton payslipId={slip.id} status={slip.status} sentAt={slip.sentAt} />
+          ) : null}
+          <Link
+            href={`/admin/hr/payroll/payslips/${slip.id}/print`}
+            className="rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 px-3.5 py-2"
+          >
+            Print payslip
+          </Link>
+        </div>
       </div>
       {slip.warning ? (
         <p className="text-sm font-semibold text-amber-700 border border-amber-200 rounded-lg px-3 py-2">

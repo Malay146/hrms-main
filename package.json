@@ -7,7 +7,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test lib/people/leave-rules.test.ts lib/auth/permissions.test.ts lib/payroll/compute.test.ts lib/payroll/warnings.test.ts lib/people/attendance-metrics.test.ts lib/people/contract-period.test.ts lib/people/schedule-hours.test.ts lib/people/time-off-balance.test.ts lib/ai/metrics.test.ts lib/ai/sanitize.test.ts lib/ai/build-snapshot.test.ts lib/ai/insights.test.ts lib/ai/copilot.test.ts lib/shared/mail.test.ts",
+    "test": "tsx --test lib/people/leave-rules.test.ts lib/auth/permissions.test.ts lib/payroll/compute.test.ts lib/payroll/warnings.test.ts lib/people/attendance-metrics.test.ts lib/people/contract-period.test.ts lib/people/schedule-hours.test.ts lib/people/time-off-balance.test.ts lib/ai/metrics.test.ts lib/ai/sanitize.test.ts lib/ai/build-snapshot.test.ts lib/ai/insights.test.ts lib/ai/copilot.test.ts lib/shared/mail.test.ts lib/shared/payslip-email.test.ts",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",

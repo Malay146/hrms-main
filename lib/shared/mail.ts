@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
+import { buildPayslipEmailHtml, buildPayslipEmailText, type PayslipEmailInput } from "./payslip-email";
 
 export function normalizeSmtpPassword(value: string) {
   return value.replace(/\s+/g, "").trim();
@@ -40,7 +41,7 @@ function smtpFrom() {
   return from;
 }
 
-async function sendMail(options: { to: string; subject: string; text: string }) {
+async function sendMail(options: { to: string; subject: string; text: string; html?: string }) {
   try {
     await transporter().sendMail({
       from: smtpFrom(),
@@ -77,34 +78,24 @@ export async function sendAccountCredentialsEmail(input: {
   logger.info("mail.credentials_sent", { to: input.to });
 }
 
-export async function sendPayslipEmail(input: {
-  to: string;
-  fullName: string;
-  periodLabel: string;
-  net: number;
-  lines: { name: string; amount: number }[];
-}) {
-  const lineText = input.lines
-    .map((line) => `${line.name}: ₹${line.amount.toLocaleString("en-IN")}`)
-    .join("\n");
-
+export async function sendPayslipEmail(input: PayslipEmailInput & { to: string }) {
+  const subject = `Your payslip for ${input.periodLabel}`;
   await sendMail({
     to: input.to,
-    subject: `Your payslip for ${input.periodLabel}`,
-    text: [
-      `Hi ${input.fullName},`,
-      "",
-      `Please find your payslip summary for ${input.periodLabel}.`,
-      "",
-      lineText,
-      "",
-      `Net salary: ₹${input.net.toLocaleString("en-IN")}`,
-      "",
-      "This is a system-generated message from HRMS.",
-    ].join("\n"),
+    subject,
+    text: buildPayslipEmailText(input),
+    html: buildPayslipEmailHtml(input),
   });
 
   logger.info("mail.payslip_sent", { to: input.to });
+}
+
+export async function sendNotificationEmail(input: { to: string; title: string; body: string }) {
+  await sendMail({
+    to: input.to,
+    subject: `HRMS: ${input.title}`,
+    text: input.body,
+  });
 }
 
 export function generateTemporaryPassword() {

@@ -4,13 +4,18 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
 import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
-import { dateFromKey, toDateKey } from "@/lib/shared/dates";
+import { dateFromKey, payslipIssueMonth, toDateKey } from "@/lib/shared/dates";
 import { computePayslip } from "@/lib/payroll/compute";
 import { payslipWarning } from "@/lib/payroll/warnings";
 import { stubHasContract, stubWage } from "@/lib/payroll/period-wage";
 import { stubWorkedDays, unpaidDaysInPeriod, weekdayCount } from "@/lib/payroll/worked-days";
 import { ensureRegularSalaryStructure } from "@/lib/actions/payroll/salary";
-import { sendPayslipEmail } from "@/lib/shared/mail";
+import {
+  deliverUnsentPayslip,
+  emailPayslipNow,
+  issueMonthEndPayslips,
+  payslipEmailInclude,
+} from "@/lib/payroll/deliver-payslips";
 import type { ActionResult } from "@/lib/shared/types";
 import { z } from "zod";
 import { firstZodError } from "@/lib/shared/validations";
@@ -70,6 +75,7 @@ export type PayslipListItem = {
   gross: number;
   net: number;
   warning: string | null;
+  sentAt: string | null;
   basic: number;
   allowances: number;
   deductions: number;
@@ -115,6 +121,7 @@ function mapPayslip(row: {
   net: unknown;
   warning: string | null;
   status: PayslipStatus;
+  sentAt?: Date | null;
   employee: {
     fullName: string;
     employeeId: string;
@@ -147,6 +154,7 @@ function mapPayslip(row: {
     gross: money(row.gross),
     net: money(row.net),
     warning: row.warning,
+    sentAt: row.sentAt ? row.sentAt.toISOString() : null,
     basic: lines.filter((line) => line.category === "basic").reduce((sum, line) => sum + money(line.amount), 0),
     allowances: lines.filter((line) => line.category === "allowance").reduce((sum, line) => sum + money(line.amount), 0),
     deductions: lines.filter((line) => line.category === "deduction" || line.category === "contribution").reduce((sum, line) => sum + money(line.amount), 0),
@@ -574,25 +582,16 @@ export async function listMyPayslips(): Promise<ActionResult<PayslipListItem[]>>
   }
 }
 
-export async function sendPayslipsAction(payrunId: string): Promise<ActionResult<{ sent: number; failed: number }>> {
+export async function sendPayslipsAction(
+  payrunId: string,
+): Promise<ActionResult<{ sent: number; failed: number; skipped: number }>> {
   try {
     await requirePermission("editPayroll");
     const payrun = await prisma.payrun.findUnique({
       where: { id: payrunId },
       include: {
         structure: { select: { name: true } },
-        payslips: {
-          include: {
-            lines: true,
-            employee: {
-              include: {
-                user: { select: { email: true } },
-                department: { select: { name: true } },
-              },
-            },
-            payrun: { include: { structure: { select: { name: true } } } },
-          },
-        },
+        payslips: { include: payslipEmailInclude },
       },
     });
     if (!payrun) return { ok: false, error: "Payrun not found." };
@@ -602,29 +601,60 @@ export async function sendPayslipsAction(payrunId: string): Promise<ActionResult
 
     let sent = 0;
     let failed = 0;
+    let skipped = 0;
     for (const slip of payrun.payslips) {
-      const mapped = mapPayslip(slip);
-      try {
-        await sendPayslipEmail({
-          to: mapped.email,
-          fullName: mapped.employeeName,
-          periodLabel: `${mapped.periodStart} – ${mapped.periodEnd}`,
-          net: mapped.net,
-          lines: (slip.lines ?? []).map((line) => ({
-            name: line.name,
-            amount: money(line.amount),
-          })),
-        });
-        await prisma.payslip.update({ where: { id: slip.id }, data: { sentAt: new Date() } });
-        sent += 1;
-      } catch (error) {
-        logger.info("payrun.payslip_email_failed", { payslipId: slip.id, error: String(error) });
-        failed += 1;
-      }
+      const result = await deliverUnsentPayslip(slip);
+      if (result === "sent") sent += 1;
+      else if (result === "failed") failed += 1;
+      else skipped += 1;
     }
     revalidatePayroll(payrunId);
-    return { ok: true, data: { sent, failed } };
+    return { ok: true, data: { sent, failed, skipped } };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not send payslips.") };
+  }
+}
+
+export async function sendPayslipEmailAction(
+  payslipId: string,
+): Promise<ActionResult<{ sent: boolean }>> {
+  try {
+    await requirePermission("editPayroll");
+    const slip = await prisma.payslip.findUnique({
+      where: { id: payslipId },
+      include: payslipEmailInclude,
+    });
+    if (!slip) return { ok: false, error: "Payslip not found." };
+    if (slip.status !== "validated" && slip.status !== "paid") {
+      return { ok: false, error: "Validate the payslip before emailing it." };
+    }
+    if (slip.payrun.status !== "validated" && slip.payrun.status !== "paid") {
+      return { ok: false, error: "Validate the payrun before emailing payslips." };
+    }
+
+    try {
+      await emailPayslipNow(slip);
+    } catch (error) {
+      return { ok: false, error: actionErrorMessage(error, "Could not email this payslip.") };
+    }
+
+    revalidatePayroll(slip.payrunId);
+    revalidatePath(`/admin/hr/payroll/payslips/${slip.id}`);
+    return { ok: true, data: { sent: true } };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not email this payslip.") };
+  }
+}
+
+export async function issueMonthEndPayslipsAction(
+  month?: string,
+): Promise<ActionResult<{ month: string; sent: number; failed: number; skipped: number }>> {
+  try {
+    await requirePermission("editPayroll");
+    const result = await issueMonthEndPayslips(month || payslipIssueMonth());
+    revalidatePayroll();
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not email month-end payslips.") };
   }
 }

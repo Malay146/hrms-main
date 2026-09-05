@@ -114,6 +114,8 @@ model User {
   attendances        Attendance[]
   leaveRequests      LeaveRequest[]
   payrolls           Payroll[]
+  notifications      Notification[]
+  notificationPreference NotificationPreference?
 
   @@unique([email])
   @@map("user")
@@ -185,6 +187,34 @@ model Organization {
   aiInsights       AiInsight[]
 
   @@map("organization")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  category  String
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@map("notification")
+}
+
+model NotificationPreference {
+  userId           String  @id
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailLeave       Boolean @default(true)
+  emailRecruitment Boolean @default(true)
+  emailPerformance Boolean @default(false)
+  emailPayroll     Boolean @default(true)
+  inApp            Boolean @default(true)
+  sounds           Boolean @default(false)
+
+  @@map("notification_preference")
 }
 
 model Department {

@@ -21,11 +21,9 @@ describe("PDF role matrix", () => {
     assert.equal(hasPermission("hr_payroll_manager", "manageSalaryConfig"), true);
   });
 
-  it("restricts user management to admin", () => {
+  it("restricts user creation to admin", () => {
     assert.equal(hasPermission("hr_payroll_manager", "createUsers"), false);
     assert.equal(hasPermission("admin", "createUsers"), true);
-    assert.equal(canAccessAdminPath("admin", "/admin/users"), true);
-    assert.equal(canAccessAdminPath("hr_manager", "/admin/users"), false);
   });
 
   it("gates People and Time Off routes", () => {

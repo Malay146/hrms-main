@@ -11,6 +11,7 @@ import { kolkataParts, kolkataTodayKey, currentPayrollMonth, dateFromKey, toDate
 import { createEmployeeSchema, firstZodError, updateEmployeeSchema } from "@/lib/shared/validations";
 import { departmentCodeFromName } from "@/lib/people/department-code";
 import { generateTemporaryPassword, sendAccountCredentialsEmail } from "@/lib/shared/mail";
+import { createNotifications, staffUserIds } from "@/lib/shared/notify";
 import { initialsFromName } from "@/lib/people/employee-id";
 import { mapSheetRowsToEmployeeImports } from "@/lib/people/employee-import";
 import type { ActionResult, EmployeeListItem, EmployeeStatus, Role } from "@/lib/shared/types";
@@ -482,6 +483,20 @@ export async function createEmployeeAction(input: {
     }
 
     logger.info("employee.created", { employeeId, adminId: admin.id, role: parsed.data.role, emailSent });
+    await createNotifications({
+      userIds: [userId],
+      title: "Welcome to HRMS",
+      body: "Your account is ready. Sign in with the credentials sent to your email.",
+      category: "system",
+      href: "/employee",
+    });
+    await createNotifications({
+      userIds: await staffUserIds(adminProfile.organizationId, admin.id),
+      title: "New employee added",
+      body: `${parsed.data.fullName} joined as ${parsed.data.jobTitle}.`,
+      category: "system",
+      href: `/admin/people/employees/${employeeId}`,
+    });
     revalidatePath("/admin");
     revalidatePath("/admin/people/employees");
     return {

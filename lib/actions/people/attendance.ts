@@ -12,9 +12,12 @@ import {
   formatDisplayTime,
   formatHours,
   kolkataTodayKey,
+  LATE_AFTER_MINUTES,
+  minutesSinceMidnightKolkata,
   weekDayKeys,
   workingHours,
 } from "@/lib/shared/dates";
+import { createNotifications, staffUserIds } from "@/lib/shared/notify";
 import { firstZodError } from "@/lib/shared/validations";
 import { z } from "zod";
 import type { ActionResult, AttendanceLogItem, AttendanceStatus } from "@/lib/shared/types";
@@ -244,21 +247,38 @@ export async function clockInAction(): Promise<ActionResult<{ checkIn: string }>
       return { ok: false, error: "You are on approved leave today and cannot check in." };
     }
 
+    const checkIn = new Date();
     await prisma.attendance.create({
       data: {
         userId: user.id,
         date: dateFromKey(today),
-        checkIn: new Date(),
+        checkIn,
         status: "present",
       },
     });
+
+    if (minutesSinceMidnightKolkata(checkIn) > LATE_AFTER_MINUTES) {
+      const profile = await prisma.employeeProfile.findUnique({
+        where: { userId: user.id },
+        select: { organizationId: true, fullName: true },
+      });
+      if (profile) {
+        await createNotifications({
+          userIds: await staffUserIds(profile.organizationId, user.id),
+          title: "Late check-in",
+          body: `${profile.fullName} checked in at ${formatDisplayTime(checkIn)}.`,
+          category: "attendance",
+          href: "/admin/people/attendance",
+        });
+      }
+    }
 
     logger.info("attendance.checkin", { userId: user.id, date: today });
     revalidatePath("/employee");
     revalidatePath("/employee/attendance");
     revalidatePath("/admin");
     revalidatePath("/admin/people/attendance");
-    return { ok: true, data: { checkIn: formatDisplayTime(new Date()) } };
+    return { ok: true, data: { checkIn: formatDisplayTime(checkIn) } };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       logger.warn("attendance.duplicate_checkin", { date: kolkataTodayKey() });

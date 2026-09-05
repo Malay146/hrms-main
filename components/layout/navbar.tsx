@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import NotificationIcon from "@/components/icons/notification";
 import SettingsIcon from "@/components/icons/settings";
@@ -12,14 +12,18 @@ import { useSessionUser } from "@/components/providers/session-context";
 import { firstAllowedAdminPath, isStaffRole, ROLE_LABELS } from "@/lib/auth/permissions";
 import { AttendanceWidget } from "@/components/layout/attendance-widget";
 import { CommandTrigger, useCommandPalette } from "@/components/layout/command-trigger";
+import {
+  listMyNotifications,
+  markAllNotificationsReadAction,
+  markNotificationReadAction,
+  type NotificationItem,
+} from "@/lib/actions/notifications";
 import dynamic from "next/dynamic";
 
 const CommandPalette = dynamic(
   () => import("@/components/layout/command-palette").then((mod) => mod.CommandPalette),
   { ssr: false },
 );
-
-// ChevronsUpDown Icon
 const ChevronsUpDownIcon = ({ className }: { className?: string }) => (
   <svg
     className={className}
@@ -37,43 +41,30 @@ const ChevronsUpDownIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-const initialNotifications = [
-  {
-    id: "notif-1",
-    title: "Leave Request Approved",
-    description: "Your leave request for August 10th - 15th has been approved.",
-    time: "2 mins ago",
-    read: false,
-    type: "success",
-  },
-  {
-    id: "notif-2",
-    title: "New Candidate Application",
-    description: "Alice Smith applied for the Frontend Engineer position.",
-    time: "1 hr ago",
-    read: false,
-    type: "info",
-  },
-  {
-    id: "notif-3",
-    title: "Performance Review Pending",
-    description: "Self-evaluation is due by end of the week.",
-    time: "5 hrs ago",
-    read: true,
-    type: "warning",
-  },
-  {
-    id: "notif-4",
-    title: "System Update",
-    description: "HRMS will undergo scheduled maintenance at 12:00 AM.",
-    time: "1 day ago",
-    read: true,
-    type: "system",
-  },
-];
+function playNotificationSound() {
+  try {
+    const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = 880;
+    gain.gain.value = 0.04;
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+    oscillator.stop(ctx.currentTime + 0.18);
+    window.setTimeout(() => void ctx.close(), 250);
+  } catch {
+    // Browser may block audio until a gesture; ignore.
+  }
+}
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const user = useSessionUser();
   const isStaff = isStaffRole(user.role);
   const isAdminPortal = pathname.startsWith("/admin");
@@ -85,10 +76,28 @@ export default function Navbar() {
   const { open: commandOpen, setOpen: setCommandOpen } = useCommandPalette();
   const [isOpen, setIsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [notifications, setNotifications] = useState(initialNotifications);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [soundsEnabled, setSoundsEnabled] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const popoverRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+  const previousUnread = useRef<number | null>(null);
+
+  async function refreshNotifications() {
+    const result = await listMyNotifications();
+    if (result.ok) {
+      setNotifications(result.data.items.slice(0, 12));
+      setSoundsEnabled(result.data.preferences.sounds);
+    }
+  }
+
+  useEffect(() => {
+    void refreshNotifications();
+    const timer = window.setInterval(() => {
+      void refreshNotifications();
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, [pathname]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -112,6 +121,13 @@ export default function Navbar() {
   const unreadCount = notifications.filter((n) => !n.read).length;
   const hasUnread = unreadCount > 0;
 
+  useEffect(() => {
+    if (previousUnread.current !== null && soundsEnabled && unreadCount > previousUnread.current) {
+      playNotificationSound();
+    }
+    previousUnread.current = unreadCount;
+  }, [unreadCount, soundsEnabled]);
+
   const filteredNotifications = notifications.filter((n) => {
     if (filter === "unread") return !n.read;
     return true;
@@ -119,23 +135,34 @@ export default function Navbar() {
 
   const handleMarkAllRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    void markAllNotificationsReadAction();
   };
 
-  const handleMarkAsRead = (id: string) => {
+  const handleMarkAsRead = (id: string, href?: string | null) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
     );
+    void markNotificationReadAction(id, true);
+    if (href) {
+      setIsOpen(false);
+      router.push(href);
+    }
   };
 
   const getIcon = (type: string) => {
     switch (type) {
-      case "success":
+      case "leave":
         return "📅";
-      case "info":
+      case "recruitment":
         return "💼";
-      case "warning":
+      case "performance":
         return "📊";
-      case "system":
+      case "attendance":
+        return "⏰";
+      case "payroll":
+        return "₹";
+      case "announcement":
+        return "📣";
       default:
         return "⚙️";
     }
@@ -164,7 +191,10 @@ export default function Navbar() {
         {/* Notification Button & Dropdown */}
         <div className="relative" ref={popoverRef}>
           <button
-            onClick={() => setIsOpen(!isOpen)}
+            onClick={() => {
+              setIsOpen(!isOpen);
+              if (!isOpen) void refreshNotifications();
+            }}
             className="relative flex items-center justify-center w-10 h-10 bg-surface border border-border rounded-lg text-icon-secondary hover:text-text-primary hover:bg-surface-hover hover:border-border-strong shadow-2xs active:scale-95 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-focus-ring/40 cursor-pointer"
             aria-label="View notifications"
           >
@@ -227,7 +257,7 @@ export default function Navbar() {
                   filteredNotifications.map((notif) => (
                     <div
                       key={notif.id}
-                      onClick={() => handleMarkAsRead(notif.id)}
+                      onClick={() => handleMarkAsRead(notif.id, notif.href)}
                       className={cn(
                         "px-4 py-3.5 flex gap-3.5 hover:bg-zinc-50/50 cursor-pointer transition-colors relative",
                         !notif.read && "bg-zinc-50/20",

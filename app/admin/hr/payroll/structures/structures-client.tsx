@@ -1,10 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { saveSalaryStructureAction, type SalaryRuleListItem, type SalaryStructureListItem } from "@/lib/actions/payroll/salary";
+import { Trash2 } from "lucide-react";
+import {
+  deleteSalaryStructureAction,
+  saveSalaryStructureAction,
+  type SalaryRuleListItem,
+  type SalaryStructureListItem,
+} from "@/lib/actions/payroll/salary";
 
 type Selected = SalaryStructureListItem & { rules: SalaryRuleListItem[] };
 
@@ -22,6 +28,11 @@ export function StructuresClient({
   const [name, setName] = useState(selected?.name ?? "");
   const [active, setActive] = useState(selected?.active ?? true);
 
+  useEffect(() => {
+    setName(selected?.name ?? "");
+    setActive(selected?.active ?? true);
+  }, [selected?.id]);
+
   function save(id?: string) {
     startTransition(async () => {
       const result = await saveSalaryStructureAction({ id, name, active });
@@ -29,8 +40,22 @@ export function StructuresClient({
         toast.error(result.error);
         return;
       }
-      toast.success("Salary structure saved");
+      toast.success(id ? "Salary structure updated" : "Salary structure created");
       router.push(`/admin/hr/payroll/structures?id=${result.data.id}`);
+      router.refresh();
+    });
+  }
+
+  function remove(row: SalaryStructureListItem) {
+    if (!window.confirm(`Delete salary structure “${row.name}”? Rules in it will be removed.`)) return;
+    startTransition(async () => {
+      const result = await deleteSalaryStructureAction(row.id);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Deleted ${row.name}.`);
+      router.push("/admin/hr/payroll/structures");
       router.refresh();
     });
   }
@@ -52,7 +77,7 @@ export function StructuresClient({
               setActive(true);
               router.push("/admin/hr/payroll/structures");
             }}
-            className="rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 px-3.5 py-2"
+            className="cursor-pointer rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 px-3.5 py-2"
           >
             New structure
           </button>
@@ -71,12 +96,13 @@ export function StructuresClient({
                 <th className="py-3.5 px-4">Structure</th>
                 <th className="py-3.5 px-4">Rules</th>
                 <th className="py-3.5 px-4">Status</th>
+                {canEdit ? <th className="py-3.5 px-4 text-right"> </th> : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {structures.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="py-10 text-center text-sm text-zinc-400">
+                  <td colSpan={canEdit ? 4 : 3} className="py-10 text-center text-sm text-zinc-400">
                     No structures yet
                   </td>
                 </tr>
@@ -90,6 +116,25 @@ export function StructuresClient({
                     </td>
                     <td className="py-3 px-4">{row.ruleCount} rules</td>
                     <td className="py-3 px-4">{row.active ? "Active" : "Inactive"}</td>
+                    {canEdit ? (
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <Link
+                          href={`/admin/hr/payroll/structures?id=${row.id}`}
+                          className="px-2 py-1 rounded-lg text-xs font-semibold text-zinc-700 hover:bg-surface-hover"
+                        >
+                          Edit
+                        </Link>
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => remove(row)}
+                          className="cursor-pointer inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-semibold text-error hover:bg-error-soft/50 disabled:opacity-60"
+                        >
+                          <Trash2 className="size-3.5" />
+                          Delete
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))
               )}
@@ -98,7 +143,7 @@ export function StructuresClient({
         </div>
 
         <div className="lg:col-span-7 border border-border rounded-xl p-5 flex flex-col gap-4">
-          <h2 className="text-h3 font-semibold">{selected ? selected.name : "New structure"}</h2>
+          <h2 className="text-h3 font-semibold">{selected ? `Edit ${selected.name}` : "New structure"}</h2>
           <label className="text-sm font-semibold text-zinc-600 flex flex-col gap-1">
             Name
             <input
@@ -118,14 +163,28 @@ export function StructuresClient({
             Active
           </label>
           {canEdit ? (
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => save(selected?.id)}
-              className="w-fit rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 px-3.5 py-2"
-            >
-              {pending ? "Saving..." : "Save"}
-            </button>
+            <div className="flex items-center justify-between gap-3">
+              {selected ? (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => remove(selected)}
+                  className="cursor-pointer px-3.5 py-2 rounded-lg border border-error/30 bg-error-soft/40 text-sm font-semibold text-error hover:bg-error-soft disabled:opacity-60"
+                >
+                  Delete structure
+                </button>
+              ) : (
+                <span />
+              )}
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => save(selected?.id)}
+                className="cursor-pointer w-fit rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 px-3.5 py-2"
+              >
+                {pending ? "Saving..." : selected ? "Save changes" : "Save"}
+              </button>
+            </div>
           ) : null}
 
           {selected ? (
@@ -149,7 +208,11 @@ export function StructuresClient({
                   {selected.rules.map((rule) => (
                     <tr key={rule.id}>
                       <td className="py-2">{rule.sequence}</td>
-                      <td className="py-2 font-medium">{rule.name}</td>
+                      <td className="py-2 font-medium">
+                        <Link href={`/admin/hr/payroll/rules?structureId=${selected.id}&id=${rule.id}`} className="hover:underline">
+                          {rule.name}
+                        </Link>
+                      </td>
                       <td className="py-2">{rule.code}</td>
                       <td className="py-2 capitalize">{rule.category}</td>
                     </tr>

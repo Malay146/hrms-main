@@ -6,7 +6,7 @@ const globalForPrisma = globalThis as unknown as {
   prismaGeneration?: string;
 };
 
-const PRISMA_GENERATION = "employee-profile-department-relation";
+const PRISMA_GENERATION = "notifications-v1";
 
 function createPrismaClient() {
   const connectionString = process.env.DATABASE_URL;

@@ -43,7 +43,9 @@ export function PayrunForm({
         toast.error(result.error);
         return;
       }
-      toast.success(`Sent ${result.data.sent}. Failed ${result.data.failed}.`);
+      toast.success(
+        `Emailed ${result.data.sent}. Skipped ${result.data.skipped} already sent. Failed ${result.data.failed}.`,
+      );
       router.refresh();
     });
   }
@@ -95,7 +97,7 @@ export function PayrunForm({
               onClick={send}
               className="px-3.5 py-2 rounded-lg border border-border bg-surface hover:bg-surface-hover text-sm font-semibold"
             >
-              Send payslips
+              Email payslips
             </button>
           ) : null}
         </div>
@@ -111,6 +113,7 @@ export function PayrunForm({
               <th className="py-3.5 px-4">Gross</th>
               <th className="py-3.5 px-4">Net</th>
               <th className="py-3.5 px-4">Warning</th>
+              <th className="py-3.5 px-4">Email</th>
               <th className="py-3.5 px-4">PDF</th>
             </tr>
           </thead>
@@ -127,6 +130,9 @@ export function PayrunForm({
                 <td className="py-3 px-4">₹{slip.gross.toLocaleString("en-IN")}</td>
                 <td className="py-3 px-4 font-semibold">₹{slip.net.toLocaleString("en-IN")}</td>
                 <td className="py-3 px-4 text-amber-700">{slip.warning ?? "—"}</td>
+                <td className="py-3 px-4 text-xs font-semibold text-zinc-500">
+                  {slip.sentAt ? "Sent" : "Not sent"}
+                </td>
                 <td className="py-3 px-4">
                   <Link href={`/admin/hr/payroll/payslips/${slip.id}/print`} className="text-sm font-semibold">
                     Print

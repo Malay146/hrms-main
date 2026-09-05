@@ -24,6 +24,7 @@ import {
   takenAfterRefusal,
 } from "@/lib/people/time-off-balance";
 import { applyLeaveSchema, decideLeaveSchema, firstZodError } from "@/lib/shared/validations";
+import { createNotifications, staffUserIds } from "@/lib/shared/notify";
 import type { ActionResult, CalendarMarker, LeaveListItem, LeaveType } from "@/lib/shared/types";
 
 function revalidateLeave() {
@@ -265,6 +266,19 @@ export async function applyLeaveAction(input: {
     });
 
     logger.info("leave.applied", { leaveId: created.id, userId: user.id });
+    const profile = await prisma.employeeProfile.findUnique({
+      where: { userId: user.id },
+      select: { organizationId: true, fullName: true },
+    });
+    if (profile) {
+      await createNotifications({
+        userIds: await staffUserIds(profile.organizationId, user.id),
+        title: "Leave request pending",
+        body: `${profile.fullName} requested ${type.name} from ${parsed.data.startDate} to ${parsed.data.endDate}.`,
+        category: "leave",
+        href: "/admin/people/leave",
+      });
+    }
     revalidateLeave();
     return { ok: true, data: mapLeave(created) };
   } catch (error) {
@@ -384,6 +398,15 @@ export async function decideLeaveAction(input: {
       parsed.data.decision === "approved" ? "leave.approved" : "leave.rejected",
       { leaveId: leave.id, adminId: admin.id },
     );
+    await createNotifications({
+      userIds: [leave.userId],
+      title: parsed.data.decision === "approved" ? "Leave request approved" : "Leave request rejected",
+      body:
+        parsed.data.adminComment.trim() ||
+        `Your leave request was ${parsed.data.decision}.`,
+      category: "leave",
+      href: "/employee/leave",
+    });
     revalidateLeave();
     return { ok: true, data: undefined };
   } catch (error) {

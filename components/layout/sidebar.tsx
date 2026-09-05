@@ -126,11 +126,6 @@ const adminNavItems: SidebarItemType[] = [
     ],
   },
   {
-    label: "Users",
-    icon: MyProfileIcon,
-    href: "/admin/users",
-  },
-  {
     label: "AI Analytics",
     icon: AiIcon,
     href: "/admin/analytics",

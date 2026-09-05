@@ -156,6 +156,38 @@ export async function saveSalaryStructureAction(input: {
   }
 }
 
+export async function deleteSalaryStructureAction(id: string): Promise<ActionResult<{ id: string }>> {
+  try {
+    await requirePermission("manageSalaryConfig");
+    const existing = await prisma.salaryStructure.findUnique({
+      where: { id },
+      include: { _count: { select: { payruns: true } } },
+    });
+    if (!existing) {
+      return { ok: false, error: "Salary structure not found." };
+    }
+    if (existing._count.payruns > 0) {
+      return {
+        ok: false,
+        error: "Cannot delete a structure that is used by payruns. Deactivate it instead.",
+      };
+    }
+
+    await prisma.$transaction([
+      prisma.contract.updateMany({
+        where: { salaryStructureId: id },
+        data: { salaryStructureId: null },
+      }),
+      prisma.salaryStructure.delete({ where: { id } }),
+    ]);
+
+    revalidateSalary();
+    return { ok: true, data: { id } };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not delete salary structure.") };
+  }
+}
+
 export async function listSalaryRules(structureId?: string): Promise<ActionResult<SalaryRuleListItem[]>> {
   try {
     await requirePermission("viewSalaryConfig");
@@ -212,6 +244,24 @@ export async function saveSalaryRuleAction(input: {
     return { ok: true, data: { id: saved.id } };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not save salary rule.") };
+  }
+}
+
+export async function deleteSalaryRuleAction(id: string): Promise<ActionResult<{ id: string }>> {
+  try {
+    await requirePermission("manageSalaryConfig");
+    const existing = await prisma.salaryRule.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) {
+      return { ok: false, error: "Salary rule not found." };
+    }
+    await prisma.salaryRule.delete({ where: { id } });
+    revalidateSalary();
+    return { ok: true, data: { id } };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not delete salary rule.") };
   }
 }
 

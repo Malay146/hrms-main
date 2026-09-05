@@ -96,10 +96,6 @@ export function canAccessAdminPath(role: Role | string | undefined, pathname: st
     return hasPermission(current, "viewAdminDashboard");
   }
 
-  if (pathname.startsWith("/admin/users")) {
-    return hasPermission(current, "createUsers");
-  }
-
   if (
     pathname.startsWith("/admin/people/employees") ||
     pathname.startsWith("/admin/people/department") ||

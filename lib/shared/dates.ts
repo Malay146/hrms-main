@@ -144,6 +144,48 @@ export function weekDayKeys(now = new Date()) {
   );
 }
 
+export function formatRelativeTime(value: Date, now = new Date()) {
+  const minutes = Math.max(0, Math.floor((now.getTime() - value.getTime()) / 60_000));
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes} min${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return formatDisplayDate(value);
+}
+
+export function formatNotificationStamp(value: Date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: TIMEZONE,
+  }).format(value);
+}
+
 export function compareDateKeys(a: string, b: string) {
   return a.localeCompare(b);
+}
+
+export function payslipIssueMonth(now = new Date()) {
+  const { year, month, day } = kolkataParts(now);
+  const lastDay = new Date(year, month, 0).getDate();
+  if (day >= lastDay - 1) {
+    return `${year}-${pad(month)}`;
+  }
+  if (month === 1) return `${year - 1}-12`;
+  return `${year}-${pad(month - 1)}`;
+}
+
+export function payrollMonthRange(month: string) {
+  const [year, monthNum] = month.split("-").map(Number);
+  const lastDay = new Date(year, monthNum, 0).getDate();
+  return {
+    start: formatDateKey(year, monthNum, 1),
+    end: formatDateKey(year, monthNum, lastDay),
+  };
 }
