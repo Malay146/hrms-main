@@ -47,6 +47,48 @@ export const createEmployeeSchema = z.object({
   phone: z.string().optional(),
 });
 
+export const createDepartmentSchema = z.object({
+  name: z.string().min(2, "Department name is required.").max(80),
+  code: z
+    .string()
+    .max(32)
+    .optional()
+    .transform((value) => value?.trim() || undefined),
+});
+
+export const renameDepartmentSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(2, "Department name is required.").max(80),
+});
+
+export const scheduleLineSchema = z.object({
+  weekday: z.number().int().min(1).max(7),
+  startMin: z.number().int().min(0).max(24 * 60 - 1),
+  endMin: z.number().int().min(1).max(24 * 60),
+  breakMin: z.number().int().min(0).max(12 * 60),
+});
+
+export const upsertScheduleSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(2, "Schedule name is required.").max(80),
+    calendarType: z.enum(["fixed", "variable"]),
+    timezone: z.string().min(1).default("Asia/Kolkata"),
+    active: z.boolean().default(true),
+    lines: z.array(scheduleLineSchema).min(1, "Add at least one working day."),
+  })
+  .superRefine((value, ctx) => {
+    for (const [index, line] of value.lines.entries()) {
+      if (line.endMin <= line.startMin) {
+        ctx.addIssue({
+          code: "custom",
+          message: "End time must be after start time.",
+          path: ["lines", index, "endMin"],
+        });
+      }
+    }
+  });
+
 export const applyLeaveSchema = z.object({
   type: z.enum(["paid", "sick", "unpaid"]),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Start date is required."),

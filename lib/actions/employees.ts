@@ -9,6 +9,7 @@ import { actionErrorMessage, requirePermission, requireUser } from "@/lib/sessio
 import { mapEmployee } from "@/lib/mappers";
 import { kolkataParts, kolkataTodayKey, currentPayrollMonth } from "@/lib/dates";
 import { createEmployeeSchema, firstZodError } from "@/lib/validations";
+import { departmentCodeFromName } from "@/lib/department-code";
 import { generateTemporaryPassword, sendAccountCredentialsEmail } from "@/lib/mail";
 import type { ActionResult, EmployeeListItem, Role } from "@/lib/types";
 
@@ -120,11 +121,7 @@ export async function createEmployeeAction(input: {
     const passwordHash = await hashPassword(password);
 
     const deptName = parsed.data.department.trim();
-    const deptCode = deptName
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, "_")
-      .replace(/^_|_$/g, "")
-      .slice(0, 32) || "GENERAL";
+    const deptCode = departmentCodeFromName(deptName);
 
     await prisma.$transaction(async (tx) => {
       const department = await tx.department.upsert({
