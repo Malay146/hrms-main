@@ -159,6 +159,7 @@ model Organization {
   profiles         EmployeeProfile[]
   salaryStructures SalaryStructure[]
   payruns          Payrun[]
+  aiInsights       AiInsight[]
 
   @@map("organization")
 }
@@ -328,4 +329,21 @@ model PayslipLine {
 
   @@index([payslipId])
   @@map("payslip_line")
+}
+
+model AiInsight {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  severity       String
+  title          String
+  body           String
+  action         String
+  href           String?
+  payload        Json?
+  generatedAt    DateTime     @default(now())
+  expiresAt      DateTime
+
+  @@index([organizationId, generatedAt])
+  @@map("ai_insight")
 }

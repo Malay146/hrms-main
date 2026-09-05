@@ -5,7 +5,8 @@ import { Search } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { Toast } from "@/components/ui/toast";
 import { decideLeaveAction } from "@/lib/actions/leave";
-import type { LeaveListItem } from "@/lib/types";
+import { summarizeLeaveForApprover } from "@/lib/actions/ai";
+import type { AiLeaveBrief, LeaveListItem } from "@/lib/types";
 
 export function LeaveClient({
   initialRequests,
@@ -19,6 +20,8 @@ export function LeaveClient({
   const [comment, setComment] = useState("");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [pending, setPending] = useState(false);
+  const [brief, setBrief] = useState<AiLeaveBrief | null>(null);
+  const [briefLoadingId, setBriefLoadingId] = useState<string | null>(null);
 
   const filtered = requests.filter((req) => {
     const matchesSearch = req.name.toLowerCase().includes(search.toLowerCase());
@@ -49,6 +52,17 @@ export function LeaveClient({
     setCommentFor(null);
     setComment("");
     setToast({ message: `Leave ${commentFor.decision}.`, type: "success" });
+  }
+
+  async function summarize(leaveId: string) {
+    setBriefLoadingId(leaveId);
+    const result = await summarizeLeaveForApprover(leaveId);
+    setBriefLoadingId(null);
+    if (!result.ok) {
+      setToast({ message: result.error, type: "error" });
+      return;
+    }
+    setBrief(result.data);
   }
 
   return (
@@ -118,6 +132,14 @@ export function LeaveClient({
                         <button onClick={() => { setCommentFor({ id: req.id, decision: "rejected" }); setComment(""); }} className="cursor-pointer px-2.5 py-1 rounded-lg bg-red-50 text-red-700 text-xs font-semibold border border-red-200/50">
                           Reject
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => summarize(req.id)}
+                          disabled={briefLoadingId === req.id}
+                          className="cursor-pointer px-2.5 py-1 rounded-lg border border-border bg-surface hover:bg-surface-hover text-xs font-semibold disabled:opacity-50"
+                        >
+                          {briefLoadingId === req.id ? "Summarizing…" : "Summarize"}
+                        </button>
                       </div>
                     ) : (
                       <span className="text-xs text-zinc-400">{req.adminComment ?? "—"}</span>
@@ -148,6 +170,28 @@ export function LeaveClient({
               </button>
               <button disabled={pending || !comment.trim()} onClick={decide} className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 text-white text-sm font-semibold disabled:opacity-50">
                 {pending ? "Saving..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {brief && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="w-full max-w-md border border-border rounded-2xl p-6 bg-surface flex flex-col gap-4">
+            <h2 className="text-h3 font-semibold">Leave brief</h2>
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Suggestion: {brief.suggestion} · {brief.clashCount} team clash(es)
+            </p>
+            <ul className="flex flex-col gap-2 text-sm text-zinc-700 font-medium">
+              {brief.bullets.map((item) => (
+                <li key={item}>• {item}</li>
+              ))}
+            </ul>
+            <p className="text-xs text-zinc-400">Advisory only. Approve or reject still requires your comment.</p>
+            <div className="flex justify-end">
+              <button onClick={() => setBrief(null)} className="cursor-pointer px-3 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-surface-hover">
+                Close
               </button>
             </div>
           </div>
