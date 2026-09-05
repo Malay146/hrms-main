@@ -1,17 +1,41 @@
+-- UPDATEs rewrite dirty rows in place; deploy with `npx prisma migrate deploy`.
 -- Repair rows that would fail the CHECKs below.
-UPDATE "leave_request" SET "endDate" = "startDate" WHERE "endDate" < "startDate";
-UPDATE "leave_request" SET "duration" = 0 WHERE "duration" < 0;
-UPDATE "contract" SET "endDate" = "startDate" WHERE "endDate" IS NOT NULL AND "endDate" < "startDate";
+UPDATE "leave_request"
+SET
+  "startDate" = "endDate",
+  "endDate" = "startDate",
+  "duration" = ("startDate" - "endDate") + 1
+WHERE "endDate" < "startDate";
+UPDATE "leave_request" SET "duration" = ("endDate" - "startDate") + 1 WHERE "duration" < 0;
+UPDATE "contract"
+SET
+  "startDate" = "endDate",
+  "endDate" = "startDate"
+WHERE "endDate" IS NOT NULL AND "endDate" < "startDate";
 UPDATE "contract" SET "wage" = 0 WHERE "wage" < 0;
 UPDATE "attendance" SET "checkOut" = NULL WHERE "checkIn" IS NULL AND "checkOut" IS NOT NULL;
 UPDATE "working_schedule_line" SET "weekday" = 7 WHERE "weekday" = 0;
 UPDATE "working_schedule_line" SET "weekday" = 1 WHERE "weekday" < 1;
 UPDATE "working_schedule_line" SET "weekday" = 7 WHERE "weekday" > 7;
-UPDATE "working_schedule_line" SET "startMin" = 0 WHERE "startMin" < 0;
-UPDATE "working_schedule_line" SET "endMin" = 24 * 60 WHERE "endMin" > 24 * 60;
-UPDATE "working_schedule_line" SET "endMin" = "startMin" + 1 WHERE "endMin" <= "startMin";
-UPDATE "working_schedule_line" SET "startMin" = "endMin" - 1 WHERE "endMin" > 24 * 60 OR "startMin" >= 24 * 60;
-UPDATE "working_schedule_line" SET "endMin" = 24 * 60 WHERE "endMin" > 24 * 60;
+DO $$
+BEGIN
+  -- Inverted lines with a valid start keep a 1-hour window, not 1 minute.
+  UPDATE "working_schedule_line"
+  SET "endMin" = LEAST(1440, "startMin" + 60)
+  WHERE "endMin" <= "startMin"
+    AND "startMin" >= 0
+    AND "startMin" <= 1439;
+
+  UPDATE "working_schedule_line" SET "startMin" = 0 WHERE "startMin" < 0;
+  UPDATE "working_schedule_line" SET "endMin" = 1440 WHERE "endMin" > 1440;
+
+  IF EXISTS (
+    SELECT 1 FROM "working_schedule_line"
+    WHERE "endMin" <= "startMin" OR "startMin" < 0 OR "endMin" > 1440
+  ) THEN
+    RAISE EXCEPTION 'working_schedule_line range still invalid after repair; migrate must abort';
+  END IF;
+END $$;
 UPDATE "working_schedule" SET "hoursPerWeek" = 1 WHERE "hoursPerWeek" <= 0;
 UPDATE "working_schedule" SET "daysPerWeek" = 1 WHERE "daysPerWeek" < 1;
 UPDATE "working_schedule" SET "daysPerWeek" = 7 WHERE "daysPerWeek" > 7;

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -8,6 +9,12 @@ const CHECK_MIGRATION_PATH = join(
   process.cwd(),
   "prisma/migrations/20260906010000_check_constraints/migration.sql",
 );
+
+const CHECK_CONSTRAINT_NAMES = Object.values(INVARIANT_SQL.checks).map((sql) => {
+  const match = sql.match(/ADD CONSTRAINT "([^"]+)"/);
+  assert.ok(match, `CHECK SQL must name a constraint:\n${sql}`);
+  return match[1];
+});
 
 describe("db invariants catalog", () => {
   it("includes a leave date order check", () => {
@@ -101,10 +108,41 @@ describe("db invariants catalog", () => {
     }
   });
 
-  it.skip(
-    "live Postgres probe waits until CHECK constraints exist (Task 2)",
-    () => {
-      assert.fail("constraints not applied yet");
+  it("check-constraints migration swaps inverted dates and repairs ranges without fighting UPDATEs", () => {
+    const sql = readFileSync(CHECK_MIGRATION_PATH, "utf8").replace(/\r\n/g, "\n");
+    assert.match(
+      sql,
+      /SET\s+"startDate"\s*=\s*"endDate"\s*,\s*"endDate"\s*=\s*"startDate"/,
+    );
+    assert.match(sql, /\("endDate"\s*-\s*"startDate"\)\s*\+\s*1/);
+    assert.match(sql, /LEAST\s*\(\s*1440\s*,\s*"startMin"\s*\+\s*60\s*\)/i);
+    assert.match(sql, /RAISE EXCEPTION/i);
+    assert.doesNotMatch(sql, /SET\s+"endMin"\s*=\s*"startMin"\s*\+\s*1/);
+  });
+
+  it(
+    "live Postgres has the 11 CHECK constraints in pg_constraint",
+    { skip: process.env.DATABASE_URL ? false : "DATABASE_URL is unset" },
+    async () => {
+      assert.equal(CHECK_CONSTRAINT_NAMES.length, 11);
+      const { Client } = await import("pg");
+      const client = new Client({ connectionString: process.env.DATABASE_URL });
+      await client.connect();
+      try {
+        const { rows } = await client.query<{ conname: string }>(
+          `SELECT conname
+           FROM pg_constraint
+           WHERE contype = 'c'
+             AND conname = ANY($1::text[])`,
+          [CHECK_CONSTRAINT_NAMES],
+        );
+        const found = new Set(rows.map((row) => row.conname));
+        for (const name of CHECK_CONSTRAINT_NAMES) {
+          assert.ok(found.has(name), `missing CHECK ${name} in pg_constraint`);
+        }
+      } finally {
+        await client.end();
+      }
     },
   );
 });
