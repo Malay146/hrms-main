@@ -12,7 +12,7 @@ Catalog of PeoplePay360 facts that PostgreSQL must eventually enforce. Status is
 
 Nothing below is a CHECK, EXCLUDE, or RLS constraint in Postgres yet. Existing UNIQUE indexes in the schema stay `enforced`.
 
-Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariants.ts).
+Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariants.ts) (`INVARIANT_SQL.checks` / `.uniques` / `.exclusion`). Task 2 copies **`.checks` only**.
 
 ---
 
@@ -75,7 +75,7 @@ Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariant
 
 ### `schedule_line_one_per_weekday`
 
-- **SQL:** `CREATE UNIQUE INDEX "working_schedule_line_scheduleId_weekday_key" ON "working_schedule_line" ("scheduleId", "weekday")`
+- **SQL:** `CREATE UNIQUE INDEX "working_schedule_line_scheduleId_weekday_key" ON "working_schedule_line" ("scheduleId", "weekday");` (`INVARIANT_SQL.uniques.scheduleLineOnePerWeekday`)
 - **Status:** `missing`
 - **Notes:** Two Monday lines on the same schedule are allowed today. Task 3 adds the unique index.
 
@@ -101,7 +101,7 @@ Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariant
 
 ### `allocation_unique_per_year`
 
-- **SQL:** `CREATE UNIQUE INDEX "time_off_allocation_employee_type_year_key" ON "time_off_allocation" ("employeeId", "typeId", "validityYear")`
+- **SQL:** `CREATE UNIQUE INDEX "time_off_allocation_employee_type_year_key" ON "time_off_allocation" ("employeeId", "typeId", "validityYear");` (`INVARIANT_SQL.uniques.allocationUniquePerYear`)
 - **Status:** `missing`
 - **Notes:** Two allocations for the same employee / type / year can coexist. Task 3 adds the unique index.
 
@@ -121,7 +121,7 @@ Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariant
 
 - **SQL:** `btree_gist` exclusion on `leave_request` (`leave_request_no_approved_overlap`) — `EXCLUDE USING gist` on `employeeId` + `daterange(startDate, endDate, '[]')` where `status = 'approved'`
 - **Status:** `app-only`
-- **Notes:** `findOverlappingLeave` in `lib/people/leave-rules.ts` is advisory. Two approvers can still persist overlapping approved rows. Task 5 applies the exclusion (after Task 4 adds `employeeId` on `leave_request`).
+- **Notes:** `findOverlappingLeave` in `lib/people/leave-rules.ts` is advisory. Two approvers can still persist overlapping approved rows. Task 5 copies `INVARIANT_SQL.exclusion.noOverlappingApprovedLeave` after Task 4 adds `employeeId` on `leave_request`.
 
 ---
 
@@ -143,7 +143,7 @@ These are UNIQUE indexes already in `prisma/schema.prisma`. They are **not** mis
 
 ---
 
-## Task 2 CHECK SQL (copy from `INVARIANT_SQL`)
+## Task 2 CHECK SQL (copy from `INVARIANT_SQL.checks`)
 
 Applied later. Do not run in this task.
 
@@ -193,7 +193,7 @@ ALTER TABLE "performance_goal"
   CHECK ("progress" >= 0 AND "progress" <= 100);
 ```
 
-## Task 5 exclusion SQL (copy from `INVARIANT_SQL`)
+## Task 5 exclusion SQL (copy from `INVARIANT_SQL.exclusion`)
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS btree_gist;
