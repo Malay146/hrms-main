@@ -10,6 +10,7 @@ import { toModelSnapshot } from "@/lib/ai/sanitize";
 import { hasPermission } from "@/lib/permissions";
 import { actionErrorMessage, requirePermission } from "@/lib/session";
 import { dateFromKey, inclusiveDayCount, kolkataTodayKey, toDateKey, weekDayKeys } from "@/lib/dates";
+import { leaveTypeFromCode } from "@/lib/mappers";
 import { copilotQuestionSchema, firstZodError } from "@/lib/validations";
 import type { ActionResult, AiAnalyticsData, AiCopilotResult, AiInsightCard, AiLeaveBrief } from "@/lib/types";
 
@@ -66,7 +67,7 @@ export async function assembleAiSnapshot(periodDays = PERIOD_DAYS, insights?: Ai
       userId: true,
       employeeId: true,
       fullName: true,
-      department: true,
+      department: { select: { name: true } },
       status: true,
       paidLeaveBalance: true,
       bankAccount: true,
@@ -76,7 +77,7 @@ export async function assembleAiSnapshot(periodDays = PERIOD_DAYS, insights?: Ai
   });
 
   const userIds = employees.map((row) => row.userId);
-  const departmentByUser = new Map(employees.map((row) => [row.userId, row.department]));
+  const departmentByUser = new Map(employees.map((row) => [row.userId, row.department.name]));
 
   const [attendanceRows, leaveRows, paidPayrun, warningPayslips, paidCount] = await Promise.all([
     userIds.length === 0
@@ -92,7 +93,13 @@ export async function assembleAiSnapshot(periodDays = PERIOD_DAYS, insights?: Ai
       ? Promise.resolve([])
       : prisma.leaveRequest.findMany({
           where: { userId: { in: userIds } },
-          select: { userId: true, type: true, startDate: true, endDate: true, status: true },
+          select: {
+            userId: true,
+            type: { select: { code: true } },
+            startDate: true,
+            endDate: true,
+            status: true,
+          },
         }),
     canPayroll
       ? prisma.payrun.findFirst({
@@ -154,6 +161,7 @@ export async function assembleAiSnapshot(periodDays = PERIOD_DAYS, insights?: Ai
     ...buildAiSnapshot({
       employees: employees.map((row) => ({
         ...row,
+        department: row.department.name,
         wage: row.wage == null ? null : Number(row.wage),
       })),
       attendance: attendanceRows.map((row) => ({
@@ -165,7 +173,7 @@ export async function assembleAiSnapshot(periodDays = PERIOD_DAYS, insights?: Ai
       })),
       leaves: leaveRows.map((row) => ({
         userId: row.userId,
-        type: row.type,
+        type: leaveTypeFromCode(row.type.code),
         startDate: toDateKey(row.startDate),
         endDate: toDateKey(row.endDate),
         status: row.status,
@@ -239,7 +247,13 @@ export async function askHrCopilot(question: string): Promise<ActionResult<AiCop
           endDate: { gte: dateFromKey(today) },
           user: { profile: { organizationId: assembled.orgId } },
         },
-        include: { user: { select: { profile: { select: { fullName: true, department: true } } } } },
+        include: {
+          user: {
+            select: {
+              profile: { select: { fullName: true, department: { select: { name: true } } } },
+            },
+          },
+        },
       });
       const names = assembled.canPeople
         ? onLeave.map((row) => row.user.profile?.fullName ?? "Employee")
@@ -298,12 +312,14 @@ export async function summarizeLeaveForApprover(leaveId: string): Promise<Action
     const leave = await prisma.leaveRequest.findUnique({
       where: { id: leaveId },
       include: {
+        type: { select: { code: true } },
         user: {
           select: {
             profile: {
               select: {
                 organizationId: true,
-                department: true,
+                departmentId: true,
+                department: { select: { name: true } },
                 paidLeaveBalance: true,
                 fullName: true,
               },
@@ -316,7 +332,8 @@ export async function summarizeLeaveForApprover(leaveId: string): Promise<Action
       return { ok: false, error: "Leave request not found." };
     }
     const orgId = leave.user.profile.organizationId;
-    const department = leave.user.profile.department;
+    const department = leave.user.profile.department.name;
+    const leaveType = leaveTypeFromCode(leave.type.code);
     const start = toDateKey(leave.startDate);
     const end = toDateKey(leave.endDate);
     const days = inclusiveDayCount(start, end);
@@ -325,7 +342,12 @@ export async function summarizeLeaveForApprover(leaveId: string): Promise<Action
       where: {
         id: { not: leave.id },
         status: { in: ["pending", "approved"] },
-        user: { profile: { organizationId: orgId, department } },
+        user: {
+          profile: {
+            organizationId: orgId,
+            departmentId: leave.user.profile.departmentId,
+          },
+        },
       },
       select: { startDate: true, endDate: true },
     });
@@ -338,7 +360,7 @@ export async function summarizeLeaveForApprover(leaveId: string): Promise<Action
     );
 
     const payload = {
-      type: leave.type,
+      type: leaveType,
       days,
       remarks: leave.remarks.slice(0, 280),
       remainingPaidBalance: leave.user.profile.paidLeaveBalance,
@@ -354,11 +376,11 @@ export async function summarizeLeaveForApprover(leaveId: string): Promise<Action
       bullets = generated.bullets;
       suggestion = generated.suggestion;
     } else {
-      suggestion = clashCount > 0 || (leave.type === "paid" && leave.user.profile.paidLeaveBalance < days)
+      suggestion = clashCount > 0 || (leaveType === "paid" && leave.user.profile.paidLeaveBalance < days)
         ? "review"
         : "approve";
       bullets = [
-        `${leave.type} leave for ${days} day(s): ${leave.remarks.slice(0, 160)}`,
+        `${leaveType} leave for ${days} day(s): ${leave.remarks.slice(0, 160)}`,
         `${clashCount} overlapping request(s) in ${department}.`,
         `Paid balance remaining: ${leave.user.profile.paidLeaveBalance} day(s).`,
       ];

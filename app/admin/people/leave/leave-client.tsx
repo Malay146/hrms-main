@@ -68,9 +68,9 @@ export function LeaveClient({
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
       <div>
-        <h1 className="text-h1 font-medium">Leave Management</h1>
+        <h1 className="text-h1 font-medium">Time Off Requests</h1>
         <p className="text-body-lg text-zinc-500 font-medium">
-          Approve or reject paid, sick, and unpaid leave with a required comment.
+          Approve or refuse requests driven by types and allocations.
         </p>
       </div>
 

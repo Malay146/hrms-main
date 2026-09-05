@@ -40,23 +40,27 @@ export async function getPayrollDashboard(input: {
     const end = dateFromKey(input.periodEnd);
 
     const profileFilter = {
-      ...(input.department ? { department: input.department } : {}),
+      ...(input.department ? { department: { name: input.department } } : {}),
       ...(input.employeeType ? { employeeType: input.employeeType } : {}),
     };
+    const profileSelect = {
+      department: { select: { name: true } },
+      employeeType: true,
+    } as const;
 
     const [departments, approvedLeaves, attendance, payslips, drafts, expiring] = await Promise.all([
-      prisma.employeeProfile.findMany({ select: { department: true }, distinct: ["department"] }),
+      prisma.department.findMany({ select: { name: true }, orderBy: { name: "asc" } }),
       prisma.leaveRequest.findMany({
         where: {
           status: "approved",
           startDate: { lte: end },
           endDate: { gte: start },
         },
-        include: { user: { select: { profile: { select: { department: true, employeeType: true } } } } },
+        include: { user: { select: { profile: { select: profileSelect } } } },
       }),
       prisma.attendance.findMany({
         where: { date: { gte: start, lte: end } },
-        include: { user: { select: { profile: { select: { department: true, employeeType: true } } } } },
+        include: { user: { select: { profile: { select: profileSelect } } } },
       }),
       canViewPayroll
         ? prisma.payslip.findMany({
@@ -66,7 +70,15 @@ export async function getPayrollDashboard(input: {
                 ? { employee: profileFilter }
                 : {}),
             },
-            include: { employee: { select: { department: true, bankAccount: true, wage: true } } },
+            include: {
+              employee: {
+                select: {
+                  department: { select: { name: true } },
+                  bankAccount: true,
+                  wage: true,
+                },
+              },
+            },
           })
         : Promise.resolve([]),
       canViewPayroll
@@ -80,12 +92,12 @@ export async function getPayrollDashboard(input: {
     ]);
 
     const leaves = approvedLeaves.filter((row) => {
-      if (input.department && row.user.profile?.department !== input.department) return false;
+      if (input.department && row.user.profile?.department.name !== input.department) return false;
       if (input.employeeType && row.user.profile?.employeeType !== input.employeeType) return false;
       return true;
     });
     const att = attendance.filter((row) => {
-      if (input.department && row.user.profile?.department !== input.department) return false;
+      if (input.department && row.user.profile?.department.name !== input.department) return false;
       if (input.employeeType && row.user.profile?.employeeType !== input.employeeType) return false;
       return true;
     });
@@ -106,8 +118,8 @@ export async function getPayrollDashboard(input: {
     const salaryByDepartmentMap = new Map<string, number>();
     for (const row of paid) {
       salaryByDepartmentMap.set(
-        row.employee.department,
-        (salaryByDepartmentMap.get(row.employee.department) ?? 0) + Number(row.net),
+        row.employee.department.name,
+        (salaryByDepartmentMap.get(row.employee.department.name) ?? 0) + Number(row.net),
       );
     }
 
@@ -145,7 +157,7 @@ export async function getPayrollDashboard(input: {
         late,
         absent,
         missingCheckout,
-        departments: departments.map((row) => row.department).filter(Boolean),
+        departments: departments.map((row) => row.name).filter(Boolean),
       },
     };
   } catch (error) {
