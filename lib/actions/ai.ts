@@ -1,11 +1,12 @@
 "use server";
 
 import { prisma } from "@/lib/db";
+import { buildAiSnapshot } from "@/lib/ai/build-snapshot";
 import { addDaysToKey } from "@/lib/ai/metrics";
 import { hasPermission } from "@/lib/permissions";
 import { actionErrorMessage, requirePermission } from "@/lib/session";
 import { dateFromKey, kolkataTodayKey, toDateKey, weekDayKeys } from "@/lib/dates";
-import type { ActionResult, AiAnalyticsData, AiInsightCard } from "@/lib/types";
+import type { ActionResult, AiAnalyticsData, AiCopilotResult, AiInsightCard } from "@/lib/types";
 
 const PERIOD_DAYS = 30;
 
@@ -160,4 +161,23 @@ export async function assembleAiSnapshot(periodDays = PERIOD_DAYS, insights: AiI
       insights,
     }),
   };
+}
+
+export async function generateAiInsights(): Promise<ActionResult<AiInsightCard[]>> {
+  try {
+    await requirePermission("viewAiAnalytics");
+    return { ok: false, error: "AI provider is not configured." };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not generate insights.") };
+  }
+}
+
+export async function askHrCopilot(question: string): Promise<ActionResult<AiCopilotResult>> {
+  try {
+    await requirePermission("viewAiAnalytics");
+    if (!question.trim()) return { ok: false, error: "Enter a question." };
+    return { ok: false, error: "AI provider is not configured." };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not answer.") };
+  }
 }
