@@ -21,6 +21,7 @@ import LeaveTodayIcon from "@/components/icons/leave-today";
 import OpenPositionIcon from "@/components/icons/open-position";
 import PendingApprovalIcon from "@/components/icons/pending-approval";
 import { cn } from "@/utils/cn";
+import { PersonAvatar } from "@/components/ui/person-avatar";
 import type { DashboardStats } from "@/lib/shared/types";
 import type { PayrollDashboardData } from "@/lib/actions/payroll/payroll-dashboard";
 
@@ -174,9 +175,7 @@ export default function Dashboard({
           ) : (
             stats.recentLeaves.map((request) => (
               <div key={request.id} className="flex items-center justify-between py-3 border-b border-divider last:border-0">
-                <div className="w-10 h-10 rounded-xl bg-zinc-100 shrink-0 flex items-center justify-center text-xs font-bold">
-                  {request.avatar}
-                </div>
+                <PersonAvatar name={request.name} size={40} />
                 <div className="flex-1 ml-3">
                   <p className="text-sm font-semibold text-zinc-900 leading-tight">{request.name}</p>
                   <p className="text-xs text-zinc-500">{request.leaveType}</p>
