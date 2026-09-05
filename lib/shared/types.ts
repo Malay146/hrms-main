@@ -187,6 +187,8 @@ export type AiCopilotResult = {
   source: string;
   conversationId: string;
   acted: boolean;
+  needsConfirmation: boolean;
+  confirmationSummary: string | null;
 };
 
 export type CopilotHistoryItem = {

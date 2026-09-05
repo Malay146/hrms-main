@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
 import { buildAiSnapshot } from "@/lib/ai/build-snapshot";
 import {
   generateInsightCards,
@@ -10,15 +11,21 @@ import {
   phraseCopilotAnswer,
   planCopilotTurn,
 } from "@/lib/ai/client";
-import { executeAssistantPlan } from "@/lib/ai/assistant-execute";
+import { executeAssistantLookup, executeAssistantPlan } from "@/lib/ai/assistant-execute";
 import {
   chatReply,
   classifyCopilotQuestion,
+  confirmationPrompt,
   conversationTitleFromQuestion,
   COPILOT_NO_PAYROLL,
   COPILOT_REFUSAL,
-  isCopilotRefuse,
+  isCancel,
+  isConfirm,
+  isSmallTalk,
+  parsePendingAction,
+  pendingReminder,
   planAssistantTurn,
+  summarizePendingAction,
 } from "@/lib/ai/copilot";
 import { mapInsightCards } from "@/lib/ai/insights";
 import { addDaysToKey, leaveClashCount } from "@/lib/ai/metrics";
@@ -280,6 +287,21 @@ async function persistCopilotTurn(
   });
 }
 
+async function loadPending(userId: string, conversationId: string) {
+  const row = await prisma.copilotConversation.findFirst({
+    where: { id: conversationId, userId },
+    select: { pendingAction: true },
+  });
+  return parsePendingAction(row?.pendingAction);
+}
+
+async function clearPending(conversationId: string) {
+  await prisma.copilotConversation.update({
+    where: { id: conversationId },
+    data: { pendingAction: Prisma.DbNull },
+  });
+}
+
 async function resolveConversation(userId: string, conversationId: string | null | undefined, question: string) {
   if (conversationId) {
     const existing = await prisma.copilotConversation.findFirst({
@@ -319,7 +341,8 @@ export async function askHrCopilot(
       return { ok: false, error: firstZodError(parsed.error) };
     }
 
-    const threadId = await resolveConversation(user.id, parsed.data.conversationId, parsed.data.question);
+    const asked = parsed.data.question;
+    const threadId = await resolveConversation(user.id, parsed.data.conversationId, asked);
     const recent = await prisma.copilotMessage.findMany({
       where: { conversationId: threadId, userId: user.id },
       orderBy: { createdAt: "desc" },
@@ -331,45 +354,126 @@ export async function askHrCopilot(
       body: row.body,
     }));
 
-    const finish = async (payload: Omit<AiCopilotResult, "conversationId">) => {
-      const data = { ...payload, conversationId: threadId };
-      await persistCopilotTurn(user.id, threadId, parsed.data.question, data);
+    const finish = async (
+      payload: Omit<AiCopilotResult, "conversationId" | "needsConfirmation" | "confirmationSummary"> & {
+        needsConfirmation?: boolean;
+        confirmationSummary?: string | null;
+      },
+    ) => {
+      const data: AiCopilotResult = {
+        needsConfirmation: false,
+        confirmationSummary: null,
+        ...payload,
+        conversationId: threadId,
+      };
+      await persistCopilotTurn(user.id, threadId, asked, data);
       return { ok: true as const, data };
     };
 
-    if (isCopilotRefuse(parsed.data.question)) {
-      return finish({ answer: COPILOT_REFUSAL, source: "Refused out-of-scope request", acted: false });
-    }
+    const pending = await loadPending(user.id, threadId);
+    const heuristic = planAssistantTurn(asked, history);
 
-    const plan = isAiConfigured()
-      ? await planCopilotTurn({ question: parsed.data.question, history })
-      : planAssistantTurn(parsed.data.question);
-
-    if (plan.kind === "refuse") {
-      return finish({ answer: plan.answer, source: "Refused out-of-scope request", acted: false });
+    if (pending && isCancel(asked)) {
+      await clearPending(threadId);
+      return finish({
+        answer: "Okay — I cancelled that change. Nothing was saved.",
+        source: "HR assistant",
+        acted: false,
+      });
     }
-    if (plan.kind === "clarify") {
-      return finish({ answer: plan.answer, source: "Need more detail", acted: false });
-    }
-    if (plan.kind === "act") {
-      const executed = await executeAssistantPlan(user, plan);
+    if (pending && isConfirm(asked)) {
+      await clearPending(threadId);
+      const executed = await executeAssistantPlan(user, { kind: "act", tool: pending.tool, args: pending.args });
       const acted = /^(Created|Updated|Deleted|Renamed|Attendance|approved|rejected)/i.test(executed.source);
       return finish({ answer: executed.answer, source: executed.source, acted });
     }
 
+    async function applyPlan(plan: typeof heuristic) {
+      if (plan.kind === "refuse") {
+        return finish({ answer: plan.answer, source: "Refused out-of-scope request", acted: false });
+      }
+      if (plan.kind === "clarify") {
+        return finish({ answer: plan.answer, source: "Need more detail", acted: false });
+      }
+      if (plan.kind === "lookup") {
+        const executed = await executeAssistantLookup(user, plan);
+        return finish({ answer: executed.answer, source: executed.source, acted: false });
+      }
+      if (plan.kind === "act") {
+        if (isConfirm(asked)) {
+          const executed = await executeAssistantPlan(user, plan);
+          const acted = /^(Created|Updated|Deleted|Renamed|Attendance|approved|rejected)/i.test(executed.source);
+          return finish({ answer: executed.answer, source: executed.source, acted });
+        }
+        const summary = summarizePendingAction(plan.tool, plan.args);
+        await prisma.copilotConversation.update({
+          where: { id: threadId },
+          data: { pendingAction: { tool: plan.tool, args: plan.args, summary } },
+        });
+        return finish({
+          answer: confirmationPrompt(summary),
+          source: "Needs your confirmation",
+          acted: false,
+          needsConfirmation: true,
+          confirmationSummary: summary,
+        });
+      }
+      return null;
+    }
+
+    if (pending && heuristic.kind !== "act" && heuristic.kind !== "lookup" && heuristic.kind !== "refuse") {
+      return finish({
+        answer: pendingReminder(pending.summary),
+        source: "Needs your confirmation",
+        acted: false,
+        needsConfirmation: true,
+        confirmationSummary: pending.summary,
+      });
+    }
+    if (pending && heuristic.kind === "act") {
+      await clearPending(threadId);
+    }
+    if (pending && heuristic.kind === "lookup") {
+      await clearPending(threadId);
+    }
+
+    if (heuristic.kind === "act" || heuristic.kind === "lookup" || heuristic.kind === "refuse" || heuristic.kind === "clarify") {
+      const handled = await applyPlan(heuristic);
+      if (handled) return handled;
+    }
+
+    const plan = isAiConfigured()
+      ? await planCopilotTurn({ question: asked, history })
+      : heuristic;
+
+    const handled = await applyPlan(plan);
+    if (handled) return handled;
+
     const firstName = user.fullName.split(" ")[0] || "there";
-    const intent = classifyCopilotQuestion(parsed.data.question);
+    const intent = classifyCopilotQuestion(asked);
     if (intent === "refuse") {
       return finish({ answer: COPILOT_REFUSAL, source: "Refused out-of-scope request", acted: false });
     }
     if (plan.kind === "chat" || intent === "chat") {
+      const recentCreate = history.some((turn) => /(?:add|create|make).{0,40}departments?/i.test(turn.body));
+      const alreadyCreated = history.some(
+        (turn) => turn.role === "assistant" && /Created department/i.test(turn.body),
+      );
+      if (recentCreate && !alreadyCreated && !isSmallTalk(asked)) {
+        return finish({
+          answer:
+            "I have not saved a department yet. Say it like “create CMS department”, then confirm. A name is enough.",
+          source: "HR assistant",
+          acted: false,
+        });
+      }
       const answer = isAiConfigured()
         ? await phraseAssistantChat({
-            question: parsed.data.question,
+            question: asked,
             firstName,
             history,
           })
-        : chatReply(firstName, parsed.data.question);
+        : chatReply(firstName, asked);
       return finish({ answer, source: "HR assistant", acted: false });
     }
 
@@ -447,18 +551,26 @@ export async function askHrCopilot(
     const fallbackAnswer =
       intent === "general"
         ? `Hi ${firstName}. Team health is ${assembled.data.health.score} (${assembled.data.health.band}). Attendance is ${assembled.data.attendancePct}%, with ${assembled.data.pendingApprovals} pending leave request(s). What would you like to look at first?`
-        : factText || chatReply(firstName, parsed.data.question);
+        : factText || chatReply(firstName, asked);
     const payload: Omit<AiCopilotResult, "conversationId"> = isAiConfigured()
       ? {
           answer: await phraseCopilotAnswer({
-            question: parsed.data.question,
+            question: asked,
             facts: factText,
             firstName,
           }),
           source,
           acted: false,
+          needsConfirmation: false,
+          confirmationSummary: null,
         }
-      : { answer: fallbackAnswer, source, acted: false };
+      : {
+          answer: fallbackAnswer,
+          source,
+          acted: false,
+          needsConfirmation: false,
+          confirmationSummary: null,
+        };
     return finish(payload);
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not answer.") };
@@ -495,7 +607,7 @@ export async function listCopilotConversations(): Promise<ActionResult<CopilotCo
 }
 
 export async function listCopilotHistory(conversationId?: string | null): Promise<
-  ActionResult<{ conversationId: string | null; messages: CopilotHistoryItem[] }>
+  ActionResult<{ conversationId: string | null; messages: CopilotHistoryItem[]; pendingSummary: string | null }>
 > {
   try {
     const user = await requirePermission("viewAiAnalytics");
@@ -508,10 +620,10 @@ export async function listCopilotHistory(conversationId?: string | null): Promis
       });
       threadId = latest?.id ?? null;
     }
-    if (!threadId) return { ok: true, data: { conversationId: null, messages: [] } };
+    if (!threadId) return { ok: true, data: { conversationId: null, messages: [], pendingSummary: null } };
     const owned = await prisma.copilotConversation.findFirst({
       where: { id: threadId, userId: user.id },
-      select: { id: true },
+      select: { id: true, pendingAction: true },
     });
     if (!owned) return { ok: false, error: "Chat not found." };
     const rows = await prisma.copilotMessage.findMany({
@@ -519,7 +631,14 @@ export async function listCopilotHistory(conversationId?: string | null): Promis
       orderBy: { createdAt: "asc" },
       take: 200,
     });
-    return { ok: true, data: { conversationId: threadId, messages: rows.map(mapHistoryItem) } };
+    return {
+      ok: true,
+      data: {
+        conversationId: threadId,
+        messages: rows.map(mapHistoryItem),
+        pendingSummary: parsePendingAction(owned.pendingAction)?.summary ?? null,
+      },
+    };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load chat history.") };
   }

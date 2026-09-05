@@ -6,7 +6,7 @@ const globalForPrisma = globalThis as unknown as {
   prismaGeneration?: string;
 };
 
-const PRISMA_GENERATION = "copilot-v2";
+const PRISMA_GENERATION = "copilot-v3";
 
 function createPrismaClient() {
   const connectionString = process.env.DATABASE_URL;

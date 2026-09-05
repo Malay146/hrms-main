@@ -12,6 +12,7 @@ import { decideLeaveAction } from "@/lib/actions/people/leave";
 import { kolkataTodayKey } from "@/lib/shared/dates";
 import type { Role, SessionUser } from "@/lib/shared/types";
 import type { AssistantPlan } from "@/lib/ai/copilot";
+import { sqlDepartmentHeadcount, sqlOrgHeadcount, sqlPeopleInDepartment } from "@/lib/ai/copilot-query";
 
 export type AssistantExecuteResult = {
   answer: string;
@@ -197,9 +198,16 @@ async function executeUpdateEmployee(user: SessionUser, orgId: string, args: Rec
     return { answer: result.error, source: "Update employee" };
   }
   revalidatePath("/admin");
+  if (result.data.kind === "deactivated") {
+    return {
+      answer: `Removed ${lookup.employee.fullName} (${result.data.employeeId}).`,
+      source: `Updated employee ${result.data.employeeId}`,
+    };
+  }
+  const updated = result.data.employee;
   return {
-    answer: `Updated ${result.data.fullName} (${result.data.employeeId}). Status is ${result.data.statusLabel}, department is ${result.data.departmentName}, title is ${result.data.jobTitle}.`,
-    source: `Updated employee ${result.data.employeeId}`,
+    answer: `Updated ${updated.fullName} (${updated.employeeId}). Status is ${updated.statusLabel}, department is ${updated.departmentName}, title is ${updated.jobTitle}.`,
+    source: `Updated employee ${updated.employeeId}`,
   };
 }
 
@@ -319,6 +327,78 @@ async function executeAttendance(user: SessionUser, orgId: string, args: Record<
   return {
     answer: `Marked ${lookup.employee.fullName} as ${status.replace("_", " ")} on ${date}. Present-today on the dashboard will update.`,
     source: `Attendance ${status} for ${lookup.employee.employeeId}`,
+  };
+}
+
+export async function executeAssistantLookup(
+  user: SessionUser,
+  plan: Extract<AssistantPlan, { kind: "lookup" }>,
+): Promise<AssistantExecuteResult> {
+  const orgId = await orgIdFor(user.id);
+  if (!orgId) {
+    return { answer: "No organisation is linked to this account.", source: "Permission check" };
+  }
+
+  if (plan.tool === "lookup_departments" || (plan.tool === "lookup_headcount" && !arg(plan.args, "department"))) {
+    const rows = await sqlDepartmentHeadcount(orgId);
+    const total = await sqlOrgHeadcount(orgId);
+    if (rows.length === 0) {
+      return { answer: "There are no departments in this organisation yet.", source: "Department query" };
+    }
+    const lines = rows.map((row) => `${row.name} (${row.code}): ${row.headcount}`).join("; ");
+    return {
+      answer: `There are ${total} active people across ${rows.length} departments. ${lines}.`,
+      source: `Queried ${rows.length} departments`,
+    };
+  }
+
+  if (plan.tool === "lookup_headcount") {
+    const department = arg(plan.args, "department");
+    const rows = await sqlDepartmentHeadcount(orgId, department);
+    if (rows.length === 0) {
+      return {
+        answer: `I could not find a department matching “${department}”.`,
+        source: "Department query",
+      };
+    }
+    if (rows.length === 1 && rows[0]) {
+      const row = rows[0];
+      return {
+        answer: `${row.name} has ${row.headcount} active ${row.headcount === 1 ? "employee" : "employees"}.`,
+        source: `Headcount for ${row.name}`,
+      };
+    }
+    const lines = rows.map((row) => `${row.name}: ${row.headcount}`).join("; ");
+    return {
+      answer: `Several departments match “${department}”: ${lines}.`,
+      source: "Department query",
+    };
+  }
+
+  const department = arg(plan.args, "department");
+  if (!department) {
+    return { answer: "Which department should I look up?", source: "Missing fields" };
+  }
+  const people = await sqlPeopleInDepartment(orgId, department);
+  if (people.length === 0) {
+    const rows = await sqlDepartmentHeadcount(orgId, department);
+    if (rows.length === 0) {
+      return {
+        answer: `I could not find a department matching “${department}”.`,
+        source: "People query",
+      };
+    }
+    return {
+      answer: `${rows[0]?.name ?? department} has no active employees yet.`,
+      source: "People query",
+    };
+  }
+  const names = people
+    .map((row) => `${row.fullName} (${row.employeeId}, ${row.jobTitle})`)
+    .join("; ");
+  return {
+    answer: `${people.length} active ${people.length === 1 ? "person" : "people"} in ${department}: ${names}.`,
+    source: `People in ${department}`,
   };
 }
 

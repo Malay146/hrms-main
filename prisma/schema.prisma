@@ -259,10 +259,11 @@ model CopilotConversation {
   id        String           @id @default(cuid())
   userId    String
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title     String
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  messages  CopilotMessage[]
+  title          String
+  pendingAction  Json?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  messages       CopilotMessage[]
 
   @@index([userId, updatedAt])
   @@map("copilot_conversation")

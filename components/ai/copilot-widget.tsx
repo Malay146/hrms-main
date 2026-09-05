@@ -36,6 +36,7 @@ export function CopilotWidget() {
   const [pending, startTransition] = useTransition();
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [sending, setSending] = useState(false);
+  const [awaitingConfirm, setAwaitingConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -64,10 +65,12 @@ export function CopilotWidget() {
       }
       if (freshChat) {
         setMessages([]);
+        setAwaitingConfirm(false);
         return;
       }
       setConversationId(history.data.conversationId);
       setMessages(history.data.messages);
+      setAwaitingConfirm(Boolean(history.data.pendingSummary));
     });
   }
 
@@ -85,6 +88,7 @@ export function CopilotWidget() {
       }
       setConversationId(result.data.conversationId);
       setMessages(result.data.messages);
+      setAwaitingConfirm(Boolean(result.data.pendingSummary));
     });
   }
 
@@ -94,12 +98,11 @@ export function CopilotWidget() {
     setMessages([]);
     setQuestion("");
     setError(null);
+    setAwaitingConfirm(false);
     setView("chat");
   }
 
-  function send(event: React.FormEvent) {
-    event.preventDefault();
-    const text = question.trim();
+  function submitText(text: string) {
     if (!text || sending) return;
     const optimistic: CopilotHistoryItem = {
       id: `local-${Date.now()}`,
@@ -112,6 +115,7 @@ export function CopilotWidget() {
     setQuestion("");
     setError(null);
     setSending(true);
+    setAwaitingConfirm(false);
     startTransition(async () => {
       const result = await askHrCopilot(text, conversationId);
       setSending(false);
@@ -121,6 +125,7 @@ export function CopilotWidget() {
       }
       setFreshChat(false);
       setConversationId(result.data.conversationId);
+      setAwaitingConfirm(Boolean(result.data.needsConfirmation));
       setMessages((prev) => [
         ...prev,
         {
@@ -135,6 +140,11 @@ export function CopilotWidget() {
       const threads = await listCopilotConversations();
       if (threads.ok) setConversations(threads.data);
     });
+  }
+
+  function send(event: React.FormEvent) {
+    event.preventDefault();
+    submitText(question.trim());
   }
 
   function deleteThread(id: string) {
@@ -195,7 +205,7 @@ export function CopilotWidget() {
                     HR assistant
                   </h2>
                   <p className="text-xs font-medium text-zinc-500 mt-0.5">
-                    Ask a question, or tell me to add, update, or remove people, departments, leave, and attendance.
+                    Ask about the team. Changes wait for your confirmation.
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -282,8 +292,8 @@ export function CopilotWidget() {
                       <p className="text-sm font-medium text-zinc-400 text-center py-10">Loading…</p>
                     ) : messages.length === 0 ? (
                       <div className="text-sm font-medium text-zinc-400 text-center py-8 flex flex-col gap-2">
-                        <p>Hi — I’m your HR assistant. Ask about leave or attendance, or tell me what to change.</p>
-                        <p>Try “Hi there”, “Who is on leave today?”, or “Mark Aarav absent today”.</p>
+                        <p>Hi — I’m your HR assistant. Ask about leave, attendance, or the team.</p>
+                        <p>Try “Hi there” or “Who is on leave today?”</p>
                       </div>
                     ) : (
                       messages.map((row) => (
@@ -297,12 +307,33 @@ export function CopilotWidget() {
                           )}
                         >
                           <p className="font-medium leading-relaxed whitespace-pre-wrap">{row.body}</p>
-                          {row.role === "assistant" && row.source && row.source !== "HR assistant" ? (
+                          {row.role === "assistant" &&
+                          row.source &&
+                          row.source !== "HR assistant" &&
+                          row.source !== "Needs your confirmation" ? (
                             <p className="mt-1.5 text-[11px] font-medium text-zinc-500">Used: {row.source}</p>
                           ) : null}
                         </div>
                       ))
                     )}
+                    {awaitingConfirm && !sending ? (
+                      <div className="self-start flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => submitText("Confirm")}
+                          className="cursor-pointer h-9 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-xs font-semibold text-white shadow-2xs active:scale-98"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => submitText("Cancel")}
+                          className="cursor-pointer h-9 px-3 rounded-lg border border-border bg-surface hover:bg-surface-hover text-xs font-semibold text-zinc-800"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : null}
                     {sending ? (
                       <p className="text-xs font-semibold text-zinc-400 self-start">Working…</p>
                     ) : null}
@@ -314,7 +345,7 @@ export function CopilotWidget() {
                     <input
                       value={question}
                       onChange={(event) => setQuestion(event.target.value)}
-                      placeholder="Say hi, ask a question, or give an instruction…"
+                      placeholder="Ask a question…"
                       className="h-10 flex-1 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
                     />
                     <button
