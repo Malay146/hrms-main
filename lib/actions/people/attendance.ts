@@ -155,7 +155,13 @@ export async function listAttendanceLogs(
     "timing.attendance_list",
     async () => {
   try {
-    await requirePermission("managePeople");
+    const actor = await requirePermission("managePeople");
+    const actorProfile = await prisma.employeeProfile.findUnique({
+      where: { userId: actor.id },
+      select: { organizationId: true },
+    });
+    if (!actorProfile) throw new Error("Employee profile is missing.");
+    const organizationId = actorProfile.organizationId;
     const window = defaultAttendanceWindow();
     const from = filters?.from || window.from;
     const to = filters?.to || window.to;
@@ -182,6 +188,7 @@ export async function listAttendanceLogs(
       andUser.length === 0 ? undefined : andUser.length === 1 ? andUser[0] : { AND: andUser };
 
     const baseWhere: Prisma.AttendanceWhereInput = {
+      organizationId,
       date: { gte: dateFromKey(from), lte: dateFromKey(to) },
       ...(userWhere ? { user: userWhere } : {}),
       ...(lateOnly ? { status: "present", checkIn: { not: null } } : attendanceStatusWhere(statusFilter)),
@@ -191,6 +198,7 @@ export async function listAttendanceLogs(
       prisma.attendance.groupBy({
         by: ["status"],
         where: {
+          organizationId,
           date: { gte: dateFromKey(from), lte: dateFromKey(to) },
           ...(filters?.employeeCode
             ? { user: { profile: { employeeId: filters.employeeCode } } }
@@ -200,6 +208,7 @@ export async function listAttendanceLogs(
       }),
       prisma.attendance.findMany({
         where: {
+          organizationId,
           date: { gte: dateFromKey(from), lte: dateFromKey(to) },
           status: "present",
           checkIn: { not: null },

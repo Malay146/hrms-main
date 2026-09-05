@@ -96,12 +96,17 @@ export async function listLeaveRequests(filters?: {
   search?: string;
 }): Promise<ActionResult<LeaveListResult>> {
   try {
-    await requirePermission("approveLeave");
+    const actor = await requirePermission("approveLeave");
+    const actorProfile = await prisma.employeeProfile.findUnique({
+      where: { userId: actor.id },
+      select: { organizationId: true },
+    });
+    if (!actorProfile) throw new Error("Employee profile is missing.");
     const page = clampPage(filters?.page);
     const pageSize = clampPageSize(filters?.pageSize);
     const search = filters?.search?.trim() ?? "";
 
-    const andFilters: Prisma.LeaveRequestWhereInput[] = [];
+    const andFilters: Prisma.LeaveRequestWhereInput[] = [{ organizationId: actorProfile.organizationId }];
     const statusWhere = leaveStatusWhere(filters?.status);
     if (statusWhere) andFilters.push(statusWhere);
     if (search) {

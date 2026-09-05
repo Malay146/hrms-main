@@ -7,7 +7,7 @@ export async function recomputeAttendanceDailyRollup(organizationId: string, dat
   const rows = await prisma.attendance.findMany({
     where: {
       date: day,
-      user: { profile: { organizationId } },
+      organizationId,
     },
     select: { status: true, checkIn: true, checkOut: true },
   });

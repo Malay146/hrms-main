@@ -36,7 +36,6 @@ async function loadAdminDashboardSnapshot(
 ): Promise<AdminDashboardSnapshot> {
   const todayDate = dateFromKey(today);
   const orgProfile = { organizationId };
-  const orgUser = { profile: orgProfile };
   const weekKeys = weekDayKeys();
 
   const [
@@ -60,7 +59,7 @@ async function loadAdminDashboardSnapshot(
       where: {
         date: todayDate,
         status: { in: ["present", "half_day"] },
-        user: orgUser,
+        organizationId,
       },
     }),
     prisma.leaveRequest.count({
@@ -68,25 +67,25 @@ async function loadAdminDashboardSnapshot(
         status: "approved",
         startDate: { lte: todayDate },
         endDate: { gte: todayDate },
-        user: orgUser,
+        organizationId,
       },
     }),
     prisma.leaveRequest.count({
-      where: { status: "pending", user: orgUser },
+      where: { status: "pending", organizationId },
     }),
     prisma.attendance.groupBy({
       by: ["date"],
       where: {
         date: { gte: dateFromKey(weekKeys[0]), lte: dateFromKey(weekKeys[weekKeys.length - 1]) },
         status: { in: ["present", "half_day"] },
-        user: orgUser,
+        organizationId,
       },
       _count: { _all: true },
     }),
     prisma.leaveRequest.findMany({
       take: 8,
       orderBy: { createdAt: "desc" },
-      where: { user: orgUser },
+      where: { organizationId },
       include: {
         type: { select: { code: true, name: true } },
         user: {
