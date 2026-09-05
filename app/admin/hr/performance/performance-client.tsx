@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Plus, Search, Trash2 } from "lucide-react";
 import { ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Modal } from "@/components/ui/modal";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ListPagination } from "@/components/ui/list-pagination";
 import { cn } from "@/utils/cn";
 import {
   closePerformanceCycleAction,
@@ -30,11 +32,19 @@ type GoalDraft = { title: string; description: string; progress: number };
 
 const emptyGoal = (): GoalDraft => ({ title: "", description: "", progress: 0 });
 
-export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
+export function PerformanceClient({
+  initial,
+  query,
+}: {
+  initial: PerformanceBoard;
+  query: { q: string; status: string; cycleId: string; page: number };
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [board, setBoard] = useState(initial);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("All");
-  const [cycleFilter, setCycleFilter] = useState("All");
+  const [search, setSearch] = useState(query.q);
+  const [status, setStatus] = useState(query.status || "All");
+  const [cycleFilter, setCycleFilter] = useState(query.cycleId || "All");
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [cycleOpen, setCycleOpen] = useState(false);
@@ -43,28 +53,73 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
   const [goals, setGoals] = useState<GoalDraft[]>([emptyGoal()]);
   const [rating, setRating] = useState("3");
   const [summary, setSummary] = useState("");
+  const [employeePickerSearch, setEmployeePickerSearch] = useState("");
+  const [pickerEmployees, setPickerEmployees] = useState(initial.employees);
+
+  useEffect(() => {
+    setBoard(initial);
+    setPickerEmployees(initial.employees);
+  }, [initial]);
+
+  useEffect(() => {
+    setSearch(query.q);
+    setStatus(query.status || "All");
+    setCycleFilter(query.cycleId || "All");
+  }, [query.q, query.status, query.cycleId]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      if (search === query.q) return;
+      pushQuery({ q: search, page: 1 });
+    }, 250);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce search only
+  }, [search]);
+
+  useEffect(() => {
+    if (!reviewOpen) return;
+    const handle = window.setTimeout(() => {
+      void (async () => {
+        const result = await getPerformanceBoard({
+          page: board.page,
+          pageSize: board.pageSize,
+          search: query.q || undefined,
+          cycleId: cycleFilter !== "All" ? cycleFilter : undefined,
+          status: status !== "All" ? status : undefined,
+          employeeSearch: employeePickerSearch.trim() || undefined,
+        });
+        if (result.ok) setPickerEmployees(result.data.employees);
+      })();
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [employeePickerSearch, reviewOpen, board.page, board.pageSize, query.q, cycleFilter, status]);
 
   const openCycles = board.cycles.filter((cycle) => cycle.status === "open");
-
-  const filtered = board.reviews.filter((row) => {
-    const q = search.trim().toLowerCase();
-    const matchesSearch =
-      !q ||
-      row.employeeName.toLowerCase().includes(q) ||
-      row.employeeCode.toLowerCase().includes(q) ||
-      row.department.toLowerCase().includes(q);
-    const matchesStatus = status === "All" || row.status === status;
-    const matchesCycle = cycleFilter === "All" || row.cycleId === cycleFilter;
-    return matchesSearch && matchesStatus && matchesCycle;
-  });
 
   const maxPie = useMemo(
     () => board.ratingDistribution.some((row) => row.value > 0),
     [board.ratingDistribution],
   );
 
+  function pushQuery(patch: Partial<{ q: string; status: string; cycleId: string; page: number }>) {
+    const params = new URLSearchParams();
+    const next = {
+      q: patch.q ?? search,
+      status: patch.status ?? status,
+      cycleId: patch.cycleId ?? cycleFilter,
+      page: patch.page ?? query.page,
+    };
+    if (next.q.trim()) params.set("q", next.q.trim());
+    if (next.status && next.status !== "All") params.set("status", next.status);
+    if (next.cycleId && next.cycleId !== "All") params.set("cycleId", next.cycleId);
+    if (next.page > 1) params.set("page", String(next.page));
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }
+
   function refreshFrom(next: PerformanceBoard) {
     setBoard(next);
+    setPickerEmployees(next.employees);
   }
 
   function createCycle(event: React.FormEvent<HTMLFormElement>) {
@@ -81,10 +136,17 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
         setMessage(result.error);
         return;
       }
-      const boardResult = await getPerformanceBoard();
+      const boardResult = await getPerformanceBoard({
+        page: query.page,
+        pageSize: board.pageSize,
+        search: query.q || undefined,
+        cycleId: cycleFilter !== "All" ? cycleFilter : undefined,
+        status: status !== "All" ? status : undefined,
+      });
       if (boardResult.ok) refreshFrom(boardResult.data);
       setCycleOpen(false);
       setMessage(`Created ${result.data.name}.`);
+      router.refresh();
     });
   }
 
@@ -109,11 +171,17 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
       }
       setBoard((prev) => ({
         ...prev,
-        reviews: [result.data, ...prev.reviews.filter((row) => row.id !== result.data.id)],
+        reviews: [result.data, ...prev.reviews.filter((row) => row.id !== result.data.id)].slice(
+          0,
+          prev.pageSize,
+        ),
+        total: prev.total + 1,
       }));
       setReviewOpen(false);
       setGoals([emptyGoal()]);
+      setEmployeePickerSearch("");
       setMessage(`Review started for ${result.data.employeeName}.`);
+      router.refresh();
     });
   }
 
@@ -158,6 +226,7 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
       }));
       setEditing(null);
       setMessage("Review saved.");
+      router.refresh();
     });
   }
 
@@ -174,6 +243,7 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
       }));
       setEditing(null);
       setMessage("Review submitted to the employee.");
+      router.refresh();
     });
   }
 
@@ -205,7 +275,9 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
       setBoard((prev) => ({
         ...prev,
         reviews: prev.reviews.filter((row) => row.id !== id),
+        total: Math.max(0, prev.total - 1),
       }));
+      router.refresh();
     });
   }
 
@@ -253,6 +325,8 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
             type="button"
             onClick={() => {
               setGoals([emptyGoal()]);
+              setEmployeePickerSearch("");
+              setPickerEmployees(board.employees);
               setReviewOpen(true);
             }}
             disabled={openCycles.length === 0}
@@ -362,7 +436,15 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
             className={cn(inputClass, "pl-9 w-full")}
           />
         </div>
-        <select value={cycleFilter} onChange={(event) => setCycleFilter(event.target.value)} className={inputClass}>
+        <select
+          value={cycleFilter}
+          onChange={(event) => {
+            const value = event.target.value;
+            setCycleFilter(value);
+            pushQuery({ cycleId: value, page: 1 });
+          }}
+          className={inputClass}
+        >
           <option value="All">All cycles</option>
           {board.cycles.map((cycle) => (
             <option key={cycle.id} value={cycle.id}>
@@ -370,7 +452,15 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
             </option>
           ))}
         </select>
-        <select value={status} onChange={(event) => setStatus(event.target.value)} className={inputClass}>
+        <select
+          value={status}
+          onChange={(event) => {
+            const value = event.target.value;
+            setStatus(value);
+            pushQuery({ status: value, page: 1 });
+          }}
+          className={inputClass}
+        >
           <option value="All">All statuses</option>
           <option value="draft">Draft</option>
           <option value="submitted">Submitted</option>
@@ -378,7 +468,7 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
         </select>
       </div>
 
-      {filtered.length === 0 ? (
+      {board.reviews.length === 0 ? (
         <div className="border border-dashed border-border rounded-xl py-16 text-center text-sm font-medium text-zinc-400">
           No reviews match these filters.
         </div>
@@ -396,7 +486,7 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => (
+              {board.reviews.map((row) => (
                 <tr key={row.id} className="border-t border-border">
                   <td className="px-4 py-3">
                     <p className="font-semibold text-zinc-950">{row.employeeName}</p>
@@ -452,6 +542,14 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
         </div>
       )}
 
+      <ListPagination
+        page={board.page}
+        totalPages={board.totalPages}
+        total={board.total}
+        pageItemCount={board.reviews.length}
+        onPageChange={(nextPage) => pushQuery({ page: nextPage })}
+      />
+
       <Modal open={cycleOpen} onClose={() => setCycleOpen(false)} title="New review cycle">
         <form className="flex flex-col gap-3" onSubmit={createCycle}>
           <input name="name" required placeholder="H2 2026 reviews" className={inputClass} />
@@ -482,9 +580,18 @@ export function PerformanceClient({ initial }: { initial: PerformanceBoard }) {
               </option>
             ))}
           </select>
+          <div className="relative">
+            <Search className="size-4 absolute left-3 top-3 text-zinc-400" />
+            <input
+              value={employeePickerSearch}
+              onChange={(event) => setEmployeePickerSearch(event.target.value)}
+              placeholder="Search employees"
+              className={cn(inputClass, "pl-9 w-full")}
+            />
+          </div>
           <select name="employeeId" required className={inputClass}>
             <option value="">Select employee</option>
-            {board.employees.map((employee) => (
+            {pickerEmployees.map((employee) => (
               <option key={employee.id} value={employee.id}>
                 {employee.name} · {employee.department}
               </option>

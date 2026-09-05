@@ -1,10 +1,8 @@
-import { createRequire } from "node:module";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { requireDocsHtml } from "@/lib/api/v1/swagger-html";
 
-const require = createRequire(import.meta.url);
-const DIST = path.dirname(require.resolve("swagger-ui-dist/package.json"));
+const DIST = path.join(process.cwd(), "node_modules", "swagger-ui-dist");
 
 const ALLOWED: Record<string, string> = {
   "swagger-ui.css": "text/css; charset=utf-8",

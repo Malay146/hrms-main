@@ -129,11 +129,19 @@ async function main() {
   await prisma.timeOffAllocation.deleteMany();
   await prisma.timeOffType.deleteMany();
   await prisma.attendance.deleteMany();
+  await prisma.attendanceDailyRollup.deleteMany();
+  await prisma.orgMetricsSnapshot.deleteMany();
+  await prisma.backgroundJob.deleteMany();
+  await prisma.performanceGoal.deleteMany();
+  await prisma.performanceReview.deleteMany();
+  await prisma.performanceCycle.deleteMany();
   await prisma.payroll.deleteMany();
   await prisma.candidate.deleteMany();
   await prisma.jobOpening.deleteMany();
   await prisma.notification.deleteMany();
   await prisma.notificationPreference.deleteMany();
+  await prisma.copilotMessage.deleteMany();
+  await prisma.copilotConversation.deleteMany();
   await prisma.session.deleteMany();
   await prisma.account.deleteMany();
   await prisma.employeeProfile.deleteMany();
@@ -468,13 +476,9 @@ async function main() {
         const seq = contractSeq + index;
         const wage = Number(profile.wage ?? 40000);
         const roll = seq % 12;
-        // Mix: open-ended running, fixed-term running, ending soon, and truly expired.
-        let status: "running" | "expired" = "running";
+        // Every active/on-leave employee gets a running contract. Vary end dates only.
         let endDate: Date | null = null;
-        if (roll === 0) {
-          status = "expired";
-          endDate = dateFromKey(daysAgo(45 + (seq % 40)));
-        } else if (roll === 1) {
+        if (roll === 1) {
           endDate = dateFromKey(daysAgo(-(14 + (seq % 21)))); // ends within ~5 weeks
         } else if (roll === 2 || profile.employeeType === "intern") {
           endDate = dateFromKey(daysAgo(-(90 + (seq % 60))));
@@ -490,20 +494,15 @@ async function main() {
           salaryStructureId: structureEarly.id,
           jobTitle: profile.jobTitle,
           wage,
-          startDate:
-            status === "expired"
-              ? dateFromKey(daysAgo(200 + (seq % 100)))
-              : (profile.joinDate ?? dateFromKey(daysAgo(120))),
+          startDate: profile.joinDate ?? dateFromKey(daysAgo(120)),
           endDate,
-          status,
+          status: "running" as const,
           notes:
             profile.employeeType === "intern"
               ? "Internship agreement"
               : profile.employeeType === "contractor"
                 ? "Fixed-term contractor"
-                : status === "expired"
-                  ? "Prior term — superseded or not renewed"
-                  : "Full-time employment",
+                : "Full-time employment",
         };
       }),
     });
@@ -513,125 +512,33 @@ async function main() {
     );
   }
 
-  // Diverse attendance for the current week (drives Attendance Overview + payroll alerts).
-  const weekKeys = weekDayKeys();
-  const todayKey = kolkataTodayKey();
-  const attendancePool = await prisma.employeeProfile.findMany({
-    where: { organizationId: organization.id, status: { not: "inactive" } },
-    select: { userId: true },
-    orderBy: { employeeId: "asc" },
-  });
-  const poolIds = attendancePool.map((row) => row.userId);
-  const poolSize = poolIds.length;
-
-  // Scale to headcount so dashboard present/late match ~300 roster (not a tiny sample).
-  const weekdayFactors = [0.62, 0.84, 0.71, 0.9, 0.78];
-  const presentTargets = weekKeys.map((key, dayIndex) => {
-    if (key === todayKey) return Math.max(40, Math.floor(poolSize * 0.78));
-    const utcDay = dateFromKey(key).getUTCDay();
-    if (utcDay === 0 || utcDay === 6) return Math.max(12, Math.floor(poolSize * 0.14));
-    const factor = weekdayFactors[dayIndex] ?? 0.75;
-    return Math.max(20, Math.floor(poolSize * factor));
-  });
-
-  const attendanceRows: {
-    userId: string;
-    date: Date;
-    checkIn: Date | null;
-    checkOut: Date | null;
-    status: "present" | "absent" | "half_day" | "leave";
-    workedHours: number | null;
-  }[] = [];
-
-  for (let dayIndex = 0; dayIndex < weekKeys.length; dayIndex += 1) {
-    const key = weekKeys[dayIndex]!;
-    const presentCount = Math.min(presentTargets[dayIndex]!, poolSize);
-    const halfDayCount = Math.max(2, Math.floor(presentCount * 0.1));
-    const afterPresent = Math.max(0, poolSize - presentCount);
-    const leaveCount = Math.min(
-      afterPresent,
-      Math.max(8, Math.floor(poolSize * 0.06) + (dayIndex % 4) * 4),
-    );
-    const absentCount = Math.max(0, afterPresent - leaveCount);
-    const date = dateFromKey(key);
-
-    // Rotate starting offset so the same people aren't always "present".
-    const offset = (dayIndex * 17) % poolSize;
-    const rotated = [...poolIds.slice(offset), ...poolIds.slice(0, offset)];
-    let cursor = 0;
-    const take = (n: number) => {
-      const slice = rotated.slice(cursor, cursor + n);
-      cursor += n;
-      return slice;
-    };
-
-    for (const [i, userId] of take(presentCount - halfDayCount).entries()) {
-      // Mix on-time (IST morning) and late check-ins for Late metric.
-      const late = i % 4 === 0;
-      const hourUtc = late ? 4 + (i % 2) : 2 + (i % 2); // ~07:30–09:30 IST on-time vs ~09:30–11:30 late-ish
-      const minute = late ? 45 + (i % 10) : 5 + (i % 40);
-      const checkIn = new Date(
-        `${key}T${String(hourUtc).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`,
-      );
-      const checkOut =
-        key === todayKey && i % 7 === 0
-          ? null
-          : new Date(`${key}T1${1 + (i % 3)}:${String(i % 50).padStart(2, "0")}:00.000Z`);
-      attendanceRows.push({
-        userId,
-        date,
-        checkIn,
-        checkOut,
-        status: "present",
-        workedHours: checkOut ? 8.5 : null,
-      });
-    }
-    for (const [i, userId] of take(halfDayCount).entries()) {
-      attendanceRows.push({
-        userId,
-        date,
-        checkIn: new Date(`${key}T03:${String(i % 30).padStart(2, "0")}:00.000Z`),
-        checkOut: new Date(`${key}T07:${String(20 + (i % 20)).padStart(2, "0")}:00.000Z`),
-        status: "half_day",
-        workedHours: 4,
-      });
-    }
-    for (const userId of take(leaveCount)) {
-      attendanceRows.push({
-        userId,
-        date,
-        checkIn: null,
-        checkOut: null,
-        status: "leave",
-        workedHours: 0,
-      });
-    }
-    for (const userId of take(absentCount)) {
-      attendanceRows.push({
-        userId,
-        date,
-        checkIn: null,
-        checkOut: null,
-        status: "absent",
-        workedHours: 0,
-      });
-    }
-  }
-
-  for (let start = 0; start < attendanceRows.length; start += 200) {
-    await prisma.attendance.createMany({
-      data: attendanceRows.slice(start, start + 200),
-      skipDuplicates: true,
+  // Prior expired terms for ~1/12 of staff (history only — does not replace running).
+  const expiredExtras = contractProfiles.filter((_, index) => (index + 1) % 12 === 0);
+  if (expiredExtras.length > 0) {
+    await prisma.contract.createMany({
+      data: expiredExtras.map((profile, index) => ({
+        code: `CON/2025/${String(index + 1).padStart(4, "0")}`,
+        employeeId: profile.id,
+        departmentId: profile.departmentId,
+        scheduleId: profile.scheduleId,
+        salaryStructureId: structureEarly.id,
+        jobTitle: profile.jobTitle,
+        wage: Number(profile.wage ?? 40000),
+        startDate: dateFromKey(daysAgo(400 + (index % 80))),
+        endDate: dateFromKey(daysAgo(45 + (index % 40))),
+        status: "expired" as const,
+        notes: "Prior term — superseded or not renewed",
+      })),
     });
   }
-  console.log(`Seeded attendance rows: ${attendanceRows.length}`);
 
+  // Demo leave rows (dates use daysAgo: negative = future; start must be ≤ end).
   const leaveSeeds = [
     {
       userId: userIds["john.cena@oddo.com"],
       code: "sick",
-      start: daysAgo(-2),
-      end: daysAgo(-1),
+      start: daysAgo(-1),
+      end: daysAgo(-2),
       remarks: "Medical checkup",
       status: "pending" as const,
       hoursAgo: 2,
@@ -639,8 +546,8 @@ async function main() {
     {
       userId: userIds["sarah.mills@oddo.com"],
       code: "paid",
-      start: daysAgo(-10),
-      end: daysAgo(-8),
+      start: daysAgo(-8),
+      end: daysAgo(-10),
       remarks: "Family vacation",
       status: "approved" as const,
       adminComment: "Approved",
@@ -716,6 +623,200 @@ async function main() {
     });
   }
 
+  // Allocations for types that require them + sync paid balances from approved leave.
+  const allocProfiles = await prisma.employeeProfile.findMany({
+    where: { organizationId: organization.id, status: { not: "inactive" } },
+    select: { id: true, userId: true },
+  });
+  const validityYear = Number(kolkataTodayKey().slice(0, 4));
+  const approvedPaidByUser = new Map<string, number>();
+  const paidLeaves = await prisma.leaveRequest.findMany({
+    where: { typeId: timeOffTypes.paid, status: "approved" },
+    select: { userId: true, duration: true },
+  });
+  for (const row of paidLeaves) {
+    approvedPaidByUser.set(
+      row.userId,
+      (approvedPaidByUser.get(row.userId) ?? 0) + Math.max(0, Number(row.duration)),
+    );
+  }
+  const paidAllocationByUser = new Map<string, string>();
+  for (const profile of allocProfiles) {
+    const taken = Math.min(20, approvedPaidByUser.get(profile.userId) ?? 0);
+    const paidAlloc = await prisma.timeOffAllocation.create({
+      data: {
+        employeeId: profile.id,
+        typeId: timeOffTypes.paid,
+        allocated: 20,
+        taken,
+        validityYear,
+        status: "approved",
+        description: "Annual paid leave",
+      },
+    });
+    paidAllocationByUser.set(profile.userId, paidAlloc.id);
+    await prisma.timeOffAllocation.create({
+      data: {
+        employeeId: profile.id,
+        typeId: timeOffTypes.comp_off,
+        allocated: 5,
+        taken: 0,
+        validityYear,
+        status: "approved",
+        description: "Comp-off bank",
+      },
+    });
+    await prisma.employeeProfile.update({
+      where: { id: profile.id },
+      data: { paidLeaveBalance: Math.max(0, 20 - taken) },
+    });
+  }
+  for (const leave of await prisma.leaveRequest.findMany({
+    where: { typeId: timeOffTypes.paid },
+    select: { id: true, userId: true },
+  })) {
+    const allocationId = paidAllocationByUser.get(leave.userId);
+    if (!allocationId) continue;
+    await prisma.leaveRequest.update({
+      where: { id: leave.id },
+      data: { allocationId },
+    });
+  }
+  console.log(`Seeded allocations for ${allocProfiles.length} staff`);
+
+  // Attendance for the current week — leave status only when an approved leave covers the day.
+  const weekKeys = weekDayKeys();
+  const todayKey = kolkataTodayKey();
+  const attendancePool = await prisma.employeeProfile.findMany({
+    where: { organizationId: organization.id, status: { not: "inactive" } },
+    select: { userId: true },
+    orderBy: { employeeId: "asc" },
+  });
+  const poolIds = attendancePool.map((row) => row.userId);
+  const poolSize = poolIds.length;
+
+  const leaveOnDay = new Map<string, Set<string>>();
+  for (const key of weekKeys) leaveOnDay.set(key, new Set());
+  const coveringLeaves = await prisma.leaveRequest.findMany({
+    where: {
+      status: "approved",
+      startDate: { lte: dateFromKey(weekKeys[weekKeys.length - 1]!) },
+      endDate: { gte: dateFromKey(weekKeys[0]!) },
+    },
+    select: { userId: true, startDate: true, endDate: true },
+  });
+  for (const leave of coveringLeaves) {
+    const start = leave.startDate.toISOString().slice(0, 10);
+    const end = leave.endDate.toISOString().slice(0, 10);
+    let cursor = dateFromKey(start);
+    const endDate = dateFromKey(end);
+    while (cursor.getTime() <= endDate.getTime()) {
+      const key = cursor.toISOString().slice(0, 10);
+      leaveOnDay.get(key)?.add(leave.userId);
+      cursor = new Date(cursor.getTime() + 86_400_000);
+    }
+  }
+
+  const weekdayFactors = [0.62, 0.84, 0.71, 0.9, 0.78];
+  const attendanceRows: {
+    userId: string;
+    date: Date;
+    checkIn: Date | null;
+    checkOut: Date | null;
+    status: "present" | "absent" | "half_day" | "leave";
+    workedHours: number | null;
+  }[] = [];
+
+  for (let dayIndex = 0; dayIndex < weekKeys.length; dayIndex += 1) {
+    const key = weekKeys[dayIndex]!;
+    const onLeave = [...(leaveOnDay.get(key) ?? [])];
+    const available = poolIds.filter((id) => !leaveOnDay.get(key)?.has(id));
+    const availableSize = available.length;
+    const utcDay = dateFromKey(key).getUTCDay();
+    const presentTarget =
+      key === todayKey
+        ? Math.max(40, Math.floor(poolSize * 0.78))
+        : utcDay === 0 || utcDay === 6
+          ? Math.max(12, Math.floor(poolSize * 0.14))
+          : Math.max(20, Math.floor(poolSize * (weekdayFactors[dayIndex] ?? 0.75)));
+    const presentCount = Math.min(presentTarget, availableSize);
+    const halfDayCount = Math.min(availableSize, Math.max(2, Math.floor(presentCount * 0.1)));
+    const presentOnly = Math.max(0, presentCount - halfDayCount);
+    const absentCount = Math.max(0, availableSize - presentOnly - halfDayCount);
+    const date = dateFromKey(key);
+
+    const offset = availableSize === 0 ? 0 : (dayIndex * 17) % availableSize;
+    const rotated =
+      availableSize === 0
+        ? []
+        : [...available.slice(offset), ...available.slice(0, offset)];
+    let cursor = 0;
+    const take = (n: number) => {
+      const slice = rotated.slice(cursor, cursor + n);
+      cursor += n;
+      return slice;
+    };
+
+    for (const userId of onLeave) {
+      attendanceRows.push({
+        userId,
+        date,
+        checkIn: null,
+        checkOut: null,
+        status: "leave",
+        workedHours: 0,
+      });
+    }
+    for (const [i, userId] of take(presentOnly).entries()) {
+      const late = i % 4 === 0;
+      const hourUtc = late ? 4 + (i % 2) : 2 + (i % 2);
+      const minute = late ? 45 + (i % 10) : 5 + (i % 40);
+      const checkIn = new Date(
+        `${key}T${String(hourUtc).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`,
+      );
+      const checkOut =
+        key === todayKey && i % 7 === 0
+          ? null
+          : new Date(`${key}T1${1 + (i % 3)}:${String(i % 50).padStart(2, "0")}:00.000Z`);
+      attendanceRows.push({
+        userId,
+        date,
+        checkIn,
+        checkOut,
+        status: "present",
+        workedHours: checkOut ? 8.5 : null,
+      });
+    }
+    for (const [i, userId] of take(halfDayCount).entries()) {
+      attendanceRows.push({
+        userId,
+        date,
+        checkIn: new Date(`${key}T03:${String(i % 30).padStart(2, "0")}:00.000Z`),
+        checkOut: new Date(`${key}T07:${String(20 + (i % 20)).padStart(2, "0")}:00.000Z`),
+        status: "half_day",
+        workedHours: 4,
+      });
+    }
+    for (const userId of take(absentCount)) {
+      attendanceRows.push({
+        userId,
+        date,
+        checkIn: null,
+        checkOut: null,
+        status: "absent",
+        workedHours: 0,
+      });
+    }
+  }
+
+  for (let start = 0; start < attendanceRows.length; start += 200) {
+    await prisma.attendance.createMany({
+      data: attendanceRows.slice(start, start + 200),
+      skipDuplicates: true,
+    });
+  }
+  console.log(`Seeded attendance rows: ${attendanceRows.length}`);
+
   const structure = structureEarly;
 
   const aaravProfile = await prisma.employeeProfile.findUnique({
@@ -783,6 +884,80 @@ async function main() {
 
   const recruitment = await seedRecruitment(prisma, organization.id);
 
+  const hrReviewer = await prisma.employeeProfile.findFirst({
+    where: { organizationId: organization.id, role: { in: ["hr_manager", "admin"] } },
+    select: { id: true, userId: true },
+  });
+  const cycle = await prisma.performanceCycle.create({
+    data: {
+      organizationId: organization.id,
+      name: "Q3 2026",
+      periodStart: dateFromKey(daysAgo(30)),
+      periodEnd: dateFromKey(daysAgo(0)),
+      status: "open",
+    },
+  });
+  const reviewEmployees = await prisma.employeeProfile.findMany({
+    where: { organizationId: organization.id, status: "active", role: "employee" },
+    select: { id: true, fullName: true },
+    orderBy: { employeeId: "asc" },
+    take: 12,
+  });
+  for (const [index, employee] of reviewEmployees.entries()) {
+    const status = index % 3 === 0 ? "submitted" : index % 3 === 1 ? "acknowledged" : "draft";
+    await prisma.performanceReview.create({
+      data: {
+        cycleId: cycle.id,
+        employeeId: employee.id,
+        reviewerId: hrReviewer?.id ?? null,
+        status,
+        overallRating: status === "draft" ? null : 3.5 + (index % 3) * 0.5,
+        summary:
+          status === "draft" ? "" : `${employee.fullName} is meeting expectations for this cycle.`,
+        employeeComments: status === "acknowledged" ? "Thanks for the feedback." : "",
+        submittedAt: status === "draft" ? null : now,
+        acknowledgedAt: status === "acknowledged" ? now : null,
+        goals: {
+          create: [
+            {
+              title: "Delivery quality",
+              description: "Ship assigned work with low rework.",
+              progress: status === "draft" ? 20 : 70 + (index % 3) * 10,
+              status: status === "draft" ? "in_progress" : "completed",
+            },
+            {
+              title: "Collaboration",
+              description: "Support cross-team handoffs.",
+              progress: status === "draft" ? 10 : 60,
+              status: "in_progress",
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  if (hrReviewer) {
+    await prisma.notification.createMany({
+      data: [
+        {
+          userId: hrReviewer.userId,
+          title: "Leave requests need review",
+          body: "Pending leave requests are waiting for a decision.",
+          category: "leave",
+          href: "/admin/people/leave",
+        },
+        {
+          userId: hrReviewer.userId,
+          title: "Payroll draft ready",
+          body: "March 2026 payrun is still in draft.",
+          category: "payroll",
+          href: "/admin/hr/payroll",
+        },
+      ],
+    });
+  }
+
   console.log("Seed complete.");
   console.log(`Admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   console.log(`Demo employees password: ${DEMO_PASSWORD}`);
@@ -791,6 +966,7 @@ async function main() {
   console.log(`On-leave today (seeded): ${leaveTodayUserIds.length}`);
   console.log(`Schedules: 3 · Contracts: ${contractProfiles.length}`);
   console.log(`Recruitment: ${recruitment.jobs} jobs · ${recruitment.candidates} candidates`);
+  console.log(`Performance reviews: ${reviewEmployees.length}`);
   console.log(`Seeded at ${now.toISOString()}`);
 }
 

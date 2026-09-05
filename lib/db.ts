@@ -6,7 +6,7 @@ const globalForPrisma = globalThis as unknown as {
   prismaGeneration?: string;
 };
 
-const PRISMA_GENERATION = "performance-copilot-v4";
+const PRISMA_GENERATION = "scale-5k-jobs-metrics-v1";
 
 function createPrismaClient() {
   const connectionString = process.env.DATABASE_URL;
@@ -17,6 +17,8 @@ function createPrismaClient() {
   const adapter = new PrismaPg({
     connectionString,
     connectionTimeoutMillis: 5_000,
+    // Scale-to-5k: allow concurrent RSC + actions; override via PG_POOL_MAX.
+    max: Number(process.env.PG_POOL_MAX || (process.env.NODE_ENV === "production" ? 20 : 10)),
   });
 
   return new PrismaClient({ adapter });

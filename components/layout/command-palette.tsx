@@ -29,7 +29,7 @@ const adminCommands: CommandEntry[] = [
   { group: "People", label: "Working Schedules", href: "/admin/people/schedules" },
   { group: "People", label: "Departments", href: "/admin/people/department" },
   { group: "People", label: "Attendance", href: "/admin/people/attendance" },
-  { group: "People", label: "Time Off Requests", href: "/admin/people/leave" },
+  { group: "People", label: "Leave Requests", href: "/admin/people/leave" },
   { group: "People", label: "Allocations", href: "/admin/people/leave/allocations" },
   { group: "People", label: "Leave Types", href: "/admin/people/leave/types" },
   { group: "Payroll", label: "Payruns", href: "/admin/hr/payroll" },

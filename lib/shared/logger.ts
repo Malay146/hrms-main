@@ -30,3 +30,29 @@ export const logger = {
     write("error", event, meta);
   },
 };
+
+/** Structured timing for hot list/dashboard actions (Scale-to-5k S0). */
+export async function withTiming<T>(
+  event: string,
+  fn: () => Promise<T>,
+  meta: Record<string, unknown> = {},
+): Promise<T> {
+  const started = performance.now();
+  try {
+    const result = await fn();
+    logger.info(event, {
+      ...meta,
+      ok: true,
+      ms: Math.round(performance.now() - started),
+    });
+    return result;
+  } catch (error) {
+    logger.error(event, {
+      ...meta,
+      ok: false,
+      ms: Math.round(performance.now() - started),
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}

@@ -7,6 +7,7 @@ import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/s
 import { createNotifications } from "@/lib/shared/notify";
 import { dateFromKey, formatDisplayDate, toDateKey } from "@/lib/shared/dates";
 import { PIE_COLORS } from "@/lib/shared/mappers";
+import { clampPage, clampPageSize, pageSkip, totalPagesFor } from "@/lib/shared/pagination";
 import type { ActionResult } from "@/lib/shared/types";
 import {
   acknowledgeReviewSchema,
@@ -126,23 +127,93 @@ async function staffOrgId(userId: string) {
   return profile;
 }
 
-export async function getPerformanceBoard(): Promise<ActionResult<PerformanceBoard>> {
+export async function getPerformanceBoard(input?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  cycleId?: string;
+  status?: string;
+  employeeSearch?: string;
+}): Promise<ActionResult<PerformanceBoard>> {
   try {
     const user = await requirePermission("managePerformance");
     const { organizationId } = await staffOrgId(user.id);
-    const [cycles, reviews, employees] = await Promise.all([
+    const page = clampPage(input?.page);
+    const pageSize = clampPageSize(input?.pageSize);
+    const search = input?.search?.trim() ?? "";
+    const employeeSearch = input?.employeeSearch?.trim() ?? "";
+    const cycleId = input?.cycleId?.trim() || undefined;
+    const statusRaw = input?.status?.trim() || "";
+    const status: PerformanceReviewStatus | undefined =
+      statusRaw === "draft" || statusRaw === "submitted" || statusRaw === "acknowledged"
+        ? statusRaw
+        : undefined;
+
+    const reviewScope: Prisma.PerformanceReviewWhereInput = {
+      cycle: {
+        organizationId,
+        ...(cycleId ? { id: cycleId } : {}),
+      },
+      ...(status ? { status } : {}),
+      ...(search
+        ? {
+            OR: [
+              { employee: { fullName: { contains: search, mode: "insensitive" as const } } },
+              { employee: { employeeId: { contains: search, mode: "insensitive" as const } } },
+              { employee: { department: { name: { contains: search, mode: "insensitive" as const } } } },
+            ],
+          }
+        : {}),
+    };
+
+    const statsScope: Prisma.PerformanceReviewWhereInput = {
+      cycle: {
+        organizationId,
+        ...(cycleId ? { id: cycleId } : {}),
+      },
+    };
+
+    const employeeWhere = {
+      organizationId,
+      role: "employee" as const,
+      status: { not: "inactive" as const },
+      ...(employeeSearch
+        ? {
+            OR: [
+              { fullName: { contains: employeeSearch, mode: "insensitive" as const } },
+              { employeeId: { contains: employeeSearch, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
+
+    const [
+      cycles,
+      total,
+      reviews,
+      employees,
+      statusGroups,
+      ratingAgg,
+      ratingRows,
+      goalCount,
+      goalsOnTrack,
+    ] = await Promise.all([
       prisma.performanceCycle.findMany({
         where: { organizationId },
         include: { _count: { select: { reviews: true } } },
         orderBy: { periodStart: "desc" },
+        take: 50,
       }),
+      prisma.performanceReview.count({ where: reviewScope }),
       prisma.performanceReview.findMany({
-        where: { cycle: { organizationId } },
+        where: reviewScope,
         include: reviewInclude,
         orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+        skip: pageSkip(page, pageSize),
+        take: pageSize,
       }),
       prisma.employeeProfile.findMany({
-        where: { organizationId, role: "employee", status: { not: "inactive" } },
+        where: employeeWhere,
         select: {
           id: true,
           fullName: true,
@@ -150,23 +221,43 @@ export async function getPerformanceBoard(): Promise<ActionResult<PerformanceBoa
           department: { select: { name: true } },
         },
         orderBy: { fullName: "asc" },
+        take: 40,
+      }),
+      prisma.performanceReview.groupBy({
+        by: ["status"],
+        where: statsScope,
+        _count: { _all: true },
+      }),
+      prisma.performanceReview.aggregate({
+        where: { ...statsScope, overallRating: { not: null } },
+        _avg: { overallRating: true },
+      }),
+      prisma.performanceReview.findMany({
+        where: { ...statsScope, overallRating: { not: null } },
+        select: { overallRating: true },
+      }),
+      prisma.performanceGoal.count({
+        where: { review: statsScope },
+      }),
+      prisma.performanceGoal.count({
+        where: { progress: { gte: 50 }, review: statsScope },
       }),
     ]);
 
-    const mapped = reviews.map(mapReview);
-    const rated = mapped.filter((row) => row.overallRating != null);
+    const statusCount = Object.fromEntries(
+      statusGroups.map((row) => [row.status, row._count._all]),
+    ) as Partial<Record<PerformanceReviewStatus, number>>;
+
+    const avgRaw = ratingAgg._avg.overallRating;
     const avgRating =
-      rated.length === 0
-        ? null
-        : Math.round((rated.reduce((sum, row) => sum + (row.overallRating ?? 0), 0) / rated.length) * 10) / 10;
-    const goalCount = mapped.reduce((sum, row) => sum + row.goals.length, 0);
-    const goalsOnTrack = mapped.reduce((sum, row) => sum + row.goalsOnTrack, 0);
+      avgRaw == null ? null : Math.round(Number(avgRaw) * 10) / 10;
+
     const buckets = [0, 0, 0, 0, 0];
-    for (const row of rated) {
-      const slot = Math.min(4, Math.max(0, Math.round(row.overallRating ?? 1) - 1));
+    for (const row of ratingRows) {
+      const slot = Math.min(4, Math.max(0, Math.round(Number(row.overallRating ?? 1)) - 1));
       buckets[slot] += 1;
     }
-    const ratedCount = rated.length;
+    const ratedCount = ratingRows.length;
     const ratingDistribution = buckets.map((value, index) => ({
       name: `${index + 1} star`,
       value,
@@ -186,18 +277,22 @@ export async function getPerformanceBoard(): Promise<ActionResult<PerformanceBoa
           status: cycle.status,
           reviewCount: cycle._count.reviews,
         })),
-        reviews: mapped,
+        reviews: reviews.map(mapReview),
         employees: employees.map((row) => ({
           id: row.id,
           name: row.fullName,
           employeeId: row.employeeId,
           department: row.department.name,
         })),
+        page,
+        pageSize,
+        total,
+        totalPages: totalPagesFor(total, pageSize),
         stats: {
           avgRating,
-          pendingReviews: mapped.filter((row) => row.status === "draft").length,
-          submittedReviews: mapped.filter((row) => row.status === "submitted").length,
-          acknowledgedReviews: mapped.filter((row) => row.status === "acknowledged").length,
+          pendingReviews: statusCount.draft ?? 0,
+          submittedReviews: statusCount.submitted ?? 0,
+          acknowledgedReviews: statusCount.acknowledged ?? 0,
           goalsOnTrack,
           goalCount,
         },

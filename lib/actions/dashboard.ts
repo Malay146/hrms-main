@@ -18,6 +18,7 @@ import {
   workingHours,
 } from "@/lib/shared/dates";
 import type { ActionResult, DashboardStats, EmployeeDashboardData } from "@/lib/shared/types";
+import { withTiming } from "@/lib/shared/logger";
 
 type AdminDashboardSnapshot = Omit<DashboardStats, "firstName" | "greeting" | "todayLabel">;
 
@@ -40,7 +41,8 @@ async function loadAdminDashboardSnapshot(
 
   const [
     totalEmployees,
-    presentToday,
+    todayRollup,
+    presentTodayCount,
     leaveToday,
     pendingApprovals,
     weeklyGroups,
@@ -51,6 +53,9 @@ async function loadAdminDashboardSnapshot(
     reviewStatusGroups,
   ] = await Promise.all([
     prisma.employeeProfile.count({ where: orgProfile }),
+    prisma.attendanceDailyRollup.findUnique({
+      where: { organizationId_date: { organizationId, date: todayDate } },
+    }),
     prisma.attendance.count({
       where: {
         date: todayDate,
@@ -119,6 +124,10 @@ async function loadAdminDashboardSnapshot(
         })
       : Promise.resolve([] as { status: string; _count: { _all: number } }[]),
   ]);
+
+  const presentToday = todayRollup
+    ? todayRollup.presentCount + todayRollup.halfDayCount
+    : presentTodayCount;
 
   const weekByDate = new Map(
     weeklyGroups.map((row) => [row.date.toISOString().slice(0, 10), row._count._all]),
@@ -198,6 +207,7 @@ const getCachedAdminDashboardSnapshot = unstable_cache(
 );
 
 export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>> {
+  return withTiming("timing.admin_dashboard", async () => {
   try {
     const admin = await requirePermission("viewAdminDashboard");
     const today = kolkataTodayKey();
@@ -229,6 +239,7 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load dashboard.") };
   }
+  });
 }
 
 export async function getEmployeeDashboard(): Promise<ActionResult<EmployeeDashboardData>> {

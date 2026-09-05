@@ -1,4 +1,4 @@
-import Dashboard from "@/components/section/dashboard";
+import { DashboardLazy } from "@/components/section/dashboard-lazy";
 import { getAdminDashboard } from "@/lib/actions/dashboard";
 import { getPayrollDashboard } from "@/lib/actions/payroll/payroll-dashboard";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -42,7 +42,7 @@ export default async function AdminPage({
       : Promise.resolve({ ok: false as const, error: "Not signed in" }),
   ]);
   return (
-    <Dashboard
+    <DashboardLazy
       stats={result.ok ? result.data : emptyStats}
       payroll={payroll.ok ? payroll.data : undefined}
       filters={{

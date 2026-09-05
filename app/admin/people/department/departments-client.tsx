@@ -4,28 +4,17 @@ import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { Pencil, Plus, Search, Trash2, Users } from "lucide-react";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { Modal } from "@/components/ui/modal";
+import { ListPagination } from "@/components/ui/list-pagination";
 import { toast } from "sonner";
 import {
   createDepartmentAction,
   deleteDepartmentAction,
+  listDepartmentMembers,
   moveEmployeeDepartmentAction,
   renameDepartmentAction,
   type DepartmentListItem,
+  type DepartmentMember,
 } from "@/lib/actions/people/departments";
-
-type MemberSort = "name-asc" | "name-desc" | "title-asc";
-
-function remapDepartmentMembers(
-  dept: DepartmentListItem,
-  members: DepartmentListItem["members"],
-): DepartmentListItem {
-  return {
-    ...dept,
-    members,
-    employeeCount: members.length,
-    managerName: members[0]?.name ?? "—",
-  };
-}
 
 export function DepartmentsClient({
   initialDepartments,
@@ -35,8 +24,11 @@ export function DepartmentsClient({
   const [departments, setDepartments] = useState(initialDepartments);
   const [search, setSearch] = useState("");
   const [memberSearch, setMemberSearch] = useState("");
-  const [memberSort, setMemberSort] = useState<MemberSort>("name-asc");
-  const [memberRole, setMemberRole] = useState("all");
+  const [memberPage, setMemberPage] = useState(1);
+  const [memberTotal, setMemberTotal] = useState(0);
+  const [memberTotalPages, setMemberTotalPages] = useState(1);
+  const [sheetMembers, setSheetMembers] = useState<DepartmentMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
   const [selected, setSelected] = useState<DepartmentListItem | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [renameTarget, setRenameTarget] = useState<DepartmentListItem | null>(null);
@@ -54,49 +46,52 @@ export function DepartmentsClient({
     );
   }, [departments, search]);
 
-  const memberRoles = useMemo(() => {
-    if (!selected) return [];
-    return Array.from(new Set(selected.members.map((m) => m.jobTitle).filter(Boolean))).sort(
-      (a, b) => a.localeCompare(b),
-    );
-  }, [selected]);
-
-  const filteredMembers = useMemo(() => {
-    if (!selected) return [];
-    const q = memberSearch.trim().toLowerCase();
-    let list = selected.members.filter((member) => {
-      if (memberRole !== "all" && member.jobTitle !== memberRole) return false;
-      if (!q) return true;
-      return (
-        member.name.toLowerCase().includes(q) ||
-        member.jobTitle.toLowerCase().includes(q) ||
-        member.employeeId.toLowerCase().includes(q) ||
-        member.email.toLowerCase().includes(q)
-      );
-    });
-    list = [...list].sort((a, b) => {
-      if (memberSort === "name-desc") return b.name.localeCompare(a.name);
-      if (memberSort === "title-asc") {
-        const byTitle = a.jobTitle.localeCompare(b.jobTitle);
-        return byTitle !== 0 ? byTitle : a.name.localeCompare(b.name);
-      }
-      return a.name.localeCompare(b.name);
-    });
-    return list;
-  }, [selected, memberSearch, memberSort, memberRole]);
-
   const moveTargets = useMemo(() => {
     if (!selected) return [];
     return departments.filter((dept) => dept.id !== selected.id);
   }, [departments, selected]);
 
+  async function loadMembers(departmentId: string, page: number, q: string) {
+    setMembersLoading(true);
+    const result = await listDepartmentMembers({
+      departmentId,
+      page,
+      pageSize: 20,
+      search: q || undefined,
+    });
+    setMembersLoading(false);
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+    setSheetMembers(result.data.rows);
+    setMemberPage(result.data.page);
+    setMemberTotal(result.data.total);
+    setMemberTotalPages(result.data.totalPages);
+  }
+
   useEffect(() => {
     if (!selected) {
       setMemberSearch("");
-      setMemberSort("name-asc");
-      setMemberRole("all");
+      setMemberPage(1);
+      setSheetMembers([]);
+      return;
     }
-  }, [selected]);
+    const handle = window.setTimeout(() => {
+      void loadMembers(selected.id, 1, memberSearch);
+    }, 250);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce search / open
+  }, [selected?.id, memberSearch]);
+
+  function openDepartment(dept: DepartmentListItem) {
+    setSelected(dept);
+    setMemberSearch("");
+    setSheetMembers(dept.members);
+    setMemberTotal(dept.employeeCount);
+    setMemberTotalPages(Math.max(1, Math.ceil(dept.employeeCount / 20)));
+    setMemberPage(1);
+  }
 
   function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -158,7 +153,7 @@ export function DepartmentsClient({
   }
 
   function handleMoveEmployee(employeeId: string, departmentId: string) {
-    if (!departmentId) return;
+    if (!departmentId || !selected) return;
     startTransition(async () => {
       const result = await moveEmployeeDepartmentAction({ employeeId, departmentId });
       if (!result.ok) {
@@ -171,33 +166,34 @@ export function DepartmentsClient({
       setDepartments((prev) =>
         prev.map((dept) => {
           if (dept.id === fromDepartmentId) {
-            return remapDepartmentMembers(
-              dept,
-              dept.members.filter((row) => row.employeeId !== member.employeeId),
-            );
+            return {
+              ...dept,
+              employeeCount: Math.max(0, dept.employeeCount - 1),
+              members: dept.members.filter((row) => row.employeeId !== member.employeeId),
+            };
           }
           if (dept.id === toDepartmentId) {
-            const members = [...dept.members, member].sort((a, b) =>
-              a.name.localeCompare(b.name),
-            );
-            return remapDepartmentMembers(dept, members);
+            const members = [...dept.members, member]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .slice(0, 5);
+            return {
+              ...dept,
+              employeeCount: dept.employeeCount + 1,
+              members,
+            };
           }
           return dept;
         }),
       );
-      setSelected((prev) => {
-        if (!prev || prev.id !== fromDepartmentId) return prev;
-        return remapDepartmentMembers(
-          prev,
-          prev.members.filter((row) => row.employeeId !== member.employeeId),
-        );
-      });
+      setSelected((prev) =>
+        prev && prev.id === fromDepartmentId
+          ? { ...prev, employeeCount: Math.max(0, prev.employeeCount - 1) }
+          : prev,
+      );
+      void loadMembers(fromDepartmentId, memberPage, memberSearch);
       toast.success(`Moved ${member.name} to ${targetName}.`);
     });
   }
-
-  const compactSelectClass =
-    "h-7 max-w-[7.5rem] px-1.5 border border-border rounded-md text-[11px] font-medium text-zinc-600 bg-surface focus:outline-none focus:border-border-strong";
 
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
@@ -241,7 +237,7 @@ export function DepartmentsClient({
             >
               <button
                 type="button"
-                onClick={() => setSelected(dept)}
+                onClick={() => openDepartment(dept)}
                 className="cursor-pointer w-full text-left"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -303,47 +299,24 @@ export function DepartmentsClient({
       >
         {selected ? (
           <div className="flex flex-col gap-3 text-left">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-2 top-1.5 size-3.5 text-zinc-400 pointer-events-none" />
-                <input
-                  value={memberSearch}
-                  onChange={(e) => setMemberSearch(e.target.value)}
-                  placeholder="Search people…"
-                  className="w-full h-7 pl-7 pr-2 border border-border rounded-md text-[11px] bg-surface focus:outline-none focus:border-border-strong"
-                />
-              </div>
-              <select
-                aria-label="Sort members"
-                value={memberSort}
-                onChange={(e) => setMemberSort(e.target.value as MemberSort)}
-                className={compactSelectClass}
-              >
-                <option value="name-asc">A–Z</option>
-                <option value="name-desc">Z–A</option>
-                <option value="title-asc">Title</option>
-              </select>
-              <select
-                aria-label="Filter by title"
-                value={memberRole}
-                onChange={(e) => setMemberRole(e.target.value)}
-                className={compactSelectClass}
-              >
-                <option value="all">All titles</option>
-                {memberRoles.map((title) => (
-                  <option key={title} value={title}>
-                    {title}
-                  </option>
-                ))}
-              </select>
+            <div className="relative">
+              <Search className="absolute left-2 top-1.5 size-3.5 text-zinc-400 pointer-events-none" />
+              <input
+                value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)}
+                placeholder="Search people…"
+                className="w-full h-7 pl-7 pr-2 border border-border rounded-md text-[11px] bg-surface focus:outline-none focus:border-border-strong"
+              />
             </div>
             <div className="flex flex-col gap-2 max-h-[480px] overflow-y-auto pr-1">
-              {selected.members.length === 0 ? (
-                <p className="text-sm text-zinc-500">No members assigned yet.</p>
-              ) : filteredMembers.length === 0 ? (
-                <p className="text-sm text-zinc-500">No people match these filters.</p>
+              {membersLoading && sheetMembers.length === 0 ? (
+                <p className="text-sm text-zinc-500">Loading members…</p>
+              ) : sheetMembers.length === 0 ? (
+                <p className="text-sm text-zinc-500">
+                  {memberSearch.trim() ? "No people match these filters." : "No members assigned yet."}
+                </p>
               ) : (
-                filteredMembers.map((member) => (
+                sheetMembers.map((member) => (
                   <div
                     key={member.employeeId}
                     className="flex items-center gap-3 border border-border rounded-lg px-3 py-2"
@@ -361,7 +334,7 @@ export function DepartmentsClient({
                       aria-label={`Move ${member.name}`}
                       disabled={pending || moveTargets.length === 0}
                       defaultValue=""
-                      key={`${member.employeeId}-${selected.id}-${selected.employeeCount}`}
+                      key={`${member.employeeId}-${selected.id}-${memberTotal}`}
                       onChange={(e) => {
                         const nextDept = e.target.value;
                         e.target.value = "";
@@ -382,6 +355,15 @@ export function DepartmentsClient({
                 ))
               )}
             </div>
+            <ListPagination
+              page={memberPage}
+              totalPages={memberTotalPages}
+              total={memberTotal}
+              pageItemCount={sheetMembers.length}
+              onPageChange={(nextPage) => {
+                void loadMembers(selected.id, nextPage, memberSearch);
+              }}
+            />
           </div>
         ) : null}
       </Modal>
