@@ -1,10 +1,18 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
 import { remaining } from "@/lib/people/time-off-balance";
 import { firstZodError } from "@/lib/shared/validations";
+import {
+  clampPage,
+  clampPageSize,
+  pageSkip,
+  totalPagesFor,
+  type PagedResult,
+} from "@/lib/shared/pagination";
 import { z } from "zod";
 import type { ActionResult } from "@/lib/shared/types";
 
@@ -22,6 +30,8 @@ export type AllocationListItem = {
   status: "draft" | "approved" | "refused";
   description: string | null;
 };
+
+export type AllocationListResult = PagedResult<AllocationListItem>;
 
 const upsertAllocationSchema = z.object({
   id: z.string().optional(),
@@ -62,22 +72,77 @@ function mapAllocation(row: {
   };
 }
 
+const allocationInclude = {
+  employee: { select: { employeeId: true, fullName: true } },
+  type: { select: { name: true } },
+} as const;
+
+function revalidateAllocations() {
+  revalidatePath("/admin/people/leave/allocations");
+  revalidateTag("leave", "max");
+}
+
 export async function listAllocations(filters?: {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+  search?: string;
   employeeCode?: string | null;
-}): Promise<ActionResult<AllocationListItem[]>> {
+}): Promise<ActionResult<AllocationListResult>> {
   try {
     await requirePermission("approveLeave");
-    const rows = await prisma.timeOffAllocation.findMany({
-      where: filters?.employeeCode
-        ? { employee: { employeeId: filters.employeeCode } }
-        : undefined,
-      include: {
-        employee: { select: { employeeId: true, fullName: true } },
-        type: { select: { name: true } },
+    const page = clampPage(filters?.page);
+    const pageSize = clampPageSize(filters?.pageSize);
+    const search = filters?.search?.trim() ?? "";
+    const statusRaw = filters?.status?.trim().toLowerCase() ?? "";
+
+    const andFilters: Prisma.TimeOffAllocationWhereInput[] = [];
+    if (filters?.employeeCode) {
+      andFilters.push({ employee: { employeeId: filters.employeeCode } });
+    }
+    if (statusRaw && statusRaw !== "all") {
+      if (statusRaw === "draft" || statusRaw === "approved" || statusRaw === "refused") {
+        andFilters.push({ status: statusRaw });
+      }
+    }
+    if (search) {
+      andFilters.push({
+        OR: [
+          { employee: { fullName: { contains: search, mode: "insensitive" } } },
+          { employee: { employeeId: { contains: search, mode: "insensitive" } } },
+          { type: { name: { contains: search, mode: "insensitive" } } },
+        ],
+      });
+    }
+
+    const where: Prisma.TimeOffAllocationWhereInput | undefined =
+      andFilters.length === 0
+        ? undefined
+        : andFilters.length === 1
+          ? andFilters[0]
+          : { AND: andFilters };
+
+    const [total, rows] = await Promise.all([
+      prisma.timeOffAllocation.count({ where }),
+      prisma.timeOffAllocation.findMany({
+        where,
+        include: allocationInclude,
+        orderBy: [{ validityYear: "desc" }, { createdAt: "desc" }],
+        skip: pageSkip(page, pageSize),
+        take: pageSize,
+      }),
+    ]);
+
+    return {
+      ok: true,
+      data: {
+        rows: rows.map(mapAllocation),
+        page,
+        pageSize,
+        total,
+        totalPages: totalPagesFor(total, pageSize),
       },
-      orderBy: [{ validityYear: "desc" }, { createdAt: "desc" }],
-    });
-    return { ok: true, data: rows.map(mapAllocation) };
+    };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load allocations.") };
   }
@@ -106,10 +171,7 @@ export async function upsertAllocationAction(input: {
             validityYear: parsed.data.validityYear,
             description: parsed.data.description?.trim() || null,
           },
-          include: {
-            employee: { select: { employeeId: true, fullName: true } },
-            type: { select: { name: true } },
-          },
+          include: allocationInclude,
         })
       : await prisma.timeOffAllocation.create({
           data: {
@@ -120,13 +182,10 @@ export async function upsertAllocationAction(input: {
             description: parsed.data.description?.trim() || null,
             status: "draft",
           },
-          include: {
-            employee: { select: { employeeId: true, fullName: true } },
-            type: { select: { name: true } },
-          },
+          include: allocationInclude,
         });
 
-    revalidatePath("/admin/people/leave/allocations");
+    revalidateAllocations();
     return { ok: true, data: mapAllocation(row) };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not save allocation.") };
@@ -142,12 +201,9 @@ export async function decideAllocationAction(input: {
     const row = await prisma.timeOffAllocation.update({
       where: { id: input.id },
       data: { status: input.decision },
-      include: {
-        employee: { select: { employeeId: true, fullName: true } },
-        type: { select: { name: true } },
-      },
+      include: allocationInclude,
     });
-    revalidatePath("/admin/people/leave/allocations");
+    revalidateAllocations();
     return { ok: true, data: mapAllocation(row) };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not update allocation.") };

@@ -1,9 +1,9 @@
 # HRMS Performance & Optimization Plan
 
 **Date:** 2026-09-05  
-**Status:** Plan only (not yet implemented)  
+**Status:** Partially implemented (P0–P2 core landed 2026-09-05)  
 **Audience:** Engineers implementing speedups across admin/employee App Router surfaces  
-**Related:** Employees already use server pagination + one `unstable_cache` path; TanStack Query and Zustand are in `package.json` but unused.
+**Related:** Employees already use server pagination + one `unstable_cache` path; TanStack Query is wired via `QueryProvider` in AppChrome.
 
 ---
 

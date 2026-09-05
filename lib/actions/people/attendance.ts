@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
@@ -11,6 +11,7 @@ import {
   dateFromKey,
   formatDisplayTime,
   formatHours,
+  isLateCheckIn,
   kolkataTodayKey,
   LATE_AFTER_MINUTES,
   minutesSinceMidnightKolkata,
@@ -19,10 +20,11 @@ import {
 } from "@/lib/shared/dates";
 import { createNotifications, staffUserIds } from "@/lib/shared/notify";
 import { firstZodError } from "@/lib/shared/validations";
+import { clampPage, clampPageSize, pageSkip, totalPagesFor } from "@/lib/shared/pagination";
 import { z } from "zod";
 import type { ActionResult, AttendanceLogItem, AttendanceStatus } from "@/lib/shared/types";
 
-const attendanceInclude = {
+const attendanceListInclude = {
   user: {
     select: {
       email: true,
@@ -43,6 +45,9 @@ const attendanceInclude = {
     },
   },
 } as const;
+
+/** Detail/edit still needs schedule; list uses the same include for late metrics on one page. */
+const attendanceInclude = attendanceListInclude;
 
 const upsertAttendanceSchema = z.object({
   id: z.string().optional(),
@@ -91,19 +96,145 @@ function parseOptionalDateTime(value: string | null | undefined, dateKey: string
   return new Date(value);
 }
 
-export async function listAttendanceLogs(filters?: {
+export type AttendanceListQuery = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  from?: string;
+  to?: string;
   employeeCode?: string | null;
-}): Promise<ActionResult<AttendanceLogItem[]>> {
+};
+
+export type AttendanceListResult = {
+  logs: AttendanceLogItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  from: string;
+  to: string;
+  stats: {
+    present: number;
+    late: number;
+    leave: number;
+    absent: number;
+  };
+};
+
+function defaultAttendanceWindow() {
+  const keys = weekDayKeys();
+  return { from: keys[0], to: keys[keys.length - 1] };
+}
+
+function attendanceStatusWhere(status?: string): Prisma.AttendanceWhereInput | undefined {
+  if (!status || status === "All") return undefined;
+  const key = status.toLowerCase();
+  if (key === "late") return { status: "present" };
+  if (key === "present") return { status: { in: ["present", "half_day"] } };
+  if (key === "half day" || key === "half_day") return { status: "half_day" };
+  if (key === "leave") return { status: "leave" };
+  if (key === "absent") return { status: "absent" };
+  return undefined;
+}
+
+export async function listAttendanceLogs(
+  filters?: AttendanceListQuery,
+): Promise<ActionResult<AttendanceListResult>> {
   try {
     await requirePermission("managePeople");
-    const rows = await prisma.attendance.findMany({
-      where: filters?.employeeCode
-        ? { user: { profile: { employeeId: filters.employeeCode } } }
-        : undefined,
-      include: attendanceInclude,
-      orderBy: [{ date: "desc" }, { checkIn: "asc" }],
-    });
-    return { ok: true, data: rows.map((row) => mapAttendance(row)) };
+    const window = defaultAttendanceWindow();
+    const from = filters?.from || window.from;
+    const to = filters?.to || window.to;
+    const page = clampPage(filters?.page);
+    const pageSize = clampPageSize(filters?.pageSize);
+    const search = filters?.search?.trim() ?? "";
+    const statusFilter = filters?.status?.trim() || "All";
+    const lateOnly = statusFilter.toLowerCase() === "late";
+
+    const andUser: Prisma.UserWhereInput[] = [];
+    if (filters?.employeeCode) {
+      andUser.push({ profile: { employeeId: filters.employeeCode } });
+    }
+    if (search) {
+      andUser.push({
+        OR: [
+          { email: { contains: search, mode: "insensitive" } },
+          { profile: { fullName: { contains: search, mode: "insensitive" } } },
+          { profile: { employeeId: { contains: search, mode: "insensitive" } } },
+        ],
+      });
+    }
+    const userWhere: Prisma.UserWhereInput | undefined =
+      andUser.length === 0 ? undefined : andUser.length === 1 ? andUser[0] : { AND: andUser };
+
+    const baseWhere: Prisma.AttendanceWhereInput = {
+      date: { gte: dateFromKey(from), lte: dateFromKey(to) },
+      ...(userWhere ? { user: userWhere } : {}),
+      ...(lateOnly ? { status: "present", checkIn: { not: null } } : attendanceStatusWhere(statusFilter)),
+    };
+
+    const [statusGroups, lateProbe] = await Promise.all([
+      prisma.attendance.groupBy({
+        by: ["status"],
+        where: {
+          date: { gte: dateFromKey(from), lte: dateFromKey(to) },
+          ...(filters?.employeeCode
+            ? { user: { profile: { employeeId: filters.employeeCode } } }
+            : {}),
+        },
+        _count: { _all: true },
+      }),
+      prisma.attendance.findMany({
+        where: {
+          date: { gte: dateFromKey(from), lte: dateFromKey(to) },
+          status: "present",
+          checkIn: { not: null },
+          ...(filters?.employeeCode
+            ? { user: { profile: { employeeId: filters.employeeCode } } }
+            : {}),
+        },
+        select: { id: true, checkIn: true },
+        take: 8000,
+      }),
+    ]);
+
+    const lateIds = lateProbe.filter((row) => isLateCheckIn(row.checkIn)).map((row) => row.id);
+    const late = lateIds.length;
+    const countByStatus = new Map(statusGroups.map((row) => [row.status, row._count._all]));
+    const present =
+      (countByStatus.get("present") ?? 0) + (countByStatus.get("half_day") ?? 0);
+    const leave = countByStatus.get("leave") ?? 0;
+    const absent = countByStatus.get("absent") ?? 0;
+
+    const where: Prisma.AttendanceWhereInput = lateOnly
+      ? { ...baseWhere, id: { in: lateIds.length ? lateIds : ["__none__"] } }
+      : baseWhere;
+
+    const [total, rows] = await Promise.all([
+      lateOnly ? Promise.resolve(late) : prisma.attendance.count({ where }),
+      prisma.attendance.findMany({
+        where,
+        include: attendanceInclude,
+        orderBy: [{ date: "desc" }, { checkIn: "asc" }],
+        skip: pageSkip(page, pageSize),
+        take: pageSize,
+      }),
+    ]);
+
+    return {
+      ok: true,
+      data: {
+        logs: rows.map((row) => mapAttendance(row)),
+        page,
+        pageSize,
+        total,
+        totalPages: totalPagesFor(total, pageSize),
+        from,
+        to,
+        stats: { present, late, leave, absent },
+      },
+    };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load attendance.") };
   }
@@ -128,10 +259,15 @@ export async function getAttendanceAction(
 export async function listMyAttendance(): Promise<ActionResult<AttendanceLogItem[]>> {
   try {
     const user = await requireUser();
+    const keys = weekDayKeys();
     const rows = await prisma.attendance.findMany({
-      where: { userId: user.id },
+      where: {
+        userId: user.id,
+        date: { gte: dateFromKey(keys[0]), lte: dateFromKey(keys[keys.length - 1]) },
+      },
       include: attendanceInclude,
       orderBy: { date: "desc" },
+      take: 60,
     });
     return { ok: true, data: rows.map((row) => mapAttendance(row)) };
   } catch (error) {
@@ -223,6 +359,7 @@ export async function upsertAttendanceAction(input: {
     revalidatePath("/admin/people/attendance");
     revalidatePath("/employee/attendance");
     revalidatePath("/admin");
+    revalidateTag("attendance", "max");
     return { ok: true, data: mapAttendance(saved) };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not save attendance.") };
@@ -278,6 +415,7 @@ export async function clockInAction(): Promise<ActionResult<{ checkIn: string }>
     revalidatePath("/employee/attendance");
     revalidatePath("/admin");
     revalidatePath("/admin/people/attendance");
+    revalidateTag("attendance", "max");
     return { ok: true, data: { checkIn: formatDisplayTime(checkIn) } };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -335,6 +473,7 @@ export async function clockOutAction(): Promise<
     revalidatePath("/employee");
     revalidatePath("/employee/attendance");
     revalidatePath("/admin/people/attendance");
+    revalidateTag("attendance", "max");
     return {
       ok: true,
       data: { checkOut: formatDisplayTime(checkOut), hours: formatHours(hours) },
@@ -362,14 +501,27 @@ export async function weeklyAttendanceCounts() {
   }));
 }
 
-export async function listAttendanceEmployees(): Promise<
-  ActionResult<{ userId: string; employeeId: string; name: string }[]>
-> {
+export async function listAttendanceEmployees(input?: {
+  search?: string;
+}): Promise<ActionResult<{ userId: string; employeeId: string; name: string }[]>> {
   try {
     await requirePermission("managePeople");
+    const search = input?.search?.trim() ?? "";
     const rows = await prisma.employeeProfile.findMany({
+      where: {
+        status: { not: "inactive" },
+        ...(search
+          ? {
+              OR: [
+                { fullName: { contains: search, mode: "insensitive" } },
+                { employeeId: { contains: search, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
       select: { userId: true, employeeId: true, fullName: true },
       orderBy: { fullName: "asc" },
+      take: 40,
     });
     return {
       ok: true,

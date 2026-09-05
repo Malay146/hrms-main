@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef, useTransition } from "react";
+import React, { useState, useEffect, useRef, useTransition } from "react";
 import {
   Plus,
   Search,
@@ -14,6 +14,7 @@ import {
   Activity as ActivityIcon,
   FilterX,
 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
 import { cn } from "@/utils/cn";
 import { PersonAvatar } from "@/components/ui/person-avatar";
@@ -21,7 +22,7 @@ import { Modal } from "@/components/ui/modal";
 import { DatePicker } from "@/components/ui/date-picker";
 import { toast } from "sonner";
 import { PieChartTooltip, chartTooltipWrapperStyle } from "@/components/charts/chart-tooltip";
-import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
+import { ListPagination } from "@/components/ui/list-pagination";
 import {
   createJobOpeningAction,
   moveCandidateStageAction,
@@ -44,9 +45,13 @@ const KANBAN_PREVIEW = 2;
 
 export default function RecruitmentClient({
   initialBoard,
+  query,
 }: {
   initialBoard: RecruitmentBoard;
+  query: { q: string; stage: string; position: string; page: number };
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [board, setBoard] = useState(initialBoard);
   const [pipeline, setPipeline] = useState(initialBoard.pipeline);
@@ -54,10 +59,48 @@ export default function RecruitmentClient({
   const [applicants, setApplicants] = useState(initialBoard.candidates);
   const [kanbanExpanded, setKanbanExpanded] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [search, setSearch] = useState("");
-  const [selectedPosition, setSelectedPosition] = useState("All");
-  const [selectedStage, setSelectedStage] = useState("All");
+  const [search, setSearch] = useState(query.q);
+  const [selectedPosition, setSelectedPosition] = useState(query.position || "All");
+  const [selectedStage, setSelectedStage] = useState(query.stage || "All");
   const [selectedExp, setSelectedExp] = useState("All");
+
+  useEffect(() => {
+    setBoard(initialBoard);
+    setPipeline(initialBoard.pipeline);
+    setJobs(initialBoard.jobs);
+    setApplicants(initialBoard.candidates);
+  }, [initialBoard]);
+
+  useEffect(() => {
+    setSearch(query.q);
+    setSelectedPosition(query.position || "All");
+    setSelectedStage(query.stage || "All");
+  }, [query.q, query.position, query.stage]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      if (search === query.q) return;
+      pushApplicantQuery({ q: search, page: 1 });
+    }, 250);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  function pushApplicantQuery(patch: Partial<{ q: string; stage: string; position: string; page: number }>) {
+    const params = new URLSearchParams();
+    const next = {
+      q: patch.q ?? search,
+      stage: patch.stage ?? selectedStage,
+      position: patch.position ?? selectedPosition,
+      page: patch.page ?? query.page,
+    };
+    if (next.q.trim()) params.set("q", next.q.trim());
+    if (next.stage && next.stage !== "All") params.set("stage", next.stage);
+    if (next.position && next.position !== "All") params.set("position", next.position);
+    if (next.page > 1) params.set("page", String(next.page));
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }
 
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [activeKanbanMenuId, setActiveKanbanMenuId] = useState<string | null>(
@@ -318,46 +361,22 @@ export default function RecruitmentClient({
     (stage) => (pipeline[stage]?.length ?? 0) > KANBAN_PREVIEW,
   );
 
-  // Filter Logic
-  const filteredApplicants = useMemo(
-    () =>
-      applicants.filter((app) => {
-        const matchesSearch =
-          app.name.toLowerCase().includes(search.toLowerCase()) ||
-          app.id.toLowerCase().includes(search.toLowerCase()) ||
-          app.code.toLowerCase().includes(search.toLowerCase());
+  const pagedApplicants =
+    selectedExp === "All"
+      ? applicants
+      : applicants.filter((app) => app.exp.includes(selectedExp));
+  const applicantPage = board.applicantsPage;
+  const applicantTotalPages = board.applicantsTotalPages;
+  const applicantTotal = board.applicantsTotal;
 
-        const matchesPosition =
-          selectedPosition === "All" || app.position === selectedPosition;
-        const matchesStage = selectedStage === "All" || app.stage === selectedStage;
-        const matchesExp = selectedExp === "All" || app.exp.includes(selectedExp);
-
-        return matchesSearch && matchesPosition && matchesStage && matchesExp;
-      }),
-    [applicants, search, selectedPosition, selectedStage, selectedExp],
-  );
-
-  const {
-    page: applicantPage,
-    setPage: setApplicantPage,
-    totalPages: applicantTotalPages,
-    total: applicantTotal,
-    pageItems: pagedApplicants,
-  } = useClientPagination(
-    filteredApplicants,
-    15,
-    `${search}|${selectedPosition}|${selectedStage}|${selectedExp}`,
-  );
-
-  // Clear Filters
   const handleClearFilters = () => {
     setSearch("");
     setSelectedPosition("All");
     setSelectedStage("All");
     setSelectedExp("All");
+    pushApplicantQuery({ q: "", stage: "All", position: "All", page: 1 });
   };
 
-  // Stage Badge Style Helper
   const getStageBadgeClass = (stage: string) => {
     switch (stage) {
       case "Hired":
@@ -377,7 +396,7 @@ export default function RecruitmentClient({
 
   const positions = [
     "All",
-    ...Array.from(new Set(applicants.map((app) => app.position))).sort(),
+    ...Array.from(new Set(jobs.map((job) => job.title))).sort(),
   ];
   const stages = ["All", ...PIPELINE_STAGES];
   const expLevels = [
@@ -389,20 +408,8 @@ export default function RecruitmentClient({
   const sourceData = board.sourceData;
   const recruitmentActivities = board.activities;
 
-  const reachedScreening = applicants.filter((app) =>
-    ["Screening", "Interview", "Technical", "Offer", "Hired"].includes(app.stage),
-  ).length;
-  const reachedOffer = applicants.filter((app) =>
-    ["Offer", "Hired"].includes(app.stage),
-  ).length;
-  const appliedToScreeningPct =
-    applicants.length === 0
-      ? 0
-      : Math.round((reachedScreening / applicants.length) * 100);
-  const screeningToOfferPct =
-    reachedScreening === 0
-      ? 0
-      : Math.round((reachedOffer / reachedScreening) * 100);
+  const appliedToScreeningPct = Number.parseInt(board.stats.interviewRate, 10) || 0;
+  const screeningToOfferPct = Number.parseInt(board.stats.offerAcceptance, 10) || 0;
 
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
@@ -714,7 +721,11 @@ export default function RecruitmentClient({
           <div className="relative">
             <select
               value={selectedPosition}
-              onChange={(e) => setSelectedPosition(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setSelectedPosition(next);
+                pushApplicantQuery({ position: next, page: 1 });
+              }}
               className="w-full h-10 px-3 border border-border rounded-lg text-sm text-zinc-700 bg-surface focus:outline-none focus:border-border-strong appearance-none cursor-pointer"
             >
               <option disabled>Position</option>
@@ -731,7 +742,11 @@ export default function RecruitmentClient({
           <div className="relative">
             <select
               value={selectedStage}
-              onChange={(e) => setSelectedStage(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                setSelectedStage(next);
+                pushApplicantQuery({ stage: next, page: 1 });
+              }}
               className="w-full h-10 px-3 border border-border rounded-lg text-sm text-zinc-700 bg-surface focus:outline-none focus:border-border-strong appearance-none cursor-pointer"
             >
               <option disabled>Hiring Stage</option>
@@ -791,7 +806,7 @@ export default function RecruitmentClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-border text-zinc-700 font-medium">
-                {filteredApplicants.length === 0 ? (
+                {pagedApplicants.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-10 text-center text-zinc-400">
                       No applicants found matching filters.
@@ -895,7 +910,7 @@ export default function RecruitmentClient({
             totalPages={applicantTotalPages}
             total={applicantTotal}
             pageItemCount={pagedApplicants.length}
-            onPageChange={setApplicantPage}
+            onPageChange={(next) => pushApplicantQuery({ page: next })}
           />
         </div>
       </div>

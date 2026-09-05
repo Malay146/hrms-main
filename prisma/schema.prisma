@@ -406,6 +406,8 @@ model Contract {
   @@index([departmentId])
   @@index([scheduleId])
   @@index([salaryStructureId])
+  @@index([status, endDate])
+  @@index([employeeId, status])
   @@map("contract")
 }
 
@@ -447,6 +449,7 @@ model TimeOffAllocation {
 
   @@index([employeeId])
   @@index([typeId])
+  @@index([status, validityYear])
   @@map("time_off_allocation")
 }
 
@@ -493,6 +496,7 @@ model Attendance {
   @@unique([userId, date])
   @@index([date])
   @@index([userId, date])
+  @@index([date, status])
   @@map("attendance")
 }
 
@@ -509,6 +513,7 @@ model SalaryStructure {
   updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
+  @@index([organizationId, active])
   @@map("salary_structure")
 }
 
@@ -549,6 +554,8 @@ model Payrun {
 
   @@index([organizationId])
   @@index([structureId])
+  @@index([organizationId, periodStart, periodEnd])
+  @@index([status])
   @@map("payrun")
 }
 
@@ -574,6 +581,8 @@ model Payslip {
   @@unique([payrunId, employeeId])
   @@index([employeeId])
   @@index([contractId])
+  @@index([status])
+  @@index([createdAt])
   @@map("payslip")
 }
 
@@ -679,6 +688,7 @@ model JobOpening {
 
   @@unique([organizationId, code])
   @@index([organizationId])
+  @@index([organizationId, status])
   @@map("job_opening")
 }
 

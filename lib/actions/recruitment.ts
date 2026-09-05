@@ -1,9 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/db";
 import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
 import { dateFromKey, formatDisplayDate, toDateKey } from "@/lib/shared/dates";
+import { clampPage, clampPageSize, pageSkip, totalPagesFor } from "@/lib/shared/pagination";
 import type { ActionResult } from "@/lib/shared/types";
 import type { CandidateStage } from "@/generated/prisma/client";
 import {
@@ -81,9 +82,14 @@ export type RecruitmentBoard = {
     interviewRate: string;
     offerAcceptance: string;
   };
+  applicantsPage: number;
+  applicantsPageSize: number;
+  applicantsTotal: number;
+  applicantsTotalPages: number;
 };
 
 const SOURCE_COLORS = ["#18181B", "#525252", "#737373", "#A3A3A3", "#D4D4D8"];
+const STAGE_PREVIEW = 8;
 
 function mapCandidate(row: {
   id: string;
@@ -282,118 +288,19 @@ async function ensureDemoData(organizationId: string) {
   }
 }
 
-function buildBoard(
-  jobs: {
-    id: string;
-    code: string;
-    title: string;
-    department: string;
-    description: string;
-    deadline: Date;
-    status: "active" | "closed";
-    candidates: { stage: CandidateStage }[];
-  }[],
-  candidates: RecruitmentCandidate[],
-): RecruitmentBoard {
-  const pipeline = Object.fromEntries(
+function emptyPipeline(): Record<PipelineStageLabel, RecruitmentCandidate[]> {
+  return Object.fromEntries(
     PIPELINE_STAGES.map((stage) => [stage, [] as RecruitmentCandidate[]]),
   ) as Record<PipelineStageLabel, RecruitmentCandidate[]>;
-
-  for (const candidate of candidates) {
-    if (candidate.stage !== "Rejected") {
-      pipeline[candidate.stage].push(candidate);
-    }
-  }
-
-  const mappedJobs: RecruitmentJob[] = jobs.map((job) => {
-    const linked = candidates.filter((c) => c.jobOpeningId === job.id);
-    const inInterview = linked.filter((c) =>
-      ["Interview", "Technical"].includes(c.stage),
-    ).length;
-    const offers = linked.filter((c) => c.stage === "Offer" || c.stage === "Hired").length;
-    return {
-      id: job.id,
-      code: job.code,
-      title: job.title,
-      department: job.department,
-      applicants: linked.length || job.candidates.length,
-      inInterview,
-      offers,
-      deadline: formatDisplayDate(job.deadline),
-      deadlineKey: toDateKey(job.deadline),
-      description: job.description,
-      status: job.status === "active" ? "Active" : "Closed",
-    };
-  });
-
-  const sourceCounts = new Map<string, number>();
-  for (const candidate of candidates) {
-    const key = candidate.source?.trim() || "Other";
-    sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
-  }
-  const sourceData = [...sourceCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([name, value], index) => ({
-      name,
-      value,
-      color: SOURCE_COLORS[index] ?? "#D4D4D8",
-    }));
-
-  const interviews = candidates
-    .filter((c) => c.interviewAt && c.stage !== "Rejected" && c.stage !== "Hired")
-    .map((c) => ({
-      candidate: c.name,
-      type: c.interviewType || "Interview",
-      time: new Date(c.interviewAt!).toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-      }),
-      interviewer: c.interviewer || "—",
-    }));
-
-  const activities = candidates
-    .slice()
-    .sort((a, b) => b.appliedAtKey.localeCompare(a.appliedAtKey))
-    .slice(0, 5)
-    .map((c) => ({
-      desc: `${c.name} is in ${c.stage}`,
-      user: "HR Recruiting",
-      time: c.date,
-    }));
-
-  const openPositions = mappedJobs.filter((j) => j.status === "Active").length;
-  const totalApplicants = candidates.filter((c) => c.stage !== "Rejected").length;
-  const interviewCount = candidates.filter((c) =>
-    ["Interview", "Technical", "Offer", "Hired"].includes(c.stage),
-  ).length;
-  const hired = candidates.filter((c) => c.stage === "Hired").length;
-  const offered = candidates.filter((c) => c.stage === "Offer" || c.stage === "Hired").length;
-
-  return {
-    jobs: mappedJobs,
-    candidates: candidates.filter((c) => c.stage !== "Rejected"),
-    pipeline,
-    interviews,
-    sourceData:
-      sourceData.length > 0
-        ? sourceData
-        : [{ name: "No data", value: 1, color: "#D4D4D8" }],
-    activities,
-    stats: {
-      openPositions,
-      totalApplicants,
-      interviewRate:
-        totalApplicants === 0
-          ? "0%"
-          : `${Math.round((interviewCount / totalApplicants) * 100)}%`,
-      offerAcceptance:
-        offered === 0 ? "0%" : `${Math.round((hired / offered) * 100)}%`,
-    },
-  };
 }
 
-export async function getRecruitmentBoard(): Promise<ActionResult<RecruitmentBoard>> {
+export async function getRecruitmentBoard(input?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  stage?: string;
+  position?: string;
+}): Promise<ActionResult<RecruitmentBoard>> {
   try {
     const user = await requirePermission("adminExtras");
     const organizationId = await orgIdForUser(user.id);
@@ -401,20 +308,195 @@ export async function getRecruitmentBoard(): Promise<ActionResult<RecruitmentBoa
 
     await ensureDemoData(organizationId);
 
-    const [jobs, rows] = await Promise.all([
-      prisma.jobOpening.findMany({
-        where: { organizationId },
-        include: { candidates: { select: { stage: true } } },
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.candidate.findMany({
-        where: { organizationId },
-        orderBy: { appliedAt: "desc" },
-      }),
-    ]);
+    const page = clampPage(input?.page);
+    const pageSize = clampPageSize(input?.pageSize, 15);
+    const search = input?.search?.trim() ?? "";
+    const stageLabel = input?.stage?.trim() || "All";
+    const position = input?.position?.trim() || "All";
+    const stageDb =
+      stageLabel !== "All" && stageLabel in STAGE_TO_DB
+        ? STAGE_TO_DB[stageLabel as PipelineStageLabel]
+        : undefined;
 
-    const candidates = rows.map(mapCandidate);
-    return { ok: true, data: buildBoard(jobs, candidates) };
+    const applicantWhere = {
+      organizationId,
+      stage: stageDb ? stageDb : { not: "rejected" as const },
+      ...(position !== "All" ? { position } : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: "insensitive" as const } },
+              { code: { contains: search, mode: "insensitive" as const } },
+              { email: { contains: search, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
+
+    const [jobs, stageCounts, sourceGroups, applicantsTotal, applicantRows, interviewRows, activityRows, pipelineRows] =
+      await Promise.all([
+        prisma.jobOpening.findMany({
+          where: { organizationId },
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            department: true,
+            description: true,
+            deadline: true,
+            status: true,
+            _count: { select: { candidates: true } },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+        }),
+        prisma.candidate.groupBy({
+          by: ["stage"],
+          where: { organizationId },
+          _count: { _all: true },
+        }),
+        prisma.candidate.groupBy({
+          by: ["source"],
+          where: { organizationId, stage: { not: "rejected" } },
+          _count: { _all: true },
+        }),
+        prisma.candidate.count({ where: applicantWhere }),
+        prisma.candidate.findMany({
+          where: applicantWhere,
+          orderBy: { appliedAt: "desc" },
+          skip: pageSkip(page, pageSize),
+          take: pageSize,
+        }),
+        prisma.candidate.findMany({
+          where: {
+            organizationId,
+            interviewAt: { not: null },
+            stage: { notIn: ["rejected", "hired"] },
+          },
+          orderBy: { interviewAt: "asc" },
+          take: 12,
+        }),
+        prisma.candidate.findMany({
+          where: { organizationId, stage: { not: "rejected" } },
+          orderBy: { appliedAt: "desc" },
+          take: 5,
+        }),
+        Promise.all(
+          PIPELINE_STAGES.map((label) =>
+            prisma.candidate.findMany({
+              where: { organizationId, stage: STAGE_TO_DB[label] },
+              orderBy: { appliedAt: "desc" },
+              take: STAGE_PREVIEW,
+            }),
+          ),
+        ),
+      ]);
+
+    const countByStage = new Map(stageCounts.map((row) => [row.stage, row._count._all]));
+    const jobStageCounts = await prisma.candidate.groupBy({
+      by: ["jobOpeningId", "stage"],
+      where: { organizationId, jobOpeningId: { not: null } },
+      _count: { _all: true },
+    });
+
+    const mappedJobs: RecruitmentJob[] = jobs.map((job) => {
+      const linked = jobStageCounts.filter((row) => row.jobOpeningId === job.id);
+      const inInterview = linked
+        .filter((row) => row.stage === "interview" || row.stage === "technical")
+        .reduce((sum, row) => sum + row._count._all, 0);
+      const offers = linked
+        .filter((row) => row.stage === "offer" || row.stage === "hired")
+        .reduce((sum, row) => sum + row._count._all, 0);
+      return {
+        id: job.id,
+        code: job.code,
+        title: job.title,
+        department: job.department,
+        applicants: job._count.candidates,
+        inInterview,
+        offers,
+        deadline: formatDisplayDate(job.deadline),
+        deadlineKey: toDateKey(job.deadline),
+        description: job.description,
+        status: job.status === "active" ? "Active" : "Closed",
+      };
+    });
+
+    const pipeline = emptyPipeline();
+    PIPELINE_STAGES.forEach((label, index) => {
+      pipeline[label] = pipelineRows[index].map(mapCandidate);
+    });
+
+    const candidates = applicantRows.map(mapCandidate);
+    const sourceData = sourceGroups
+      .map((row) => ({
+        name: row.source?.trim() || "Other",
+        value: row._count._all,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5)
+      .map((row, index) => ({
+        ...row,
+        color: SOURCE_COLORS[index] ?? "#D4D4D8",
+      }));
+
+    const nonRejected =
+      [...countByStage.entries()]
+        .filter(([stage]) => stage !== "rejected")
+        .reduce((sum, [, n]) => sum + n, 0);
+    const interviewCount =
+      (countByStage.get("interview") ?? 0) +
+      (countByStage.get("technical") ?? 0) +
+      (countByStage.get("offer") ?? 0) +
+      (countByStage.get("hired") ?? 0);
+    const hired = countByStage.get("hired") ?? 0;
+    const offered = (countByStage.get("offer") ?? 0) + hired;
+
+    return {
+      ok: true,
+      data: {
+        jobs: mappedJobs,
+        candidates,
+        pipeline,
+        interviews: interviewRows.map((c) => {
+          const mapped = mapCandidate(c);
+          return {
+            candidate: mapped.name,
+            type: mapped.interviewType || "Interview",
+            time: mapped.interviewAt
+              ? new Date(mapped.interviewAt).toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : "—",
+            interviewer: mapped.interviewer || "—",
+          };
+        }),
+        sourceData:
+          sourceData.length > 0
+            ? sourceData
+            : [{ name: "No data", value: 1, color: "#D4D4D8" }],
+        activities: activityRows.map((c) => {
+          const mapped = mapCandidate(c);
+          return {
+            desc: `${mapped.name} is in ${mapped.stage}`,
+            user: "HR Recruiting",
+            time: mapped.date,
+          };
+        }),
+        stats: {
+          openPositions: mappedJobs.filter((j) => j.status === "Active").length,
+          totalApplicants: nonRejected,
+          interviewRate:
+            nonRejected === 0 ? "0%" : `${Math.round((interviewCount / nonRejected) * 100)}%`,
+          offerAcceptance: offered === 0 ? "0%" : `${Math.round((hired / offered) * 100)}%`,
+        },
+        applicantsPage: page,
+        applicantsPageSize: pageSize,
+        applicantsTotal,
+        applicantsTotalPages: totalPagesFor(applicantsTotal, pageSize),
+      },
+    };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load recruitment.") };
   }
@@ -454,6 +536,7 @@ export async function createJobOpeningAction(input: {
     });
 
     revalidatePath("/admin/hr/recruitment");
+    revalidateTag("recruitment", "max");
     return {
       ok: true,
       data: {
@@ -498,6 +581,7 @@ export async function moveCandidateStageAction(input: {
     });
 
     revalidatePath("/admin/hr/recruitment");
+    revalidateTag("recruitment", "max");
     return { ok: true, data: mapCandidate(updated) };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not move candidate.") };
@@ -523,6 +607,7 @@ export async function rejectCandidateAction(input: {
     });
 
     revalidatePath("/admin/hr/recruitment");
+    revalidateTag("recruitment", "max");
     return { ok: true, data: { id: existing.id } };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not reject candidate.") };
@@ -561,6 +646,7 @@ export async function scheduleCandidateInterviewAction(input: {
     });
 
     revalidatePath("/admin/hr/recruitment");
+    revalidateTag("recruitment", "max");
     return { ok: true, data: mapCandidate(updated) };
   } catch (error) {
     return {

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { FileText, Plus, Search, Trash2 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { Modal } from "@/components/ui/modal";
@@ -11,27 +12,46 @@ import {
   upsertContractAction,
   type ContractFormOptions,
   type ContractListItem,
+  type ContractListResult,
 } from "@/lib/actions/people/contracts";
-import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
+import { ListPagination } from "@/components/ui/list-pagination";
 
 const inputClass =
   "h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong";
 
 export function ContractsClient({
-  initialContracts,
+  initial,
   options,
   filterEmployeeCode,
+  query,
 }: {
-  initialContracts: ContractListItem[];
+  initial: ContractListResult;
   options: ContractFormOptions;
   filterEmployeeCode?: string | null;
+  query: { q: string; status: "All" | "running" | "expired"; page: number };
 }) {
-  const [contracts, setContracts] = useState(initialContracts);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "running" | "expired">("all");
+  const router = useRouter();
+  const pathname = usePathname();
+  const { rows, page, total, totalPages, stats } = initial;
+  const [search, setSearch] = useState(query.q);
+  const [statusFilter, setStatusFilter] = useState<"All" | "running" | "expired">(query.status);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<ContractListItem | null>(null);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setSearch(query.q);
+    setStatusFilter(query.status);
+  }, [query.q, query.status]);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      if (search === query.q) return;
+      pushQuery({ q: search, page: 1 });
+    }, 250);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce search only
+  }, [search]);
 
   const presetEmployee = useMemo(() => {
     if (!filterEmployeeCode) return null;
@@ -49,43 +69,20 @@ export function ContractsClient({
   const [status, setStatus] = useState<"running" | "expired">("running");
   const [notes, setNotes] = useState("");
 
-  const stats = useMemo(() => {
-    const running = contracts.filter((row) => row.status === "running").length;
-    const expired = contracts.length - running;
-    const endingSoon = contracts.filter((row) => {
-      if (row.status !== "running" || !row.endDate) return false;
-      const days =
-        (new Date(`${row.endDate}T00:00:00Z`).getTime() - Date.now()) / 86_400_000;
-      return days >= 0 && days <= 45;
-    }).length;
-    const wageMonthly = contracts
-      .filter((row) => row.status === "running")
-      .reduce((sum, row) => sum + row.wage, 0);
-    return { running, expired, endingSoon, wageMonthly, total: contracts.length };
-  }, [contracts]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return contracts.filter((row) => {
-      if (statusFilter !== "all" && row.status !== statusFilter) return false;
-      if (!q) return true;
-      return (
-        row.code.toLowerCase().includes(q) ||
-        row.employeeName.toLowerCase().includes(q) ||
-        row.employeeCode.toLowerCase().includes(q) ||
-        row.jobTitle.toLowerCase().includes(q) ||
-        (row.departmentName?.toLowerCase().includes(q) ?? false)
-      );
-    });
-  }, [contracts, search, statusFilter]);
-
-  const {
-    page,
-    setPage,
-    totalPages,
-    total,
-    pageItems: pagedContracts,
-  } = useClientPagination(filtered, 20, `${search}|${statusFilter}`);
+  function pushQuery(patch: Partial<{ q: string; status: string; page: number }>) {
+    const params = new URLSearchParams();
+    const next = {
+      q: patch.q ?? search,
+      status: patch.status ?? statusFilter,
+      page: patch.page ?? query.page,
+    };
+    if (filterEmployeeCode) params.set("employeeId", filterEmployeeCode);
+    if (next.q.trim()) params.set("q", next.q.trim());
+    if (next.status && next.status !== "All") params.set("status", next.status);
+    if (next.page > 1) params.set("page", String(next.page));
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }
 
   function resetForm(next?: ContractListItem | null) {
     if (next) {
@@ -156,15 +153,9 @@ export function ContractsClient({
         toast.error(result.error);
         return;
       }
-      setContracts((prev) => {
-        const without = prev.filter((row) => row.id !== result.data.id);
-        return [result.data, ...without].sort((a, b) => {
-          if (a.status !== b.status) return a.status === "running" ? -1 : 1;
-          return b.startDate.localeCompare(a.startDate);
-        });
-      });
       setEditorOpen(false);
       toast.success(editing ? `Updated ${result.data.code}.` : `Created ${result.data.code}.`);
+      router.refresh();
     });
   }
 
@@ -176,8 +167,8 @@ export function ContractsClient({
         toast.error(result.error);
         return;
       }
-      setContracts((prev) => prev.filter((item) => item.id !== row.id));
       toast.success(`Deleted ${row.code}.`);
+      router.refresh();
     });
   }
 
@@ -246,11 +237,14 @@ export function ContractsClient({
           />
         </div>
         <div className="flex items-center gap-1.5">
-          {(["all", "running", "expired"] as const).map((key) => (
+          {(["All", "running", "expired"] as const).map((key) => (
             <button
               key={key}
               type="button"
-              onClick={() => setStatusFilter(key)}
+              onClick={() => {
+                setStatusFilter(key);
+                pushQuery({ status: key, page: 1 });
+              }}
               className={cn(
                 "cursor-pointer h-9 px-3 rounded-lg text-xs font-semibold border transition-colors",
                 statusFilter === key
@@ -258,13 +252,13 @@ export function ContractsClient({
                   : "bg-surface text-zinc-600 border-border hover:bg-surface-hover",
               )}
             >
-              {key === "all" ? "All" : key === "running" ? "Running" : "Expired"}
+              {key === "All" ? "All" : key === "running" ? "Running" : "Expired"}
             </button>
           ))}
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 py-20 text-center border border-dashed border-border rounded-xl">
           <FileText className="size-8 text-zinc-400" />
           <p className="text-sm font-medium text-zinc-500">No contracts yet.</p>
@@ -285,7 +279,7 @@ export function ContractsClient({
               </tr>
             </thead>
             <tbody>
-              {pagedContracts.map((row) => (
+              {rows.map((row) => (
                 <tr key={row.id} className="border-t border-border hover:bg-surface-hover/40 transition-colors">
                   <td className="px-4 py-3">
                     <Link
@@ -347,8 +341,8 @@ export function ContractsClient({
         page={page}
         totalPages={totalPages}
         total={total}
-        pageItemCount={pagedContracts.length}
-        onPageChange={setPage}
+        pageItemCount={rows.length}
+        onPageChange={(next) => pushQuery({ page: next })}
       />
 
       <Modal

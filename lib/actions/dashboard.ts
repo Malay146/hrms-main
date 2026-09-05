@@ -1,10 +1,10 @@
 "use server";
 
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
 import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
 import { mapLeave } from "@/lib/shared/mappers";
 import { PIE_COLORS } from "@/lib/shared/mappers";
-import { weeklyAttendanceCounts } from "@/lib/actions/people/attendance";
 import { hasPermission } from "@/lib/auth/permissions";
 import {
   dateFromKey,
@@ -19,103 +19,203 @@ import {
 } from "@/lib/shared/dates";
 import type { ActionResult, DashboardStats, EmployeeDashboardData } from "@/lib/shared/types";
 
+type AdminDashboardSnapshot = Omit<DashboardStats, "firstName" | "greeting" | "todayLabel">;
+
+/**
+ * Admin-home snapshot is cached ~30s with tags:
+ *   employees | attendance | leave | payroll
+ * Mutations already call revalidateTag for those (employees.ts, attendance.ts,
+ * leave.ts, payruns.ts). Path revalidatePath("/admin") alone does not bust this cache.
+ */
+
+async function loadAdminDashboardSnapshot(
+  organizationId: string,
+  today: string,
+  managePerformance: boolean,
+): Promise<AdminDashboardSnapshot> {
+  const todayDate = dateFromKey(today);
+  const orgProfile = { organizationId };
+  const orgUser = { profile: orgProfile };
+  const weekKeys = weekDayKeys();
+
+  const [
+    totalEmployees,
+    presentToday,
+    leaveToday,
+    pendingApprovals,
+    weeklyGroups,
+    recentLeaves,
+    deptGroups,
+    departments,
+    ratingAgg,
+    reviewStatusGroups,
+  ] = await Promise.all([
+    prisma.employeeProfile.count({ where: orgProfile }),
+    prisma.attendance.count({
+      where: {
+        date: todayDate,
+        status: { in: ["present", "half_day"] },
+        user: orgUser,
+      },
+    }),
+    prisma.leaveRequest.count({
+      where: {
+        status: "approved",
+        startDate: { lte: todayDate },
+        endDate: { gte: todayDate },
+        user: orgUser,
+      },
+    }),
+    prisma.leaveRequest.count({
+      where: { status: "pending", user: orgUser },
+    }),
+    prisma.attendance.groupBy({
+      by: ["date"],
+      where: {
+        date: { gte: dateFromKey(weekKeys[0]), lte: dateFromKey(weekKeys[weekKeys.length - 1]) },
+        status: { in: ["present", "half_day"] },
+        user: orgUser,
+      },
+      _count: { _all: true },
+    }),
+    prisma.leaveRequest.findMany({
+      take: 8,
+      orderBy: { createdAt: "desc" },
+      where: { user: orgUser },
+      include: {
+        type: { select: { code: true, name: true } },
+        user: {
+          select: {
+            email: true,
+            profile: { select: { fullName: true, department: { select: { name: true } } } },
+          },
+        },
+      },
+    }),
+    prisma.employeeProfile.groupBy({
+      by: ["departmentId"],
+      where: orgProfile,
+      _count: { _all: true },
+    }),
+    prisma.department.findMany({
+      where: { organizationId },
+      select: { id: true, name: true },
+    }),
+    managePerformance
+      ? prisma.performanceReview.aggregate({
+          where: {
+            overallRating: { not: null },
+            status: { not: "draft" },
+            employee: orgProfile,
+          },
+          _avg: { overallRating: true },
+        })
+      : Promise.resolve(null),
+    managePerformance
+      ? prisma.performanceReview.groupBy({
+          by: ["status"],
+          where: { employee: orgProfile },
+          _count: { _all: true },
+        })
+      : Promise.resolve([] as { status: string; _count: { _all: number } }[]),
+  ]);
+
+  const weekByDate = new Map(
+    weeklyGroups.map((row) => [row.date.toISOString().slice(0, 10), row._count._all]),
+  );
+  const weekLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const weeklyAttendance = weekKeys.map((key, index) => ({
+    day: weekLabels[index],
+    attendance: weekByDate.get(key) ?? 0,
+  }));
+
+  const deptNameById = new Map(departments.map((row) => [row.id, row.name]));
+  const distribution = deptGroups
+    .map((row) => ({
+      name: deptNameById.get(row.departmentId) ?? "Unknown",
+      value: row._count._all,
+    }))
+    .sort((a, b) => b.value - a.value)
+    .map((row, index) => ({
+      name: row.name,
+      value: row.value,
+      color: PIE_COLORS[index % PIE_COLORS.length],
+      percentage:
+        totalEmployees === 0 ? "0%" : `${Math.round((row.value / totalEmployees) * 100)}%`,
+    }));
+
+  const activityLeaves = (() => {
+    const picked: typeof recentLeaves = [];
+    const seenStatus = new Set<string>();
+    for (const row of recentLeaves) {
+      if (!seenStatus.has(row.status)) {
+        picked.push(row);
+        seenStatus.add(row.status);
+      }
+      if (picked.length >= 4) break;
+    }
+    for (const row of recentLeaves) {
+      if (picked.length >= 4) break;
+      if (!picked.includes(row)) picked.push(row);
+    }
+    return picked;
+  })();
+
+  const statusCount = new Map(
+    reviewStatusGroups.map((row) => [row.status, row._count._all]),
+  );
+  const avgRaw = ratingAgg?._avg.overallRating;
+  const performance = managePerformance
+    ? {
+        avgRating: avgRaw == null ? null : Math.round(Number(avgRaw) * 10) / 10,
+        pendingReviews: statusCount.get("draft") ?? 0,
+        submittedReviews: statusCount.get("submitted") ?? 0,
+        href: "/admin/hr/performance",
+      }
+    : null;
+
+  return {
+    totalEmployees,
+    presentToday,
+    leaveToday,
+    pendingApprovals,
+    weeklyAttendance,
+    recentLeaves: activityLeaves.map((row) => mapLeave(row)),
+    distribution,
+    activities: activityLeaves.map((row) => ({
+      text: `${row.user.profile?.fullName ?? "Employee"} ${row.status} ${row.type.name} leave`,
+      time: formatRelativeTime(row.createdAt),
+    })),
+    performance,
+  };
+}
+
+const getCachedAdminDashboardSnapshot = unstable_cache(
+  async (organizationId: string, today: string, managePerformance: boolean) =>
+    loadAdminDashboardSnapshot(organizationId, today, managePerformance),
+  ["admin-dashboard-snapshot"],
+  { revalidate: 30, tags: ["employees", "attendance", "leave", "payroll"] },
+);
+
 export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>> {
   try {
     const admin = await requirePermission("viewAdminDashboard");
     const today = kolkataTodayKey();
-    const todayDate = dateFromKey(today);
+    const managePerformance = hasPermission(admin.role, "managePerformance");
 
-    const [
-      totalEmployees,
-      presentToday,
-      leaveToday,
-      pendingApprovals,
-      weeklyAttendance,
-      recentLeaves,
-      profiles,
-      reviewRows,
-    ] = await Promise.all([
-      prisma.employeeProfile.count(),
-      prisma.attendance.count({
-        where: { date: todayDate, status: { in: ["present", "half_day"] } },
-      }),
-      prisma.leaveRequest.count({
-        where: {
-          status: "approved",
-          startDate: { lte: todayDate },
-          endDate: { gte: todayDate },
-        },
-      }),
-      prisma.leaveRequest.count({ where: { status: "pending" } }),
-      weeklyAttendanceCounts(),
-      prisma.leaveRequest.findMany({
-        take: 8,
-        orderBy: { createdAt: "desc" },
-        include: {
-          type: { select: { code: true, name: true } },
-          user: {
-            select: {
-              email: true,
-              profile: { select: { fullName: true, department: { select: { name: true } } } },
-            },
-          },
-        },
-      }),
-      prisma.employeeProfile.findMany({
-        select: { department: { select: { name: true } } },
-      }),
-      hasPermission(admin.role, "managePerformance")
-        ? prisma.performanceReview.findMany({
-            select: { overallRating: true, status: true },
-          })
-        : Promise.resolve([]),
-    ]);
-
-    const counts = new Map<string, number>();
-    for (const profile of profiles) {
-      const name = profile.department.name;
-      counts.set(name, (counts.get(name) ?? 0) + 1);
+    const profile = await prisma.employeeProfile.findUnique({
+      where: { userId: admin.id },
+      select: { organizationId: true },
+    });
+    if (!profile) {
+      return { ok: false, error: "No organization found for this user." };
     }
-    const distribution = [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, value], index) => ({
-        name,
-        value,
-        color: PIE_COLORS[index % PIE_COLORS.length],
-        percentage: totalEmployees === 0 ? "0%" : `${Math.round((value / totalEmployees) * 100)}%`,
-      }));
 
-    const activityLeaves = (() => {
-      const picked: typeof recentLeaves = [];
-      const seenStatus = new Set<string>();
-      for (const row of recentLeaves) {
-        if (!seenStatus.has(row.status)) {
-          picked.push(row);
-          seenStatus.add(row.status);
-        }
-        if (picked.length >= 4) break;
-      }
-      for (const row of recentLeaves) {
-        if (picked.length >= 4) break;
-        if (!picked.includes(row)) picked.push(row);
-      }
-      return picked;
-    })();
-
-    const rated = reviewRows.filter((row) => row.overallRating != null && row.status !== "draft");
-    const performance = hasPermission(admin.role, "managePerformance")
-      ? {
-          avgRating:
-            rated.length === 0
-              ? null
-              : Math.round(
-                  (rated.reduce((sum, row) => sum + Number(row.overallRating), 0) / rated.length) * 10,
-                ) / 10,
-          pendingReviews: reviewRows.filter((row) => row.status === "draft").length,
-          submittedReviews: reviewRows.filter((row) => row.status === "submitted").length,
-          href: "/admin/hr/performance",
-        }
-      : null;
+    const snapshot = await getCachedAdminDashboardSnapshot(
+      profile.organizationId,
+      today,
+      managePerformance,
+    );
 
     return {
       ok: true,
@@ -123,18 +223,7 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
         firstName: admin.fullName.split(" ")[0] ?? "Admin",
         greeting: kolkataGreeting(),
         todayLabel: formatDisplayDate(today),
-        totalEmployees,
-        presentToday,
-        leaveToday,
-        pendingApprovals,
-        weeklyAttendance,
-        recentLeaves: activityLeaves.map((row) => mapLeave(row)),
-        distribution,
-        activities: activityLeaves.map((row) => ({
-          text: `${row.user.profile?.fullName ?? "Employee"} ${row.status} ${row.type.name} leave`,
-          time: formatRelativeTime(row.createdAt),
-        })),
-        performance,
+        ...snapshot,
       },
     };
   } catch (error) {

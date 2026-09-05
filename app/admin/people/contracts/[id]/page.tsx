@@ -12,14 +12,14 @@ export default async function ContractDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [contract, options] = await Promise.all([
-    getContractAction(id),
-    getContractFormOptions(),
-  ]);
-
+  const contract = await getContractAction(id);
   if (!contract.ok) {
     notFound();
   }
+
+  const options = await getContractFormOptions({
+    employeeCode: contract.data.employeeCode,
+  });
 
   if (!options.ok) {
     return (

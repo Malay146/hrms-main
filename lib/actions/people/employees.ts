@@ -16,7 +16,6 @@ import { createNotifications, staffUserIds } from "@/lib/shared/notify";
 import { initialsFromName } from "@/lib/people/employee-id";
 import { mapSheetRowsToEmployeeImports } from "@/lib/people/employee-import";
 import type { ActionResult, EmployeeListItem, EmployeeStatus, Role } from "@/lib/shared/types";
-import * as XLSX from "xlsx";
 
 function randomId() {
   return crypto.randomUUID();
@@ -803,6 +802,7 @@ export async function importEmployeesFromSpreadsheetAction(input: {
     }
 
     const buffer = Buffer.from(input.base64, "base64");
+    const XLSX = await import("xlsx");
     const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
     const sheetName = workbook.SheetNames[0];
     if (!sheetName) {

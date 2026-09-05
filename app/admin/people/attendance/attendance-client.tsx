@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import { cn } from "@/utils/cn";
 import PresentTodayIcon from "@/components/icons/present-today";
@@ -13,58 +14,67 @@ import { toast } from "sonner";
 import {
   listAttendanceEmployees,
   upsertAttendanceAction,
+  type AttendanceListResult,
 } from "@/lib/actions/people/attendance";
-import type { AttendanceLogItem, AttendanceStatus } from "@/lib/shared/types";
-import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
+import type { AttendanceStatus } from "@/lib/shared/types";
+import { ListPagination } from "@/components/ui/list-pagination";
 
 const inputClass =
   "h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong";
 
+const STATUS_OPTIONS = ["All", "Present", "Late", "Half Day", "Leave", "Absent"];
+
 export function AttendanceClient({
-  initialLogs,
+  initial,
   filterEmployeeCode,
+  query,
 }: {
-  initialLogs: AttendanceLogItem[];
+  initial: AttendanceListResult;
   filterEmployeeCode?: string | null;
+  query: { q: string; status: string; page: number; from: string; to: string };
 }) {
-  const [logs, setLogs] = useState(initialLogs);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("All");
+  const router = useRouter();
+  const pathname = usePathname();
+  const [search, setSearch] = useState(query.q);
+  const [status, setStatus] = useState(query.status || "All");
   const [showCreate, setShowCreate] = useState(false);
   const [employees, setEmployees] = useState<
     { userId: string; employeeId: string; name: string }[]
   >([]);
   const [pending, startTransition] = useTransition();
 
-  const filtered = useMemo(
-    () =>
-      logs.filter((log) => {
-        const matchesSearch =
-          log.name.toLowerCase().includes(search.toLowerCase()) ||
-          log.email.toLowerCase().includes(search.toLowerCase()) ||
-          (log.employeeCode ?? "").toLowerCase().includes(search.toLowerCase());
-        const matchesStatus = status === "All" || log.status === status;
-        return matchesSearch && matchesStatus;
-      }),
-    [logs, search, status],
-  );
+  useEffect(() => {
+    setSearch(query.q);
+    setStatus(query.status || "All");
+  }, [query.q, query.status]);
 
-  const {
-    page,
-    setPage,
-    totalPages,
-    total,
-    pageItems: pagedLogs,
-  } = useClientPagination(filtered, 20, `${search}|${status}`);
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      if (search === query.q) return;
+      pushQuery({ q: search, page: 1 });
+    }, 250);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce search only
+  }, [search]);
 
-  const present = logs.filter((log) => log.status === "Present" || log.status === "Late").length;
-  const late = logs.filter((log) => log.late).length;
-  const leave = logs.filter((log) => log.status === "Leave").length;
-  const absent = logs.filter((log) => log.status === "Absent").length;
-  const statuses = useMemo(
-    () => ["All", ...new Set(logs.map((log) => log.status))],
-    [logs],
-  );
+  function pushQuery(patch: Partial<{ q: string; status: string; page: number }>) {
+    const params = new URLSearchParams();
+    const next = {
+      q: patch.q ?? search,
+      status: patch.status ?? status,
+      page: patch.page ?? query.page,
+      from: query.from,
+      to: query.to,
+    };
+    if (filterEmployeeCode) params.set("employeeId", filterEmployeeCode);
+    if (next.q.trim()) params.set("q", next.q.trim());
+    if (next.status && next.status !== "All") params.set("status", next.status);
+    if (next.from) params.set("from", next.from);
+    if (next.to) params.set("to", next.to);
+    if (next.page > 1) params.set("page", String(next.page));
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }
 
   async function openCreate() {
     const result = await listAttendanceEmployees();
@@ -88,11 +98,13 @@ export function AttendanceClient({
         toast.error(result.error);
         return;
       }
-      setLogs((prev) => [result.data, ...prev.filter((row) => row.id !== result.data.id)]);
       setShowCreate(false);
       toast.success("Attendance saved.");
+      router.refresh();
     });
   }
+
+  const { logs, page, total, totalPages, stats, from, to } = initial;
 
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
@@ -101,6 +113,11 @@ export function AttendanceClient({
           <h1 className="text-h1 font-medium">Attendance</h1>
           <p className="text-body-lg text-zinc-500 font-medium">
             Daily check-in log with worked hours and manual corrections.
+            {from && to ? (
+              <span className="block text-sm mt-1">
+                Showing {from} → {to}
+              </span>
+            ) : null}
           </p>
           {filterEmployeeCode ? (
             <p className="text-xs font-semibold text-zinc-500 mt-1">
@@ -130,10 +147,10 @@ export function AttendanceClient({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Present", value: present, icon: PresentTodayIcon },
-          { label: "Late arrivals", value: late, icon: LateIcon },
-          { label: "On leave", value: leave, icon: LeaveTodayIcon },
-          { label: "Absent", value: absent, icon: LateIcon },
+          { label: "Present", value: stats.present, icon: PresentTodayIcon },
+          { label: "Late arrivals", value: stats.late, icon: LateIcon },
+          { label: "On leave", value: stats.leave, icon: LeaveTodayIcon },
+          { label: "Absent", value: stats.absent, icon: LateIcon },
         ].map((stat) => {
           const Icon = stat.icon;
           return (
@@ -163,10 +180,14 @@ export function AttendanceClient({
         </div>
         <select
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            setStatus(next);
+            pushQuery({ status: next, page: 1 });
+          }}
           className="h-10 px-3 border border-border rounded-lg text-sm"
         >
-          {statuses.map((item) => (
+          {STATUS_OPTIONS.map((item) => (
             <option key={item}>{item}</option>
           ))}
         </select>
@@ -185,14 +206,14 @@ export function AttendanceClient({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {filtered.length === 0 ? (
+            {logs.length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-12 text-center text-sm font-medium text-zinc-400">
                   No attendance logs found
                 </td>
               </tr>
             ) : (
-              pagedLogs.map((log) => (
+              logs.map((log) => (
                 <tr key={log.id} className="hover:bg-zinc-50/50">
                   <td className="py-3.5 px-6">
                     <Link
@@ -245,8 +266,8 @@ export function AttendanceClient({
         page={page}
         totalPages={totalPages}
         total={total}
-        pageItemCount={pagedLogs.length}
-        onPageChange={setPage}
+        pageItemCount={logs.length}
+        onPageChange={(next) => pushQuery({ page: next })}
       />
 
       <Modal

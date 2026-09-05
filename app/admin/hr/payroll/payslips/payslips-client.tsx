@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Mail } from "lucide-react";
 import {
@@ -11,26 +11,34 @@ import {
   type PayslipListItem,
 } from "@/lib/actions/payroll/payruns";
 import { formatPayrollMonth, payslipIssueMonth } from "@/lib/shared/dates";
-import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
+import { ListPagination } from "@/components/ui/list-pagination";
 
 export function PayslipsClient({
-  rows,
+  initial,
   canEmail,
 }: {
-  rows: PayslipListItem[];
+  initial: {
+    rows: PayslipListItem[];
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
   canEmail: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [pending, startTransition] = useTransition();
   const month = payslipIssueMonth();
   const monthLabel = formatPayrollMonth(month);
-  const {
-    page,
-    setPage,
-    totalPages,
-    total,
-    pageItems: pagedRows,
-  } = useClientPagination(rows, 20);
+  const { rows, page, total, totalPages } = initial;
+
+  function goToPage(next: number) {
+    const params = new URLSearchParams();
+    if (next > 1) params.set("page", String(next));
+    const query = params.toString();
+    router.push(query ? `${pathname}?${query}` : pathname);
+  }
 
   function issueMonth() {
     startTransition(async () => {
@@ -99,7 +107,7 @@ export function PayslipsClient({
                 </td>
               </tr>
             ) : (
-              pagedRows.map((row) => (
+              rows.map((row) => (
                 <tr key={row.id}>
                   <td className="py-3 px-6">
                     <Link href={`/admin/hr/payroll/payslips/${row.id}`} className="font-semibold text-zinc-900">
@@ -138,8 +146,8 @@ export function PayslipsClient({
         page={page}
         totalPages={totalPages}
         total={total}
-        pageItemCount={pagedRows.length}
-        onPageChange={setPage}
+        pageItemCount={rows.length}
+        onPageChange={goToPage}
       />
     </div>
   );

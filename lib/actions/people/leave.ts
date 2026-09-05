@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
 import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
@@ -25,7 +26,16 @@ import {
 } from "@/lib/people/time-off-balance";
 import { applyLeaveSchema, decideLeaveSchema, firstZodError } from "@/lib/shared/validations";
 import { createNotifications, staffUserIds } from "@/lib/shared/notify";
+import {
+  clampPage,
+  clampPageSize,
+  pageSkip,
+  totalPagesFor,
+  type PagedResult,
+} from "@/lib/shared/pagination";
 import type { ActionResult, CalendarMarker, LeaveListItem, LeaveType } from "@/lib/shared/types";
+
+export type LeaveListResult = PagedResult<LeaveListItem>;
 
 function revalidateLeave() {
   revalidatePath("/employee/leave");
@@ -33,6 +43,17 @@ function revalidateLeave() {
   revalidatePath("/admin");
   revalidatePath("/admin/people/leave");
   revalidatePath("/admin/people/leave/allocations");
+  revalidateTag("leave", "max");
+  revalidateTag("attendance", "max");
+}
+
+function leaveStatusWhere(status?: string): Prisma.LeaveRequestWhereInput | undefined {
+  if (!status || status === "All") return undefined;
+  const key = status.trim().toLowerCase();
+  if (key === "pending" || key === "approved" || key === "rejected") {
+    return { status: key };
+  }
+  return undefined;
 }
 
 const leaveInclude = {
@@ -68,14 +89,63 @@ async function resolveTimeOffType(userId: string, code: LeaveType) {
   return { type, profileId: profile.id, organizationId: profile.organizationId };
 }
 
-export async function listLeaveRequests(): Promise<ActionResult<LeaveListItem[]>> {
+export async function listLeaveRequests(filters?: {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+  search?: string;
+}): Promise<ActionResult<LeaveListResult>> {
   try {
     await requirePermission("approveLeave");
-    const rows = await prisma.leaveRequest.findMany({
-      include: leaveInclude,
-      orderBy: { createdAt: "desc" },
-    });
-    return { ok: true, data: rows.map((row) => mapLeave(row)) };
+    const page = clampPage(filters?.page);
+    const pageSize = clampPageSize(filters?.pageSize);
+    const search = filters?.search?.trim() ?? "";
+
+    const andFilters: Prisma.LeaveRequestWhereInput[] = [];
+    const statusWhere = leaveStatusWhere(filters?.status);
+    if (statusWhere) andFilters.push(statusWhere);
+    if (search) {
+      andFilters.push({
+        OR: [
+          { user: { email: { contains: search, mode: "insensitive" } } },
+          { user: { profile: { fullName: { contains: search, mode: "insensitive" } } } },
+          {
+            user: {
+              profile: { employeeId: { contains: search, mode: "insensitive" } },
+            },
+          },
+        ],
+      });
+    }
+
+    const where: Prisma.LeaveRequestWhereInput | undefined =
+      andFilters.length === 0
+        ? undefined
+        : andFilters.length === 1
+          ? andFilters[0]
+          : { AND: andFilters };
+
+    const [total, rows] = await Promise.all([
+      prisma.leaveRequest.count({ where }),
+      prisma.leaveRequest.findMany({
+        where,
+        include: leaveInclude,
+        orderBy: { createdAt: "desc" },
+        skip: pageSkip(page, pageSize),
+        take: pageSize,
+      }),
+    ]);
+
+    return {
+      ok: true,
+      data: {
+        rows: rows.map((row) => mapLeave(row)),
+        page,
+        pageSize,
+        total,
+        totalPages: totalPagesFor(total, pageSize),
+      },
+    };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load leave requests.") };
   }
@@ -88,6 +158,7 @@ export async function listMyLeaves(): Promise<ActionResult<LeaveListItem[]>> {
       where: { userId: user.id },
       include: leaveInclude,
       orderBy: { createdAt: "desc" },
+      take: 48,
     });
     return { ok: true, data: rows.map((row) => mapLeave(row)) };
   } catch (error) {

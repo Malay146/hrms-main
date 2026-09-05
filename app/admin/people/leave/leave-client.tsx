@@ -1,45 +1,60 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { toast } from "sonner";
-import { decideLeaveAction } from "@/lib/actions/people/leave";
+import { decideLeaveAction, type LeaveListResult } from "@/lib/actions/people/leave";
 import { summarizeLeaveForApprover } from "@/lib/actions/ai";
-import type { AiLeaveBrief, LeaveListItem } from "@/lib/shared/types";
-import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
+import type { AiLeaveBrief } from "@/lib/shared/types";
+import { ListPagination } from "@/components/ui/list-pagination";
 
 export function LeaveClient({
-  initialRequests,
+  initial,
+  query,
 }: {
-  initialRequests: LeaveListItem[];
+  initial: LeaveListResult;
+  query: { q: string; status: string; page: number };
 }) {
-  const [requests, setRequests] = useState(initialRequests);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("All");
+  const router = useRouter();
+  const pathname = usePathname();
+  const { rows, page, total, totalPages } = initial;
+  const [search, setSearch] = useState(query.q);
+  const [status, setStatus] = useState(query.status || "All");
   const [commentFor, setCommentFor] = useState<{ id: string; decision: "approved" | "rejected" } | null>(null);
   const [comment, setComment] = useState("");
   const [pending, setPending] = useState(false);
   const [brief, setBrief] = useState<AiLeaveBrief | null>(null);
   const [briefLoadingId, setBriefLoadingId] = useState<string | null>(null);
 
-  const filtered = useMemo(
-    () =>
-      requests.filter((req) => {
-        const matchesSearch = req.name.toLowerCase().includes(search.toLowerCase());
-        const matchesStatus = status === "All" || req.status === status;
-        return matchesSearch && matchesStatus;
-      }),
-    [requests, search, status],
-  );
+  useEffect(() => {
+    setSearch(query.q);
+    setStatus(query.status || "All");
+  }, [query.q, query.status]);
 
-  const {
-    page,
-    setPage,
-    totalPages,
-    total,
-    pageItems: pagedRequests,
-  } = useClientPagination(filtered, 20, `${search}|${status}`);
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      if (search === query.q) return;
+      pushQuery({ q: search, page: 1 });
+    }, 250);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce search only
+  }, [search]);
+
+  function pushQuery(patch: Partial<{ q: string; status: string; page: number }>) {
+    const params = new URLSearchParams();
+    const next = {
+      q: patch.q ?? search,
+      status: patch.status ?? status,
+      page: patch.page ?? query.page,
+    };
+    if (next.q.trim()) params.set("q", next.q.trim());
+    if (next.status && next.status !== "All") params.set("status", next.status);
+    if (next.page > 1) params.set("page", String(next.page));
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }
 
   async function decide() {
     if (!commentFor) return;
@@ -54,16 +69,10 @@ export function LeaveClient({
       toast.error(result.error);
       return;
     }
-    setRequests((prev) =>
-      prev.map((req) =>
-        req.id === commentFor.id
-          ? { ...req, status: commentFor.decision[0].toUpperCase() + commentFor.decision.slice(1), adminComment: comment }
-          : req,
-      ),
-    );
     setCommentFor(null);
     setComment("");
     toast.success(`Leave ${commentFor.decision}.`);
+    router.refresh();
   }
 
   async function summarize(leaveId: string) {
@@ -89,10 +98,24 @@ export function LeaveClient({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="relative sm:col-span-2">
           <Search className="size-4 absolute left-3 top-3 text-zinc-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search employee" className="h-10 w-full pl-9 border border-border rounded-lg text-sm" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search employee"
+            className="h-10 w-full pl-9 border border-border rounded-lg text-sm"
+          />
         </div>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="h-10 px-3 border border-border rounded-lg text-sm">
-          {["All", "Pending", "Approved", "Rejected"].map((item) => <option key={item}>{item}</option>)}
+        <select
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            pushQuery({ status: e.target.value, page: 1 });
+          }}
+          className="h-10 px-3 border border-border rounded-lg text-sm"
+        >
+          {["All", "Pending", "Approved", "Rejected"].map((item) => (
+            <option key={item}>{item}</option>
+          ))}
         </select>
       </div>
 
@@ -110,12 +133,14 @@ export function LeaveClient({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {filtered.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center text-sm font-medium text-zinc-400">No leave requests found</td>
+                <td colSpan={7} className="py-12 text-center text-sm font-medium text-zinc-400">
+                  No leave requests found
+                </td>
               </tr>
             ) : (
-              pagedRequests.map((req) => (
+              rows.map((req) => (
                 <tr key={req.id} className="hover:bg-zinc-50/50">
                   <td className="py-3.5 px-6">
                     <p className="font-semibold text-zinc-900">{req.name}</p>
@@ -126,22 +151,36 @@ export function LeaveClient({
                   <td className="py-3.5 px-6 text-zinc-500">{req.from}</td>
                   <td className="py-3.5 px-6 text-zinc-500">{req.to}</td>
                   <td className="py-3.5 px-6">
-                    <span className={cn(
-                      "px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
-                      req.status === "Approved" && "bg-emerald-50 text-emerald-700 border-emerald-200/50",
-                      req.status === "Pending" && "bg-amber-50 text-amber-700 border-amber-200/50",
-                      req.status === "Rejected" && "bg-red-50 text-red-700 border-red-200/50",
-                    )}>
+                    <span
+                      className={cn(
+                        "px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
+                        req.status === "Approved" && "bg-emerald-50 text-emerald-700 border-emerald-200/50",
+                        req.status === "Pending" && "bg-amber-50 text-amber-700 border-amber-200/50",
+                        req.status === "Rejected" && "bg-red-50 text-red-700 border-red-200/50",
+                      )}
+                    >
                       {req.status}
                     </span>
                   </td>
                   <td className="py-3.5 px-6">
                     {req.status === "Pending" ? (
                       <div className="flex gap-2">
-                        <button onClick={() => { setCommentFor({ id: req.id, decision: "approved" }); setComment(""); }} className="cursor-pointer px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200/50">
+                        <button
+                          onClick={() => {
+                            setCommentFor({ id: req.id, decision: "approved" });
+                            setComment("");
+                          }}
+                          className="cursor-pointer px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200/50"
+                        >
                           Approve
                         </button>
-                        <button onClick={() => { setCommentFor({ id: req.id, decision: "rejected" }); setComment(""); }} className="cursor-pointer px-2.5 py-1 rounded-lg bg-red-50 text-red-700 text-xs font-semibold border border-red-200/50">
+                        <button
+                          onClick={() => {
+                            setCommentFor({ id: req.id, decision: "rejected" });
+                            setComment("");
+                          }}
+                          className="cursor-pointer px-2.5 py-1 rounded-lg bg-red-50 text-red-700 text-xs font-semibold border border-red-200/50"
+                        >
                           Reject
                         </button>
                         <button
@@ -168,8 +207,8 @@ export function LeaveClient({
         page={page}
         totalPages={totalPages}
         total={total}
-        pageItemCount={pagedRequests.length}
-        onPageChange={setPage}
+        pageItemCount={rows.length}
+        onPageChange={(next) => pushQuery({ page: next })}
       />
 
       {commentFor && (
@@ -185,10 +224,17 @@ export function LeaveClient({
               className="h-24 p-3 border border-border rounded-lg text-sm resize-none"
             />
             <div className="flex justify-end gap-3">
-              <button onClick={() => setCommentFor(null)} className="cursor-pointer px-3 py-2 border border-border rounded-lg text-sm font-semibold">
+              <button
+                onClick={() => setCommentFor(null)}
+                className="cursor-pointer px-3 py-2 border border-border rounded-lg text-sm font-semibold"
+              >
                 Cancel
               </button>
-              <button disabled={pending || !comment.trim()} onClick={decide} className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 text-white text-sm font-semibold disabled:opacity-50">
+              <button
+                disabled={pending || !comment.trim()}
+                onClick={decide}
+                className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 text-white text-sm font-semibold disabled:opacity-50"
+              >
                 {pending ? "Saving..." : "Confirm"}
               </button>
             </div>
@@ -208,9 +254,14 @@ export function LeaveClient({
                 <li key={item}>• {item}</li>
               ))}
             </ul>
-            <p className="text-xs text-zinc-400">Advisory only. Approve or reject still requires your comment.</p>
+            <p className="text-xs text-zinc-400">
+              Advisory only. Approve or reject still requires your comment.
+            </p>
             <div className="flex justify-end">
-              <button onClick={() => setBrief(null)} className="cursor-pointer px-3 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-surface-hover">
+              <button
+                onClick={() => setBrief(null)}
+                className="cursor-pointer px-3 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-surface-hover"
+              >
                 Close
               </button>
             </div>

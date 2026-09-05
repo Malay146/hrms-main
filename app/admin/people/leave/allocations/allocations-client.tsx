@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { Layers, Plus } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { toast } from "sonner";
@@ -9,39 +10,43 @@ import {
   decideAllocationAction,
   upsertAllocationAction,
   type AllocationListItem,
+  type AllocationListResult,
 } from "@/lib/actions/people/allocations";
 import type { TimeOffTypeItem } from "@/lib/actions/people/time-off-types";
-import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
+import { ListPagination } from "@/components/ui/list-pagination";
 
 const inputClass =
   "h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong";
 
 export function AllocationsClient({
-  initialAllocations,
+  initial,
   employees,
   types,
   filterEmployeeCode,
 }: {
-  initialAllocations: AllocationListItem[];
+  initial: AllocationListResult;
   employees: { id: string; employeeId: string; name: string }[];
   types: TimeOffTypeItem[];
   filterEmployeeCode?: string | null;
 }) {
-  const [rows, setRows] = useState(initialAllocations);
+  const router = useRouter();
+  const pathname = usePathname();
+  const { rows, page, total, totalPages } = initial;
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const {
-    page,
-    setPage,
-    totalPages,
-    total,
-    pageItems: pagedRows,
-  } = useClientPagination(rows, 20);
 
   const preset = useMemo(
     () => employees.find((row) => row.employeeId === filterEmployeeCode) ?? null,
     [employees, filterEmployeeCode],
   );
+
+  function goToPage(next: number) {
+    const params = new URLSearchParams();
+    if (filterEmployeeCode) params.set("employeeId", filterEmployeeCode);
+    if (next > 1) params.set("page", String(next));
+    const qs = params.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }
 
   function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,9 +63,9 @@ export function AllocationsClient({
         toast.error(result.error);
         return;
       }
-      setRows((prev) => [result.data, ...prev]);
       setOpen(false);
       toast.success("Allocation created (draft).");
+      router.refresh();
     });
   }
 
@@ -71,8 +76,8 @@ export function AllocationsClient({
         toast.error(result.error);
         return;
       }
-      setRows((prev) => prev.map((row) => (row.id === id ? result.data : row)));
       toast.success(`Allocation ${decision}.`);
+      router.refresh();
     });
   }
 
@@ -131,7 +136,7 @@ export function AllocationsClient({
               </tr>
             </thead>
             <tbody>
-              {pagedRows.map((row) => (
+              {rows.map((row: AllocationListItem) => (
                 <tr key={row.id} className="border-t border-border">
                   <td className="px-4 py-3">
                     <p className="font-semibold text-zinc-950">{row.employeeName}</p>
@@ -178,8 +183,8 @@ export function AllocationsClient({
         page={page}
         totalPages={totalPages}
         total={total}
-        pageItemCount={pagedRows.length}
-        onPageChange={setPage}
+        pageItemCount={rows.length}
+        onPageChange={goToPage}
       />
 
       <Modal open={open} onClose={() => setOpen(false)} title="Add allocation">

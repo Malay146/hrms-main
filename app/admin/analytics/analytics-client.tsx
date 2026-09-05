@@ -26,6 +26,7 @@ import { cn } from "@/utils/cn";
 import { generateAiInsights } from "@/lib/actions/ai";
 import type { AiAnalyticsData, AiInsightCard } from "@/lib/shared/types";
 import { BarChartTooltip, PieChartTooltip, chartCursor, chartTooltipWrapperStyle } from "@/components/charts/chart-tooltip";
+import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
 
 const HEALTH_BADGE = {
   healthy: { variant: "success" as const, label: "Healthy" },
@@ -52,6 +53,10 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
   const maxAttendance = Math.max(1, ...data.weeklyAttendance.map((row) => row.attendance));
   const payrollLabel =
     data.payrollNet == null ? "—" : `₹${Math.round(data.payrollNet).toLocaleString("en-IN")}`;
+
+  const deptPaging = useClientPagination(data.departmentAttendance, 8, data.periodLabel);
+  const insightPaging = useClientPagination(insights, 4, insights.length);
+  const flightPaging = useClientPagination(data.flightRisk, 10, data.flightRisk.length);
 
   const cards = [
     {
@@ -132,7 +137,7 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
       </div>
 
       {!data.aiEnabled ? (
-        <p className="text-sm font-medium text-zinc-500 border border-border rounded-xl px-4 py-3">
+        <p className="w-fit text-sm font-medium text-zinc-500 border border-border rounded-xl px-4 py-3">
           Connect an AI provider to generate written analysis. Metrics below are live without a model.
         </p>
       ) : null}
@@ -263,24 +268,34 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
         {data.departmentAttendance.length === 0 ? (
           <p className="px-6 py-8 text-sm font-medium text-zinc-400">No department attendance yet.</p>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="bg-zinc-50/80 border-b text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                <th className="py-3.5 px-6">Department</th>
-                <th className="py-3.5 px-6">Headcount</th>
-                <th className="py-3.5 px-6">Attendance</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {data.departmentAttendance.map((row) => (
-                <tr key={row.name}>
-                  <td className="py-3.5 px-6 font-semibold text-zinc-900">{row.name}</td>
-                  <td className="py-3.5 px-6 text-zinc-500">{row.headcount}</td>
-                  <td className="py-3.5 px-6 font-semibold">{row.attendancePct}%</td>
+          <>
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-zinc-50/80 border-b text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                  <th className="py-3.5 px-6">Department</th>
+                  <th className="py-3.5 px-6">Headcount</th>
+                  <th className="py-3.5 px-6">Attendance</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {deptPaging.pageItems.map((row) => (
+                  <tr key={row.name} className="hover:bg-zinc-50/50">
+                    <td className="py-3.5 px-6 font-semibold text-zinc-900">{row.name}</td>
+                    <td className="py-3.5 px-6 text-zinc-500">{row.headcount}</td>
+                    <td className="py-3.5 px-6 font-semibold">{row.attendancePct}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <ListPagination
+              className="px-6 py-3 border-t border-border"
+              page={deptPaging.page}
+              totalPages={deptPaging.totalPages}
+              total={deptPaging.total}
+              pageItemCount={deptPaging.pageItems.length}
+              onPageChange={deptPaging.setPage}
+            />
+          </>
         )}
       </div>
 
@@ -304,24 +319,33 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
-            {insights.map((insight) => (
-              <div key={insight.id} className="border border-border rounded-xl p-4 flex flex-col gap-2">
-                <div className="flex items-center gap-2">
-                  <Badge variant={INSIGHT_BADGE[insight.severity]}>{insight.severity}</Badge>
-                  <h3 className="text-sm font-semibold text-zinc-900">{insight.title}</h3>
+          <>
+            <div className="flex flex-col gap-3">
+              {insightPaging.pageItems.map((insight) => (
+                <div key={insight.id} className="border border-border rounded-xl p-4 flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={INSIGHT_BADGE[insight.severity]}>{insight.severity}</Badge>
+                    <h3 className="text-sm font-semibold text-zinc-900">{insight.title}</h3>
+                  </div>
+                  <p className="text-sm text-zinc-600 font-medium">{insight.body}</p>
+                  {insight.href ? (
+                    <Link href={insight.href} className="text-sm font-semibold text-zinc-900 hover:underline">
+                      {insight.action}
+                    </Link>
+                  ) : (
+                    <p className="text-sm font-semibold text-zinc-900">{insight.action}</p>
+                  )}
                 </div>
-                <p className="text-sm text-zinc-600 font-medium">{insight.body}</p>
-                {insight.href ? (
-                  <Link href={insight.href} className="text-sm font-semibold text-zinc-900 hover:underline">
-                    {insight.action}
-                  </Link>
-                ) : (
-                  <p className="text-sm font-semibold text-zinc-900">{insight.action}</p>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+            <ListPagination
+              page={insightPaging.page}
+              totalPages={insightPaging.totalPages}
+              total={insightPaging.total}
+              pageItemCount={insightPaging.pageItems.length}
+              onPageChange={insightPaging.setPage}
+            />
+          </>
         )}
       </div>
 
@@ -342,7 +366,7 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {data.flightRisk.map((row) => (
+                {flightPaging.pageItems.map((row) => (
                   <tr key={row.employeeId} className="hover:bg-zinc-50/50">
                     <td className="py-3.5 px-6">
                       <p className="font-semibold text-zinc-900">{row.name}</p>
@@ -356,6 +380,14 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
               </tbody>
             </table>
           </div>
+          <ListPagination
+            className="px-6 py-3 border-t border-border"
+            page={flightPaging.page}
+            totalPages={flightPaging.totalPages}
+            total={flightPaging.total}
+            pageItemCount={flightPaging.pageItems.length}
+            onPageChange={flightPaging.setPage}
+          />
         </div>
       ) : null}
     </div>
