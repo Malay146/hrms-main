@@ -23,6 +23,11 @@ export const metadata: Metadata = {
   description:
     "Human Resource Management System for managing employees, departments, attendance, leave, payroll, and recruitment.",
   applicationName: "HRMS",
+  icons: {
+    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }],
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({
