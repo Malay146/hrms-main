@@ -40,6 +40,44 @@ enum LeaveStatus {
   rejected
 }
 
+enum EmployeeType {
+  full_time
+  intern
+  contractor
+}
+
+enum SalaryCategory {
+  basic
+  allowance
+  gross
+  deduction
+  net
+  contribution
+}
+
+enum RuleComputation {
+  fixed
+  percent_of_wage
+  percent_of_basic
+  percent_of_gross
+  percent_of_category
+  formula
+}
+
+enum PayrunStatus {
+  draft
+  computed
+  validated
+  paid
+}
+
+enum PayslipStatus {
+  draft
+  computed
+  validated
+  paid
+}
+
 model User {
   id            String    @id
   name          String
@@ -112,13 +150,15 @@ model Verification {
 }
 
 model Organization {
-  id        String             @id @default(cuid())
-  name      String
-  email     String
-  slug      String             @unique
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  profiles  EmployeeProfile[]
+  id               String             @id @default(cuid())
+  name             String
+  email            String
+  slug             String             @unique
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  profiles         EmployeeProfile[]
+  salaryStructures SalaryStructure[]
+  payruns          Payrun[]
 
   @@map("organization")
 }
@@ -137,6 +177,10 @@ model EmployeeProfile {
   phone            String?
   status           EmployeeStatus @default(active)
   paidLeaveBalance Int            @default(20)
+  employeeType     EmployeeType   @default(full_time)
+  bankAccount      String?
+  wage             Decimal?       @db.Decimal(12, 2)
+  payslips         Payslip[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -193,4 +237,95 @@ model Payroll {
 
   @@unique([userId, month])
   @@map("payroll")
+}
+
+model SalaryStructure {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  active         Boolean      @default(true)
+  rules          SalaryRule[]
+  payruns        Payrun[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@map("salary_structure")
+}
+
+model SalaryRule {
+  id              String          @id @default(cuid())
+  structureId     String
+  structure       SalaryStructure @relation(fields: [structureId], references: [id], onDelete: Cascade)
+  name            String
+  code            String
+  category        SalaryCategory
+  sequence        Int
+  computation     RuleComputation
+  amount          Decimal?        @db.Decimal(12, 2)
+  percentage      Decimal?        @db.Decimal(8, 4)
+  percentBaseCode String?
+  formula         String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([structureId, sequence])
+  @@map("salary_rule")
+}
+
+model Payrun {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  structureId    String
+  structure      SalaryStructure @relation(fields: [structureId], references: [id])
+  periodStart    DateTime        @db.Date
+  periodEnd      DateTime        @db.Date
+  employeeType   EmployeeType?
+  status         PayrunStatus    @default(draft)
+  payslips       Payslip[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId, periodStart])
+  @@map("payrun")
+}
+
+model Payslip {
+  id          String         @id @default(cuid())
+  payrunId    String
+  payrun      Payrun         @relation(fields: [payrunId], references: [id], onDelete: Cascade)
+  employeeId  String
+  employee    EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  contractId  String?
+  workedDays  Decimal        @db.Decimal(6, 2)
+  status      PayslipStatus  @default(draft)
+  warning     String?
+  wage        Decimal        @default(0) @db.Decimal(12, 2)
+  gross       Decimal        @default(0) @db.Decimal(12, 2)
+  net         Decimal        @default(0) @db.Decimal(12, 2)
+  lines       PayslipLine[]
+  sentAt      DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([payrunId, employeeId])
+  @@index([employeeId])
+  @@map("payslip")
+}
+
+model PayslipLine {
+  id        String         @id @default(cuid())
+  payslipId String
+  payslip   Payslip        @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  ruleId    String?
+  name      String
+  code      String
+  category  SalaryCategory
+  amount    Decimal        @db.Decimal(12, 2)
+
+  @@index([payslipId])
+  @@map("payslip_line")
 }
