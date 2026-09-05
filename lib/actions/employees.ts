@@ -129,6 +129,7 @@ export async function createEmployeeAction(input: {
               id: randomId(),
               accountId: userId,
               providerId: "credential",
+              issuer: "local:credential",
               password: passwordHash,
               createdAt: now,
               updatedAt: now,
