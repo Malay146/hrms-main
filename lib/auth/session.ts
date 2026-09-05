@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import type { Role, SessionUser } from "@/lib/shared/types";
 import type { Permission } from "@/lib/auth/permissions";
 import { hasPermission, homePath, isStaffRole } from "@/lib/auth/permissions";
+import { publicActionError } from "@/lib/shared/errors";
 
 export class AuthError extends Error {
   constructor(message = "You need to sign in.") {
@@ -128,6 +129,5 @@ export { homePath, isStaffRole };
 export function actionErrorMessage(error: unknown, fallback: string) {
   if (error instanceof AuthError) return "Your session expired. Please sign in again.";
   if (error instanceof ForbiddenError) return error.message;
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
+  return publicActionError(error, fallback);
 }
