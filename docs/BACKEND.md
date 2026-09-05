@@ -1,190 +1,393 @@
 # PeoplePay360 — Backend Overview
 
-This project does **not** use a separate Express/FastAPI server. The backend lives inside the **Next.js App Router** app: **Server Actions**, **Better Auth**, **Prisma**, and **PostgreSQL**.
+This app has **no separate Express/FastAPI server**. The backend runs inside **Next.js App Router** using:
+
+
+| Layer             | Tech                                                     |
+| ----------------- | -------------------------------------------------------- |
+| Mutations & reads | **Server Actions** (`lib/actions/`**)                    |
+| Auth              | **Better Auth** (email/password, httpOnly cookies)       |
+| ORM               | **Prisma 7** + `@prisma/adapter-pg`                      |
+| Database          | **PostgreSQL**                                           |
+| Domain logic      | Pure helpers under `lib/people`, `lib/payroll`, `lib/ai` |
+
+
+UI lives in `app/**` and `components/**`. Those folders call into `lib/` — they are not the backend.
 
 ---
 
-## Architecture (mental model)
+## Architecture
 
 ```
-Browser / UI (app/**, components/**)
+Browser (app / components)
         │
         ▼
-Server Actions (lib/actions/**)     ← main “API” for the product
+┌───────────────────────────────────────┐
+│  proxy.ts          route / role gate  │
+│  app layouts       requireStaffPage…  │
+└───────────────────────────────────────┘
         │
-        ├── auth (lib/auth/**)
-        ├── people helpers (lib/people/**)
-        ├── payroll engine (lib/payroll/**)
-        ├── AI helpers (lib/ai/**)
-        ├── shared (lib/shared/**)
-        └── Prisma client (lib/db.ts → generated/prisma)
+        ▼
+┌───────────────────────────────────────┐
+│  lib/actions/**    Server Actions API │
+│    ├── auth / users / dashboard / ai  │
+│    ├── people/*                       │
+│    └── payroll/*                      │
+└───────────────────────────────────────┘
+        │
+        ├── lib/auth/**      session + permissions
+        ├── lib/people/**    leave / attendance / contracts rules
+        ├── lib/payroll/**   salary compute engine
+        ├── lib/ai/**        metrics, insights, copilot
+        ├── lib/shared/**    types, Zod, mappers, mail, dates
+        └── lib/db.ts        Prisma client
                 │
                 ▼
-        PostgreSQL (DATABASE_URL)
+        generated/prisma  →  PostgreSQL
 ```
 
-Also:
+### Supporting entry points
 
-| Piece | Path | Role |
-| --- | --- | --- |
-| Auth HTTP API | `app/api/auth/[...all]/route.ts` | Better Auth endpoints |
-| Request gate | `proxy.ts` | Session / role redirects before pages load |
-| Schema & migrations | `prisma/` | DB models + history |
-| Generated client | `generated/prisma/` | Auto-generated — do not edit |
 
----
+| Piece               | Path                             | Role                                            |
+| ------------------- | -------------------------------- | ----------------------------------------------- |
+| Auth HTTP catch-all | `app/api/auth/[...all]/route.ts` | Better Auth REST handlers                       |
+| Request gate        | `proxy.ts`                       | Session, password-change, role → path redirects |
+| Schema              | `prisma/schema.prisma`           | Source of truth for tables                      |
+| Migrations          | `prisma/migrations/`             | Applied history                                 |
+| Seed                | `prisma/seed.ts`                 | Demo org, users, sample data                    |
+| Generated client    | `generated/prisma/`              | **Do not edit** — run `prisma generate`         |
 
-## Where is the backend?
-
-| Concern | Location |
-| --- | --- |
-| DB connection | `lib/db.ts` |
-| Auth config | `lib/auth/server.ts`, `lib/auth/client.ts` |
-| Session / RBAC helpers | `lib/auth/session.ts`, `lib/auth/permissions.ts` |
-| Login / logout / password | `lib/actions/auth.ts` |
-| Shared types / Zod / mappers | `lib/shared/**` |
-| People domain helpers | `lib/people/**` |
-| Payroll engine (pure) | `lib/payroll/**` |
-| AI analytics helpers | `lib/ai/**` |
-| **Server actions** | `lib/actions/**` |
-| Schema | `prisma/schema.prisma` |
-| Seed data | `prisma/seed.ts` |
-
-UI pages under `app/admin/**` and `app/employee/**` mostly **call** these actions; they are not the backend themselves.
 
 ---
 
-## `lib/` layout
+## `lib/` folder map (current)
+
+After the domain reorg, backend code is grouped by concern:
 
 ```
 lib/
-  auth/           # Better Auth, session, permissions
-  shared/         # types, validations, mappers, dates, mail, logger, utils
-  people/         # leave/attendance/contract/schedule helpers
-  payroll/        # salary compute engine + warnings
-  ai/             # snapshot, metrics, insights, copilot
-  actions/
-    auth.ts
-    dashboard.ts
-    profile.ts
-    users.ts
-    ai.ts
-    people/       # employees, departments, schedules, contracts, attendance, leave, …
-    payroll/      # salary, payruns, payroll, payroll-dashboard
-  db.ts
+├── db.ts                         # Prisma singleton (pg adapter)
+│
+├── auth/                         # Identity & access
+│   ├── server.ts                 # betterAuth config (was lib/auth.ts)
+│   ├── client.ts                 # React auth client (was auth-client.ts)
+│   ├── session.ts                # getCurrentUser, requirePermission, …
+│   ├── permissions.ts            # Role → permission → admin path matrix
+│   └── permissions.test.ts
+│
+├── shared/                       # Cross-cutting utilities
+│   ├── types.ts                  # Shared TS types / ActionResult
+│   ├── validations.ts            # Zod schemas
+│   ├── mappers.ts                # DB row → UI DTO
+│   ├── dates.ts                  # Kolkata timezone helpers
+│   ├── mail.ts                   # Nodemailer (credentials, payslips)
+│   ├── logger.ts
+│   ├── utils.ts                  # cn() for class names
+│   └── notion-avatar.ts          # DiceBear Notionists SVG seeds
+│
+├── people/                       # People / HR pure rules (mostly no DB)
+│   ├── leave-rules.ts
+│   ├── time-off-balance.ts
+│   ├── attendance-metrics.ts
+│   ├── contract-period.ts
+│   ├── schedule-hours.ts
+│   ├── employee-id.ts            # ORG-YYYY-NNN generator
+│   └── department-code.ts
+│
+├── payroll/                      # Payroll pure engine
+│   ├── compute.ts                # Ordered salary rule evaluation
+│   ├── warnings.ts               # Missing bank / contract / duplicate
+│   ├── regular-salary.ts         # Seed rule table
+│   ├── period-wage.ts
+│   └── worked-days.ts
+│
+├── ai/                           # Analytics helpers
+│   ├── metrics.ts                # Attendance health, flight risk, …
+│   ├── build-snapshot.ts         # Permission-aware org snapshot
+│   ├── sanitize.ts / snapshot.ts
+│   ├── insights.ts / copilot.ts
+│   └── client.ts                 # Optional OpenAI
+│
+└── actions/                      # "use server" — the product API
+    ├── auth.ts
+    ├── dashboard.ts
+    ├── profile.ts
+    ├── users.ts
+    ├── ai.ts
+    ├── people/
+    │   ├── employees.ts
+    │   ├── departments.ts
+    │   ├── schedules.ts
+    │   ├── contracts.ts
+    │   ├── attendance.ts
+    │   ├── leave.ts
+    │   ├── allocations.ts
+    │   └── time-off-types.ts
+    └── payroll/
+        ├── salary.ts
+        ├── payruns.ts
+        ├── payroll-dashboard.ts
+        └── payroll.ts            # Legacy month-row payroll UI
 ```
+
+### Import conventions
+
+Use the `@/` alias (see `tsconfig.json`):
+
+
+| Old path (pre-reorg)      | New path                         |
+| ------------------------- | -------------------------------- |
+| `@/lib/auth`              | `@/lib/auth/server`              |
+| `@/lib/auth-client`       | `@/lib/auth/client`              |
+| `@/lib/session`           | `@/lib/auth/session`             |
+| `@/lib/permissions`       | `@/lib/auth/permissions`         |
+| `@/lib/types`             | `@/lib/shared/types`             |
+| `@/lib/validations`       | `@/lib/shared/validations`       |
+| `@/lib/leave-rules`       | `@/lib/people/leave-rules`       |
+| `@/lib/actions/employees` | `@/lib/actions/people/employees` |
+| `@/lib/actions/payruns`   | `@/lib/actions/payroll/payruns`  |
+
+
+Unchanged: `@/lib/db`, `@/lib/payroll/*`, `@/lib/ai/*`.
 
 ---
 
-## Data layer (Prisma + Postgres)
+## Data layer
 
-- **ORM:** Prisma 7 with `@prisma/adapter-pg`
-- **DB:** PostgreSQL (`DATABASE_URL` in `.env`)
-- **Client output:** `generated/prisma/` (via `prisma generate`)
+- **Connection:** `lib/db.ts` reads `DATABASE_URL`, builds `PrismaClient` with the Postgres adapter, caches it on `globalThis` in dev.
+- **Client output:** `generated/prisma/` (configured in `schema.prisma`).
+- **Alias:** Prefer `@/generated/prisma/client` over deep relative paths from nested action files.
 
-### Core models
+### Models by domain
 
-| Area | Models |
-| --- | --- |
-| Auth | `User`, `Session`, `Account`, `Verification` |
-| Org / People | `Organization`, `Department`, `EmployeeProfile`, `WorkingSchedule`, `WorkingScheduleLine`, `Contract` |
-| Time | `Attendance`, `LeaveRequest`, `TimeOffType`, `TimeOffAllocation` |
-| Payroll | `SalaryStructure`, `SalaryRule`, `Payrun`, `Payslip`, `PayslipLine` |
-| Legacy payroll row | `Payroll` (older per-employee month model; newer flow uses Payrun/Payslip) |
-| AI | `AiInsight` |
 
-### Useful commands
+| Area             | Models                                                                                                |
+| ---------------- | ----------------------------------------------------------------------------------------------------- |
+| Auth             | `User`, `Session`, `Account`, `Verification`                                                          |
+| Org / People     | `Organization`, `Department`, `EmployeeProfile`, `WorkingSchedule`, `WorkingScheduleLine`, `Contract` |
+| Time             | `Attendance`, `LeaveRequest`, `TimeOffType`, `TimeOffAllocation`                                      |
+| Payroll (new)    | `SalaryStructure`, `SalaryRule`, `Payrun`, `Payslip`, `PayslipLine`                                   |
+| Payroll (legacy) | `Payroll` — older per-employee month row; payruns are the preferred flow                              |
+| AI               | `AiInsight`                                                                                           |
+
+
+### Key `User` fields
+
+
+| Field                | Meaning                                                                        |
+| -------------------- | ------------------------------------------------------------------------------ |
+| `role`               | `admin` | `hr_manager` | `hr_payroll_user` | `hr_payroll_manager` | `employee` |
+| `mustChangePassword` | Force `/change-password` after first login / admin create                      |
+| `profile`            | Optional `EmployeeProfile` (HR data linked by `userId`)                        |
+
+
+### Commands
 
 ```bash
 npx prisma migrate deploy   # apply migrations
-npm run db:seed             # seed demo users / org data
+npx prisma generate         # regenerate client (also on postinstall / build)
+npm run db:seed             # demo data
 npm run db:studio           # browse tables
 ```
 
 ---
 
-## Auth backend
+## Auth & authorization
 
-1. **Better Auth** (`lib/auth/server.ts`) — email/password, Prisma adapter, public sign-up **disabled**.
-2. Cookies set via `nextCookies()`; sessions stored in `Session`.
-3. Extra user fields: `role`, `mustChangePassword`.
-4. **Login / change password / logout** → `lib/actions/auth.ts` (calls `auth.api.*`).
-5. **Route protection** → `proxy.ts` + layout helpers in `lib/auth/session.ts`.
-6. **Fine-grained access** → `lib/auth/permissions.ts` (e.g. `managePeople`, `finalizePayroll`, `viewAiAnalytics`).
+### How login works
 
-Accounts are created by admins (`createEmployeeAction` / user management), not by public registration.
+1. UI → `signInAction` (`lib/actions/auth.ts`).
+2. Action calls `auth.api.signInEmail` (`lib/auth/server.ts`).
+3. Better Auth verifies the hash on `Account.password`, writes `Session`, sets **httpOnly** cookie (`nextCookies()`).
+4. Redirect:
+  - `mustChangePassword` → `/change-password`
+  - staff role → `/admin`
+  - employee → `/employee`
 
----
+Public sign-up is **disabled** (`disableSignUp: true`). New accounts come from admin **Add User** or seed.
 
-## Server Actions (the product API)
+### Layers of protection
 
-Each file is `"use server"` and returns an `ActionResult<T>` (`{ ok: true, data }` or `{ ok: false, error }`).
 
-| Path | Backend responsibility |
-| --- | --- |
-| `actions/auth.ts` | Sign-in, sign-out, change password |
-| `actions/people/employees.ts` | List/create/update employees, hub data, temp passwords |
-| `actions/people/departments.ts` | Department CRUD |
-| `actions/people/schedules.ts` | Working schedules |
-| `actions/people/contracts.ts` | Employment contracts |
-| `actions/people/attendance.ts` | Logs, clock in/out, admin upsert |
-| `actions/people/leave.ts` | Apply / approve / reject leave |
-| `actions/people/allocations.ts` | Time-off allocations |
-| `actions/people/time-off-types.ts` | Leave type config |
-| `actions/profile.ts` | Employee self-update |
-| `actions/dashboard.ts` | Admin + employee dashboard stats |
-| `actions/payroll/salary.ts` | Salary structures & rules |
-| `actions/payroll/payruns.ts` | Create → compute → validate → mark paid; payslips; email |
-| `actions/payroll/payroll-dashboard.ts` | Payroll rollup metrics |
-| `actions/payroll/payroll.ts` | Legacy payroll list/upsert |
-| `actions/users.ts` | Admin user management |
-| `actions/ai.ts` | Analytics snapshot, insights, HR copilot |
+| Layer         | File                                              | What it does                                                                                      |
+| ------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Edge-ish gate | `proxy.ts`                                        | Unauthenticated → login; employees blocked from `/admin`; staff path ACL via `canAccessAdminPath` |
+| Layouts       | `app/admin/layout.tsx`, `app/employee/layout.tsx` | `requireStaffPage` / `requirePageUser`                                                            |
+| Actions       | `lib/auth/session.ts`                             | `requireUser`, `requirePermission`, `requireRole`                                                 |
+| Permissions   | `lib/auth/permissions.ts`                         | Role → permission list + admin URL map                                                            |
 
-Domain math that should stay testable (no DB) sits next to actions:
 
-- `lib/people/leave-rules.ts`, `time-off-balance.ts`, `attendance-metrics.ts`, …
-- `lib/payroll/compute.ts`, `warnings.ts`, …
-- `lib/ai/metrics.ts`, `copilot.ts`, …
+### Roles & permissions (summary)
 
----
 
-## Request flow (example: approve leave)
+| Permission                               | Typical holders                  |
+| ---------------------------------------- | -------------------------------- |
+| `viewAdminDashboard`                     | admin, HR manager, payroll roles |
+| `managePeople`                           | admin, HR manager, payroll roles |
+| `approveLeave` / `manageTimeOffTypes`    | admin, HR manager, payroll roles |
+| `viewPayrollAll` / `editPayroll`         | admin, payroll user/manager      |
+| `finalizePayroll` / `manageSalaryConfig` | admin, payroll **manager**       |
+| `createUsers`                            | **admin only**                   |
+| `viewAiAnalytics`                        | admin, HR manager                |
 
-1. Admin UI calls `decideLeaveAction(...)`.
-2. Action runs `requirePermission("approveLeave")`.
-3. Validates input (`lib/shared/validations.ts` / Zod).
-4. Applies rules (`lib/people/leave-rules.ts`, balance helpers).
-5. Updates `LeaveRequest` (and related allocation) via Prisma.
-6. Returns `{ ok: true }` or an error string for the UI toast.
 
-Same pattern for payroll, attendance, employees, etc.
+`employee` has an empty permission list for admin actions; they use employee self-service actions gated by `requireUser` + ownership checks.
+
+### Creating an employee (credentials)
+
+1. Admin opens **People → Employees → Add User**.
+2. `createEmployeeAction` (`lib/actions/people/employees.ts`) requires `createUsers`.
+3. System creates:
+  - `User` + credential `Account` (hashed **temporary password**)
+  - `EmployeeProfile` with generated `employeeId` (`lib/people/employee-id.ts`)
+  - `mustChangePassword = true`
+4. Emails credentials via `lib/shared/mail.ts` (`SMTP_*`). If mail fails, UI toast shows the temp password.
+5. New user must change password on first login.
 
 ---
 
-## Environment (backend-related)
+## Server Actions (product API)
 
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | Postgres connection |
-| `BETTER_AUTH_SECRET` | Session signing |
-| `BETTER_AUTH_URL` / `NEXT_PUBLIC_APP_URL` | App origin for auth |
-| `SMTP_*` | Email (new users, payslips) |
-| `OPENAI_API_KEY` | Optional — AI narratives / copilot phrasing |
+Every action module is `"use server"` and returns:
 
-See `.env.example` for the full template.
+```ts
+type ActionResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: string };
+```
+
+### Catalog
+
+
+| Path                                   | Responsibility                                           |
+| -------------------------------------- | -------------------------------------------------------- |
+| `actions/auth.ts`                      | Sign-in, sign-out, change password                       |
+| `actions/dashboard.ts`                 | Admin + employee dashboard stats                         |
+| `actions/profile.ts`                   | Employee self-profile update                             |
+| `actions/users.ts`                     | Admin user list / role updates                           |
+| `actions/ai.ts`                        | Analytics snapshot, generate insights, HR copilot        |
+| `actions/people/employees.ts`          | CRUD hub, create with temp password                      |
+| `actions/people/departments.ts`        | Department CRUD                                          |
+| `actions/people/schedules.ts`          | Working schedules                                        |
+| `actions/people/contracts.ts`          | Contracts + period checks                                |
+| `actions/people/attendance.ts`         | Logs, clock in/out, admin upsert                         |
+| `actions/people/leave.ts`              | Apply / approve / reject leave                           |
+| `actions/people/allocations.ts`        | Time-off allocations                                     |
+| `actions/people/time-off-types.ts`     | Leave type config                                        |
+| `actions/payroll/salary.ts`            | Structures & rules CRUD                                  |
+| `actions/payroll/payruns.ts`           | Create → compute → validate → mark paid; payslips; email |
+| `actions/payroll/payroll-dashboard.ts` | Payroll KPI rollups for admin dashboard                  |
+| `actions/payroll/payroll.ts`           | Legacy month payroll rows                                |
+
+
+### Standard action pattern
+
+1. `requireUser` / `requirePermission(...)`.
+2. Zod parse (`lib/shared/validations.ts`).
+3. Domain rules (`lib/people/*` or `lib/payroll/*`).
+4. Prisma read/write.
+5. Optional `revalidatePath(...)`.
+6. Return `{ ok: true, data }` or `{ ok: false, error }` (never throw raw errors to the client).
+
+### Example: approve leave
+
+```
+UI (leave-client)
+  → decideLeaveAction (actions/people/leave.ts)
+      → requirePermission("approveLeave")
+      → leave-rules / time-off-balance
+      → prisma.leaveRequest.update (+ allocation taken days)
+      → { ok: true }
+```
+
+### Example: payrun lifecycle
+
+```
+listEligibleEmployees → createPayrunAction
+  → computePayrunAction     (lib/payroll/compute.ts + warnings)
+  → validatePayrunAction    (blocks if missing contract, etc.)
+  → markPayrunPaidAction    (finalizePayroll)
+  → sendPayslipsAction      (mail)
+```
 
 ---
 
-## Tests covering backend logic
+## Domain helpers (why they exist)
+
+Keep **pure, testable** logic out of Server Actions when possible:
+
+
+| Module                         | Purpose                                           |
+| ------------------------------ | ------------------------------------------------- |
+| `people/leave-rules.ts`        | Overlaps, past-date rules, paid-day counting      |
+| `people/time-off-balance.ts`   | Allocation remaining / over-balance               |
+| `people/attendance-metrics.ts` | Late, overtime, missing checkout                  |
+| `people/contract-period.ts`    | Overlapping contracts, wage period coverage       |
+| `people/schedule-hours.ts`     | Weekly expected hours from schedule lines         |
+| `payroll/compute.ts`           | Safe formula sandbox for salary rules (no `eval`) |
+| `payroll/warnings.ts`          | Missing bank / contract / duplicate payslip       |
+| `ai/metrics.ts`                | Org health scores used by analytics               |
+
+
+Run them with:
 
 ```bash
 npm test
 ```
 
-Covers permissions, leave rules, attendance metrics, contract periods, payroll compute/warnings, and AI helpers — pure logic + permission matrix, not a live HTTP suite.
+(54 unit tests across permissions, people, payroll, AI — not an HTTP e2e suite.)
+
+---
+
+## Environment
+
+Copy `.env.example` → `.env`:
+
+
+| Variable                        | Required | Purpose                                                                  |
+| ------------------------------- | -------- | ------------------------------------------------------------------------ |
+| `DATABASE_URL`                  | Yes      | Postgres connection string                                               |
+| `BETTER_AUTH_SECRET`            | Yes      | Session signing (≥ 32 chars)                                             |
+| `BETTER_AUTH_URL`               | Yes      | Canonical app URL for auth                                               |
+| `NEXT_PUBLIC_APP_URL`           | Yes      | Public URL (login links, auth client)                                    |
+| `SMTP_HOST/PORT/USER/PASS/FROM` | For mail | New-user credentials + payslip emails                                    |
+| `OPENAI_API_KEY`                | Optional | AI insight narratives / copilot phrasing (metrics still work without it) |
+
+
+---
+
+## Seeded demo logins
+
+After `npm run db:seed`:
+
+
+| Role           | Email                          | Password          |
+| -------------- | ------------------------------ | ----------------- |
+| Admin          | `admin@oddo.com`               | `admin@oddo@1234` |
+| Demo employees | e.g. `william.joseph@oddo.com` | `Employee@1234`   |
+
+
+---
+
+## Where to put new backend code
+
+
+| You are adding…                     | Put it in…                         |
+| ----------------------------------- | ---------------------------------- |
+| A new UI mutation / query           | `lib/actions/<domain>/…`           |
+| Auth / session helper               | `lib/auth/`                        |
+| Pure leave/attendance/contract math | `lib/people/` + a `*.test.ts`      |
+| Salary formula / payrun warning     | `lib/payroll/`                     |
+| Analytics metric                    | `lib/ai/`                          |
+| Shared DTO / Zod schema             | `lib/shared/`                      |
+| New table                           | `prisma/schema.prisma` + migration |
+
+
+Do **not** put business rules only inside React components, and do **not** hand-edit `generated/prisma/`.
 
 ---
 
 ## One-line summary
 
-**Backend = PostgreSQL + Prisma + Better Auth + `lib/actions` Server Actions**, with domain folders under `lib/auth`, `lib/people`, `lib/payroll`, `lib/ai`, and `lib/shared`.
+**Backend = Postgres + Prisma + Better Auth + domain-organized Server Actions**, with pure engines in `lib/people`, `lib/payroll`, and `lib/ai`, and shared plumbing in `lib/shared` / `lib/auth`.
