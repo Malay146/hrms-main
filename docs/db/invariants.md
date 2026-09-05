@@ -1,0 +1,208 @@
+# Database invariants
+
+Catalog of PeoplePay360 facts that PostgreSQL must eventually enforce. Status is as of Task 1 (catalog only). Later tasks copy `INVARIANT_SQL` from `lib/db/invariants.ts` **verbatim** into Prisma migrations.
+
+**Status values**
+
+| Status | Meaning |
+| --- | --- |
+| `missing` | Not enforced in Postgres and not a dedicated app rule |
+| `app-only` | TypeScript / Zod / action checks; a crash or race can persist a violation |
+| `enforced` | Already a UNIQUE / PK / FK in `prisma/schema.prisma` |
+
+Nothing below is a CHECK, EXCLUDE, or RLS constraint in Postgres yet. Existing UNIQUE indexes in the schema stay `enforced`.
+
+Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariants.ts).
+
+---
+
+## Date, duration, and checkout
+
+### `leave_dates_ordered`
+
+- **SQL:** `CHECK ("endDate" >= "startDate")` on `leave_request` (`leave_request_dates_ordered`)
+- **Status:** `app-only`
+- **Notes:** `validateLeaveDates` in `lib/people/leave-rules.ts` rejects inverted ranges. Postgres will still accept `endDate < startDate`.
+
+### `leave_duration_nonneg`
+
+- **SQL:** `CHECK ("duration" >= 0)` on `leave_request` (`leave_request_duration_nonneg`)
+- **Status:** `missing`
+- **Notes:** Duration is written by actions; there is no CHECK.
+
+### `contract_dates_ordered`
+
+- **SQL:** `CHECK ("endDate" IS NULL OR "endDate" >= "startDate")` on `contract` (`contract_dates_ordered`)
+- **Status:** `missing`
+- **Notes:** `lib/people/contract-period.ts` compares windows in app code. Open-ended contracts (`endDate` NULL) are valid.
+
+### `attendance_checkout_needs_checkin`
+
+- **SQL:** `CHECK ("checkOut" IS NULL OR "checkIn" IS NOT NULL)` on `attendance` (`attendance_checkout_needs_checkin`)
+- **Status:** `app-only`
+- **Notes:** Clock-out and admin edits in `lib/actions/people/attendance.ts` require check-in first. A raw insert can store checkout without check-in.
+
+---
+
+## Money and progress
+
+### `wage_only_on_contract`
+
+- **SQL:** none yet (Task 7 drops `employee_profile.wage`)
+- **Status:** `app-only`
+- **Notes:** Wage is dual-written on `employee_profile.wage` and `contract.wage`. Payroll still falls back to `profile.wage`. Target: running `contract.wage` only.
+
+### `contract_wage_nonneg`
+
+- **SQL:** `CHECK ("wage" >= 0)` on `contract` (`contract_wage_nonneg`)
+- **Status:** `app-only`
+- **Notes:** Zod requires a positive wage on some forms. Postgres has no CHECK.
+
+### `payslip_amounts_nonneg`
+
+- **SQL:** `CHECK ("wage" >= 0 AND "gross" >= 0)` on `payslip` (`payslip_amounts_nonneg`)
+- **Status:** `missing`
+
+### `performance_goal_progress`
+
+- **SQL:** `CHECK ("progress" >= 0 AND "progress" <= 100)` on `performance_goal` (`performance_goal_progress`)
+- **Status:** `app-only`
+- **Notes:** Performance actions clamp / interpret progress in TypeScript. Postgres has no CHECK.
+
+---
+
+## Schedules
+
+### `schedule_line_one_per_weekday`
+
+- **SQL:** `CREATE UNIQUE INDEX "working_schedule_line_scheduleId_weekday_key" ON "working_schedule_line" ("scheduleId", "weekday")`
+- **Status:** `missing`
+- **Notes:** Two Monday lines on the same schedule are allowed today. Task 3 adds the unique index.
+
+### `schedule_line_weekday`
+
+- **SQL:** `CHECK ("weekday" >= 0 AND "weekday" <= 6)` on `working_schedule_line` (`working_schedule_line_weekday`)
+- **Status:** `missing`
+
+### `schedule_line_range`
+
+- **SQL:** `CHECK ("endMin" > "startMin" AND "startMin" >= 0 AND "endMin" <= 24 * 60)` on `working_schedule_line` (`working_schedule_line_range`)
+- **Status:** `missing`
+- **Notes:** `lineHours` assumes `endMin > startMin` but does not reject inverted ranges.
+
+### `schedule_hours_positive`
+
+- **SQL:** `CHECK ("hoursPerWeek" > 0 AND "daysPerWeek" BETWEEN 1 AND 7)` on `working_schedule` (`working_schedule_hours_positive`)
+- **Status:** `missing`
+
+---
+
+## Leave allocations and overlap
+
+### `allocation_unique_per_year`
+
+- **SQL:** `CREATE UNIQUE INDEX "time_off_allocation_employee_type_year_key" ON "time_off_allocation" ("employeeId", "typeId", "validityYear")`
+- **Status:** `missing`
+- **Notes:** Two allocations for the same employee / type / year can coexist. Task 3 adds the unique index.
+
+### `allocation_amounts`
+
+- **SQL:** `CHECK ("allocated" >= 0 AND "taken" >= 0 AND "taken" <= "allocated" + 0.01)` on `time_off_allocation` (`time_off_allocation_amounts`)
+- **Status:** `app-only`
+- **Notes:** `remaining()` in `lib/people/time-off-balance.ts` is TypeScript only. The `+ 0.01` slack covers decimal rounding.
+
+### `leave_balance_only_on_allocation`
+
+- **SQL:** none yet (Task 6 drops `employee_profile.paidLeaveBalance`)
+- **Status:** `app-only`
+- **Notes:** Remaining paid leave is dual-written to `employee_profile.paidLeaveBalance` and `time_off_allocation.taken`. `decideLeaveAction` can decrement either path. Target: `allocated - taken` on the approved allocation only.
+
+### `no_overlapping_approved_leave`
+
+- **SQL:** `btree_gist` exclusion on `leave_request` (`leave_request_no_approved_overlap`) — `EXCLUDE USING gist` on `employeeId` + `daterange(startDate, endDate, '[]')` where `status = 'approved'`
+- **Status:** `app-only`
+- **Notes:** `findOverlappingLeave` in `lib/people/leave-rules.ts` is advisory. Two approvers can still persist overlapping approved rows. Task 5 applies the exclusion (after Task 4 adds `employeeId` on `leave_request`).
+
+---
+
+## Already enforced (do not undo)
+
+These are UNIQUE indexes already in `prisma/schema.prisma`. They are **not** missing.
+
+| Name | SQL / Prisma | Status |
+| --- | --- | --- |
+| `attendance_one_row_per_user_day` | `@@unique([userId, date])` on `attendance` | `enforced` |
+| `payslip_one_per_employee_per_run` | `@@unique([payrunId, employeeId])` on `payslip` | `enforced` |
+| `review_one_per_employee_per_cycle` | `@@unique([cycleId, employeeId])` on `performance_review` | `enforced` |
+| `department_code_per_org` | `@@unique([organizationId, code])` on `department` | `enforced` |
+| `time_off_type_code_per_org` | `@@unique([organizationId, code])` on `time_off_type` | `enforced` |
+| `job_opening_code_per_org` | `@@unique([organizationId, code])` on `job_opening` | `enforced` |
+| `attendance_rollup_one_per_org_day` | `@@unique([organizationId, date])` on `attendance_daily_rollup` | `enforced` |
+| `profile_one_per_user` | `employee_profile.userId` `@unique` | `enforced` |
+| `employee_id_globally_unique` | `employee_profile.employeeId` `@unique` | `enforced` (Task 3 will narrow to `(organizationId, employeeId)`) |
+
+---
+
+## Task 2 CHECK SQL (copy from `INVARIANT_SQL`)
+
+Applied later. Do not run in this task.
+
+```sql
+ALTER TABLE "leave_request"
+  ADD CONSTRAINT "leave_request_dates_ordered"
+  CHECK ("endDate" >= "startDate");
+
+ALTER TABLE "leave_request"
+  ADD CONSTRAINT "leave_request_duration_nonneg"
+  CHECK ("duration" >= 0);
+
+ALTER TABLE "contract"
+  ADD CONSTRAINT "contract_dates_ordered"
+  CHECK ("endDate" IS NULL OR "endDate" >= "startDate");
+
+ALTER TABLE "contract"
+  ADD CONSTRAINT "contract_wage_nonneg"
+  CHECK ("wage" >= 0);
+
+ALTER TABLE "attendance"
+  ADD CONSTRAINT "attendance_checkout_needs_checkin"
+  CHECK ("checkOut" IS NULL OR "checkIn" IS NOT NULL);
+
+ALTER TABLE "working_schedule_line"
+  ADD CONSTRAINT "working_schedule_line_weekday"
+  CHECK ("weekday" >= 0 AND "weekday" <= 6);
+
+ALTER TABLE "working_schedule_line"
+  ADD CONSTRAINT "working_schedule_line_range"
+  CHECK ("endMin" > "startMin" AND "startMin" >= 0 AND "endMin" <= 24 * 60);
+
+ALTER TABLE "working_schedule"
+  ADD CONSTRAINT "working_schedule_hours_positive"
+  CHECK ("hoursPerWeek" > 0 AND "daysPerWeek" BETWEEN 1 AND 7);
+
+ALTER TABLE "time_off_allocation"
+  ADD CONSTRAINT "time_off_allocation_amounts"
+  CHECK ("allocated" >= 0 AND "taken" >= 0 AND "taken" <= "allocated" + 0.01);
+
+ALTER TABLE "payslip"
+  ADD CONSTRAINT "payslip_amounts_nonneg"
+  CHECK ("wage" >= 0 AND "gross" >= 0);
+
+ALTER TABLE "performance_goal"
+  ADD CONSTRAINT "performance_goal_progress"
+  CHECK ("progress" >= 0 AND "progress" <= 100);
+```
+
+## Task 5 exclusion SQL (copy from `INVARIANT_SQL`)
+
+```sql
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+
+ALTER TABLE "leave_request"
+  ADD CONSTRAINT "leave_request_no_approved_overlap"
+  EXCLUDE USING gist (
+    "employeeId" WITH =,
+    daterange("startDate", "endDate", '[]') WITH &&
+  )
+  WHERE (status = 'approved');
+```
