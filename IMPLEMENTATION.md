@@ -19,7 +19,13 @@
 
 ## 0. How to read this plan
 
-Implement **in phase order**. Later payroll math depends on contracts, schedules, allocations, and salary rules. Do not start Payruns until Phases 1–6 exist.
+**Hackathon parallel split (two people):**
+- Malay → [`IMPLEMENTATION-MALAY.md`](./IMPLEMENTATION-MALAY.md) — People / HR ops (schema gate, departments, schedules, employees, contracts, attendance, time off)
+- Krishil → [`IMPLEMENTATION-KRISHIL.md`](./IMPLEMENTATION-KRISHIL.md) — Payroll (engine, structures, payruns, payslips, dashboard, users, demo seed)
+
+This file remains the full product spec. The two track files own **file boundaries** so PRs do not collide.
+
+Implement **in phase order** within each track. Later payroll math depends on contracts, schedules, allocations, and salary rules. Krishil must not start Payrun Compute against empty tables until Malay’s Phase 0 schema (and ideally Phase 3 contracts) is merged.
 
 Each task is TDD for domain logic, then a thin Server Action, then a page. After each task: run the named test command, then commit.
 
