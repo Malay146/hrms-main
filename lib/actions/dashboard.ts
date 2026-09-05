@@ -47,6 +47,7 @@ export async function getAdminDashboard(): Promise<ActionResult<DashboardStats>>
         take: 4,
         orderBy: { createdAt: "desc" },
         include: {
+          type: { select: { code: true, name: true } },
           user: {
             select: {
               email: true,
