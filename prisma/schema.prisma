@@ -1,0 +1,190 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  admin
+  employee
+}
+
+enum EmployeeStatus {
+  active
+  inactive
+  on_leave
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  half_day
+  leave
+}
+
+enum LeaveType {
+  paid
+  sick
+  unpaid
+}
+
+enum LeaveStatus {
+  pending
+  approved
+  rejected
+}
+
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean
+  image         String?
+  createdAt     DateTime
+  updatedAt     DateTime
+  role          String    @default("employee")
+  sessions      Session[]
+  accounts      Account[]
+  profile       EmployeeProfile?
+  attendances   Attendance[]
+  leaveRequests LeaveRequest[]
+  payrolls      Payroll[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime
+  updatedAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime
+  updatedAt             DateTime
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime?
+  updatedAt  DateTime?
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model Organization {
+  id        String             @id @default(cuid())
+  name      String
+  email     String
+  slug      String             @unique
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  profiles  EmployeeProfile[]
+
+  @@map("organization")
+}
+
+model EmployeeProfile {
+  id               String         @id @default(cuid())
+  userId           String         @unique
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId       String         @unique
+  fullName         String
+  role             Role
+  department       String
+  jobTitle         String
+  phone            String?
+  status           EmployeeStatus @default(active)
+  paidLeaveBalance Int            @default(20)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([organizationId])
+  @@map("employee_profile")
+}
+
+model Attendance {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime         @db.Date
+  checkIn   DateTime?
+  checkOut  DateTime?
+  status    AttendanceStatus
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([userId, date])
+  @@index([date])
+  @@map("attendance")
+}
+
+model LeaveRequest {
+  id           String      @id @default(cuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type         LeaveType
+  startDate    DateTime    @db.Date
+  endDate      DateTime    @db.Date
+  remarks      String
+  status       LeaveStatus @default(pending)
+  adminComment String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([userId, status])
+  @@index([startDate, endDate])
+  @@map("leave_request")
+}
+
+model Payroll {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month        String
+  basic        Decimal  @db.Decimal(12, 2)
+  hraPct       Decimal  @map("hra_pct") @db.Decimal(5, 2)
+  allowancePct Decimal  @map("allowance_pct") @db.Decimal(5, 2)
+  deductions   Decimal  @db.Decimal(12, 2)
+  netSalary    Decimal  @default(dbgenerated("basic + (basic * hra_pct / 100.0) + (basic * allowance_pct / 100.0) - deductions")) @map("net_salary") @db.Decimal(12, 2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, month])
+  @@map("payroll")
+}

@@ -6,29 +6,35 @@ import { AuthField } from "@/components/auth/auth-field";
 
 type PasswordFieldProps = {
   id: string;
+  name?: string;
   label: string;
   placeholder: string;
   autoComplete?: string;
   className?: string;
+  required?: boolean;
 };
 
 export function PasswordField({
   id,
+  name,
   label,
   placeholder,
   autoComplete,
   className,
+  required,
 }: PasswordFieldProps) {
   const [visible, setVisible] = useState(false);
 
   return (
     <AuthField
       id={id}
+      name={name ?? id}
       label={label}
       type={visible ? "text" : "password"}
       placeholder={placeholder}
       autoComplete={autoComplete}
       className={className}
+      required={required}
       endAdornment={
         <button
           type="button"

@@ -17,6 +17,7 @@ import LogoutIcon from "@/components/icons/logout";
 import MyProfileIcon from "@/components/icons/my-profile";
 import BookIcon from "@/components/icons/book";
 import PenIcon from "@/components/icons/pen";
+import CreditCardIcon from "@/components/icons/credit-card";
 
 import CollapsibleIcon from "@/components/icons/sidebar/collapsible";
 
@@ -146,6 +147,11 @@ const employeeNavItems: SidebarItemType[] = [
     label: "My Leave",
     icon: PenIcon,
     href: "/employee/leave",
+  },
+  {
+    label: "My Payroll",
+    icon: CreditCardIcon,
+    href: "/employee/payroll",
   },
   {
     label: "divider",
