@@ -1,4 +1,9 @@
-export type Role = "admin" | "employee";
+export type Role =
+  | "admin"
+  | "hr_manager"
+  | "hr_payroll_user"
+  | "hr_payroll_manager"
+  | "employee";
 export type EmployeeStatus = "active" | "inactive" | "on_leave";
 export type AttendanceStatus = "present" | "absent" | "half_day" | "leave";
 export type LeaveType = "paid" | "sick" | "unpaid";
@@ -13,6 +18,7 @@ export type SessionUser = {
   name: string;
   email: string;
   role: Role;
+  mustChangePassword: boolean;
   employeeId: string | null;
   fullName: string;
   department: string | null;

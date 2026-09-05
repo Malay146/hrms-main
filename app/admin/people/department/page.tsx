@@ -9,6 +9,9 @@ import {
   FilterX,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { Modal } from "@/components/ui/modal";
+import { toast } from "sonner";
 
 // Mock Department Data
 const initialDepartments = [
@@ -87,6 +90,17 @@ export default function DepartmentsPage() {
   const [sortBy, setSortBy] = useState("Name-ASC");
 
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [viewDepartment, setViewDepartment] = useState<(typeof initialDepartments)[0] | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<(typeof initialDepartments)[0] | null>(null);
+  const [editTarget, setEditTarget] = useState<(typeof initialDepartments)[0] | null>(null);
+  const [membersTarget, setMembersTarget] = useState<(typeof initialDepartments)[0] | null>(null);
+  const [settingsTarget, setSettingsTarget] = useState<(typeof initialDepartments)[0] | null>(null);
+  const [draftDepartment, setDraftDepartment] = useState({
+    name: "",
+    description: "",
+    managerName: "",
+  });
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -164,17 +178,112 @@ export default function DepartmentsPage() {
       (departments.length || 1),
   );
 
+  const handleAddDepartment = () => {
+    if (!draftDepartment.name.trim() || !draftDepartment.managerName.trim()) {
+      toast.error("Department name and manager are required");
+      return;
+    }
+
+    const id = `DEP${String(departments.length + 1).padStart(3, "0")}`;
+    setDepartments((current) => [
+      ...current,
+      {
+        id,
+        name: draftDepartment.name.trim(),
+        description:
+          draftDepartment.description.trim() ||
+          "New department awaiting description.",
+        icon: "🏢",
+        managerName: draftDepartment.managerName.trim(),
+        managerAvatar: draftDepartment.managerName
+          .split(" ")
+          .map((part) => part[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase(),
+        employeeCount: 0,
+        avgTeamSize: 0,
+        status: "Active",
+        teamMembers: [],
+      },
+    ]);
+    setDraftDepartment({ name: "", description: "", managerName: "" });
+    setIsAddOpen(false);
+    toast.success("Department created");
+  };
+
+  const handleDeleteDepartment = () => {
+    if (!deleteTarget) return;
+    setDepartments((current) => current.filter((dept) => dept.id !== deleteTarget.id));
+    toast.success(`${deleteTarget.name} removed`);
+    setDeleteTarget(null);
+    setActiveMenuId(null);
+  };
+
+  const handleDepartmentMenu = (
+    action: string,
+    dept: (typeof initialDepartments)[0],
+  ) => {
+    setActiveMenuId(null);
+    if (action === "view") {
+      setViewDepartment(dept);
+      return;
+    }
+    if (action === "edit") {
+      setEditTarget(dept);
+      setDraftDepartment({
+        name: dept.name,
+        description: dept.description,
+        managerName: dept.managerName,
+      });
+      return;
+    }
+    if (action === "members") {
+      setMembersTarget(dept);
+      return;
+    }
+    if (action === "settings") {
+      setSettingsTarget(dept);
+      return;
+    }
+    if (action === "delete") {
+      setDeleteTarget(dept);
+    }
+  };
+
+  const handleSaveEditDepartment = () => {
+    if (!editTarget || !draftDepartment.name.trim()) return;
+    setDepartments((current) =>
+      current.map((dept) =>
+        dept.id === editTarget.id
+          ? {
+              ...dept,
+              name: draftDepartment.name.trim(),
+              description: draftDepartment.description.trim(),
+              managerName: draftDepartment.managerName.trim(),
+            }
+          : dept,
+      ),
+    );
+    setEditTarget(null);
+    toast.success("Department updated");
+  };
+
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div className="flex flex-col">
-          <h1 className="text-h1 font-medium">Departments</h1>
-          <p className="text-body-lg text-zinc-500 font-medium">
+          <h1 className="type-title">Departments</h1>
+          <p className="type-subtitle">
             Organize employees into departments and manage team structure.
           </p>
         </div>
-        <button className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all">
+        <button
+          type="button"
+          onClick={() => setIsAddOpen(true)}
+          className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+        >
           <Plus className="size-4" />
           Add Department
         </button>
@@ -203,8 +312,7 @@ export default function DepartmentsPage() {
       </div>
 
       {/* Filters Section */}
-      <div className="border border-border rounded-xl p-4 bg-surface flex flex-col gap-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Search Box */}
           <div className="relative flex items-center">
             <Search className="absolute left-3 size-4 text-zinc-400 pointer-events-none" />
@@ -281,7 +389,6 @@ export default function DepartmentsPage() {
               </button>
             )}
           </div>
-        </div>
       </div>
 
       {/* Departments Grid Content */}
@@ -320,17 +427,33 @@ export default function DepartmentsPage() {
                     {/* Actions Menu Popup */}
                     {activeMenuId === dept.id && (
                       <div className="absolute right-0 top-8 w-44 bg-surface border border-border rounded-lg shadow-lg py-1.5 z-40 text-left animate-in fade-in slide-in-from-top-1 duration-100">
-                        <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950">
+                        <button
+                          type="button"
+                          onClick={() => handleDepartmentMenu("edit", dept)}
+                          className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                        >
                           Edit Department
                         </button>
-                        <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950">
+                        <button
+                          type="button"
+                          onClick={() => handleDepartmentMenu("members", dept)}
+                          className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                        >
                           Manage Members
                         </button>
-                        <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950">
+                        <button
+                          type="button"
+                          onClick={() => handleDepartmentMenu("settings", dept)}
+                          className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                        >
                           Department Settings
                         </button>
                         <hr className="border-border my-1" />
-                        <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700">
+                        <button
+                          type="button"
+                          onClick={() => handleDepartmentMenu("delete", dept)}
+                          className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700"
+                        >
                           Delete Department
                         </button>
                       </div>
@@ -356,12 +479,12 @@ export default function DepartmentsPage() {
                 <div className="flex items-center gap-1 mt-5">
                   <div className="flex -space-x-2.5 overflow-hidden">
                     {dept.teamMembers.map((member, i) => (
-                      <div
+                      <PersonAvatar
                         key={i}
-                        className="size-7 rounded-full bg-zinc-100 border-2 border-white text-[10px] font-bold text-zinc-800 flex items-center justify-center shrink-0 shadow-3xs"
-                      >
-                        {member}
-                      </div>
+                        name={member}
+                        size={28}
+                        className="-2 -white shadow-3xs"
+                      />
                     ))}
                   </div>
                   {dept.employeeCount > dept.teamMembers.length && (
@@ -374,9 +497,10 @@ export default function DepartmentsPage() {
                 {/* Card Footer Actions */}
                 <div className="mt-5 pt-4 border-t border-border flex items-center justify-between">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="size-6 rounded-full bg-zinc-100 flex items-center justify-center font-bold text-[9px] text-zinc-800 border border-zinc-200 shrink-0">
-                      {dept.managerAvatar}
-                    </div>
+                    <PersonAvatar
+                      name={dept.managerName}
+                      size={28}
+                    />
                     <div className="flex flex-col min-w-0">
                       <span className="text-[10px] font-semibold text-zinc-400 uppercase leading-none">
                         Manager
@@ -386,7 +510,11 @@ export default function DepartmentsPage() {
                       </span>
                     </div>
                   </div>
-                  <button className="cursor-pointer px-3 py-1.5 border border-border bg-surface hover:bg-zinc-950 hover:text-white hover:border-zinc-950 text-zinc-700 text-xs font-bold rounded-lg shadow-3xs active:scale-98 transition-all shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleDepartmentMenu("view", dept)}
+                    className="cursor-pointer px-3 py-1.5 border border-border bg-surface hover:bg-zinc-950 hover:text-white hover:border-zinc-950 text-zinc-700 text-xs font-bold rounded-lg shadow-3xs active:scale-[0.98] transition-[transform,background-color,border-color,color] duration-150 ease-out shrink-0"
+                  >
                     View Department
                   </button>
                 </div>
@@ -395,6 +523,253 @@ export default function DepartmentsPage() {
           })}
         </div>
       )}
+      <Modal
+        open={isAddOpen}
+        onClose={() => setIsAddOpen(false)}
+        title="Add Department"
+        description="Create a new team structure"
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Department name
+            <input
+              value={draftDepartment.name}
+              onChange={(e) =>
+                setDraftDepartment((current) => ({ ...current, name: e.target.value }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Manager
+            <input
+              value={draftDepartment.managerName}
+              onChange={(e) =>
+                setDraftDepartment((current) => ({
+                  ...current,
+                  managerName: e.target.value,
+                }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Description
+            <textarea
+              value={draftDepartment.description}
+              onChange={(e) =>
+                setDraftDepartment((current) => ({
+                  ...current,
+                  description: e.target.value,
+                }))
+              }
+              rows={3}
+              className="px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong resize-none"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleAddDepartment}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white active:scale-[0.98]"
+          >
+            Save Department
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(viewDepartment)}
+        onClose={() => setViewDepartment(null)}
+        title={viewDepartment?.name ?? "Department"}
+        description={viewDepartment?.id}
+      >
+        {viewDepartment ? (
+          <div className="flex flex-col gap-4 text-left">
+            <p className="text-sm text-zinc-600 leading-relaxed">
+              {viewDepartment.description}
+            </p>
+            <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
+              <div>
+                <span className="text-zinc-400">Employees</span>
+                <p className="text-zinc-900 mt-1">{viewDepartment.employeeCount}</p>
+              </div>
+              <div>
+                <span className="text-zinc-400">Avg team size</span>
+                <p className="text-zinc-900 mt-1">{viewDepartment.avgTeamSize}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <PersonAvatar
+                name={viewDepartment.managerName}
+                size={40}
+              />
+              <div>
+                <p className="text-sm font-bold text-zinc-950">
+                  {viewDepartment.managerName}
+                </p>
+                <p className="text-xs text-zinc-400 font-semibold">Manager</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(editTarget)}
+        onClose={() => setEditTarget(null)}
+        title="Edit Department"
+        description={editTarget?.id}
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Department name
+            <input
+              value={draftDepartment.name}
+              onChange={(e) =>
+                setDraftDepartment((current) => ({ ...current, name: e.target.value }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Manager
+            <input
+              value={draftDepartment.managerName}
+              onChange={(e) =>
+                setDraftDepartment((current) => ({
+                  ...current,
+                  managerName: e.target.value,
+                }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Description
+            <textarea
+              value={draftDepartment.description}
+              onChange={(e) =>
+                setDraftDepartment((current) => ({
+                  ...current,
+                  description: e.target.value,
+                }))
+              }
+              rows={3}
+              className="px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong resize-none"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleSaveEditDepartment}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white active:scale-[0.98]"
+          >
+            Save Changes
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(membersTarget)}
+        onClose={() => setMembersTarget(null)}
+        title="Manage Members"
+        description={membersTarget?.name}
+      >
+        {membersTarget ? (
+          <div className="flex flex-col gap-4 text-left">
+            <p className="text-sm text-zinc-600">
+              {membersTarget.employeeCount} employees assigned to this department.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {membersTarget.teamMembers.map((member) => (
+                <PersonAvatar
+                  key={member}
+                  name={member}
+                  size={32}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMembersTarget(null);
+                toast.success("Member roster updated");
+              }}
+              className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white active:scale-[0.98]"
+            >
+              Save Roster
+            </button>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(settingsTarget)}
+        onClose={() => setSettingsTarget(null)}
+        title="Department Settings"
+        description={settingsTarget?.name}
+      >
+        {settingsTarget ? (
+          <div className="flex flex-col gap-4 text-left">
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              Average team size target
+              <input
+                type="number"
+                defaultValue={settingsTarget.avgTeamSize}
+                className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              Status
+              <select
+                defaultValue={settingsTarget.status}
+                className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong cursor-pointer"
+              >
+                <option>Active</option>
+                <option>Inactive</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsTarget(null);
+                toast.success("Department settings saved");
+              }}
+              className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white active:scale-[0.98]"
+            >
+              Save Settings
+            </button>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete department"
+        description={deleteTarget?.name}
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <p className="text-sm text-zinc-600 font-medium">
+            Employees in this department will need to be reassigned.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setDeleteTarget(null)}
+              className="cursor-pointer flex-1 px-3.5 py-2 rounded-lg border border-border text-sm font-semibold text-zinc-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteDepartment}
+              className="cursor-pointer flex-1 px-3.5 py-2 rounded-lg bg-red-50 text-red-700 border border-red-200/50 text-sm font-semibold"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

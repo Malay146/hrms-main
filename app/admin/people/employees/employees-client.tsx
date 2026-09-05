@@ -2,7 +2,7 @@
 
 import React, { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { FilterX, MoreHorizontal, Plus, Search, Upload } from "lucide-react";
+import { FilterX, MoreHorizontal, Plus, Search } from "lucide-react";
 import { cn } from "@/utils/cn";
 import TotalEmployeeIcon from "@/components/icons/total-employee";
 import PresentTodayIcon from "@/components/icons/present-today";
@@ -10,7 +10,9 @@ import LeaveTodayIcon from "@/components/icons/leave-today";
 import InactiveIcon from "@/components/icons/inactive";
 import { Toast } from "@/components/ui/toast";
 import { createEmployeeAction } from "@/lib/actions/employees";
-import type { EmployeeListItem } from "@/lib/types";
+import { ASSIGNABLE_ROLES, hasPermission, ROLE_LABELS } from "@/lib/permissions";
+import { useSessionUser } from "@/components/providers/session-context";
+import type { EmployeeListItem, Role } from "@/lib/types";
 
 export function EmployeesClient({
   initialEmployees,
@@ -25,6 +27,8 @@ export function EmployeesClient({
   const [showCreate, setShowCreate] = useState(false);
   const [pending, setPending] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const user = useSessionUser();
+  const canCreateUsers = hasPermission(user.role, "createUsers");
   const dropdownRef = useRef<HTMLTableCellElement>(null);
 
   const departments = useMemo(
@@ -54,7 +58,7 @@ export function EmployeesClient({
     const result = await createEmployeeAction({
       fullName: String(form.get("fullName") ?? ""),
       email: String(form.get("email") ?? ""),
-      password: String(form.get("password") ?? ""),
+      role: String(form.get("role") ?? "employee") as Role,
       department: String(form.get("department") ?? ""),
       jobTitle: String(form.get("jobTitle") ?? ""),
       phone: String(form.get("phone") ?? ""),
@@ -65,7 +69,14 @@ export function EmployeesClient({
       return;
     }
     setShowCreate(false);
-    setToast({ message: `Created ${result.data.employeeId}`, type: "success" });
+    if (result.data.emailSent) {
+      setToast({ message: `Created ${result.data.employeeId}. Login details emailed.`, type: "success" });
+    } else {
+      setToast({
+        message: `Created ${result.data.employeeId}. Email failed. Temporary password: ${result.data.temporaryPassword}`,
+        type: "success",
+      });
+    }
     window.location.reload();
   }
 
@@ -79,26 +90,24 @@ export function EmployeesClient({
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="cursor-pointer flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover hover:border-border-strong text-sm font-semibold text-zinc-700 shadow-2xs active:scale-98 transition-all">
-            <Upload className="size-4 text-zinc-500" />
-            Import Employees
-          </button>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all"
-          >
-            <Plus className="size-4" />
-            Add Employee
-          </button>
+          {canCreateUsers ? (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all"
+            >
+              <Plus className="size-4" />
+              Add User
+            </button>
+          ) : null}
         </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Total Employees", value: totalCount, icon: TotalEmployeeIcon, bgStart: "#18181B", bgEnd: "#71717A" },
-          { label: "Active Employees", value: activeCount, icon: PresentTodayIcon, bgStart: "#059669", bgEnd: "#34D399" },
-          { label: "On Leave", value: onLeaveCount, icon: LeaveTodayIcon, bgStart: "#D97706", bgEnd: "#FBBF24" },
-          { label: "Inactive Employees", value: inactiveCount, icon: InactiveIcon, bgStart: "#71717A", bgEnd: "#A1A1AA" },
+          { label: "Active Employees", value: activeCount, icon: PresentTodayIcon, bgStart: "#18181B", bgEnd: "#71717A" },
+          { label: "On Leave", value: onLeaveCount, icon: LeaveTodayIcon, bgStart: "#18181B", bgEnd: "#71717A" },
+          { label: "Inactive Employees", value: inactiveCount, icon: InactiveIcon, bgStart: "#18181B", bgEnd: "#71717A" },
         ].map((stat) => {
           const Icon = stat.icon;
           return (
@@ -162,7 +171,7 @@ export function EmployeesClient({
                 <tr key={emp.employeeId} className="hover:bg-zinc-50/50">
                   <td className="py-3.5 px-6">
                     <Link href={`/admin/people/employees/${emp.employeeId}`} className="flex items-center gap-3">
-                      <div className="size-8 rounded-full bg-zinc-100 text-zinc-700 font-bold text-xs flex items-center justify-center">
+                      <div className="size-8 rounded-lg bg-zinc-100 text-zinc-700 font-bold text-xs flex items-center justify-center">
                         {emp.avatar}
                       </div>
                       <div>
@@ -210,12 +219,20 @@ export function EmployeesClient({
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
           <form onSubmit={handleCreate} className="w-full max-w-lg border border-border rounded-2xl p-6 bg-surface flex flex-col gap-4">
             <div>
-              <h2 className="text-h3 font-semibold">Add Employee</h2>
-              <p className="text-sm text-zinc-500 font-medium">Creates a login and an employee ID like ORG-YYYY-NNN.</p>
+              <h2 className="text-h3 font-semibold">Add User</h2>
+              <p className="text-sm text-zinc-500 font-medium">
+                Creates a login. Username and a generated password are emailed to the person.
+              </p>
             </div>
             <input name="fullName" required placeholder="Full name" className="h-10 px-3 border border-border rounded-lg text-sm" />
             <input name="email" type="email" required placeholder="Work email" className="h-10 px-3 border border-border rounded-lg text-sm" />
-            <input name="password" type="password" required placeholder="Temporary password" className="h-10 px-3 border border-border rounded-lg text-sm" />
+            <select name="role" defaultValue="employee" className="h-10 px-3 border border-border rounded-lg text-sm">
+              {ASSIGNABLE_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {ROLE_LABELS[role]}
+                </option>
+              ))}
+            </select>
             <div className="grid grid-cols-2 gap-3">
               <input name="department" required placeholder="Department" className="h-10 px-3 border border-border rounded-lg text-sm" />
               <input name="jobTitle" required placeholder="Job title" className="h-10 px-3 border border-border rounded-lg text-sm" />
@@ -226,7 +243,7 @@ export function EmployeesClient({
                 Cancel
               </button>
               <button disabled={pending} className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 text-white text-sm font-semibold">
-                {pending ? "Saving..." : "Create employee"}
+                {pending ? "Saving..." : "Create user"}
               </button>
             </div>
           </form>

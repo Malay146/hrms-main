@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Role, SessionUser } from "@/lib/types";
+import type { Permission } from "@/lib/permissions";
+import { hasPermission, homePath, isStaffRole } from "@/lib/permissions";
 
 export class AuthError extends Error {
   constructor(message = "You need to sign in.") {
@@ -34,13 +36,19 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     where: { userId: session.user.id },
   });
 
-  const role = (session.user.role ?? profile?.role ?? "employee") as Role;
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { role: true, mustChangePassword: true },
+  });
+
+  const role = (dbUser?.role ?? session.user.role ?? profile?.role ?? "employee") as Role;
 
   return {
     id: session.user.id,
     name: session.user.name,
     email: session.user.email,
     role,
+    mustChangePassword: Boolean(dbUser?.mustChangePassword),
     employeeId: profile?.employeeId ?? null,
     fullName: profile?.fullName ?? session.user.name,
     department: profile?.department ?? null,
@@ -67,16 +75,54 @@ export async function requireRole(role: Role) {
   return user;
 }
 
+export async function requirePermission(permission: Permission) {
+  const user = await requireUser();
+  if (!hasPermission(user.role, permission)) {
+    throw new ForbiddenError();
+  }
+  return user;
+}
+
 export async function requirePageRole(role: Role) {
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
   }
+  if (user.mustChangePassword) {
+    redirect("/change-password");
+  }
   if (user.role !== role) {
-    redirect(user.role === "admin" ? "/admin" : "/employee");
+    redirect(homePath(user.role));
   }
   return user;
 }
+
+export async function requirePageUser() {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (user.mustChangePassword) {
+    redirect("/change-password");
+  }
+  return user;
+}
+
+export async function requireStaffPage() {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect("/login");
+  }
+  if (user.mustChangePassword) {
+    redirect("/change-password");
+  }
+  if (!isStaffRole(user.role)) {
+    redirect("/employee");
+  }
+  return user;
+}
+
+export { homePath, isStaffRole };
 
 export function actionErrorMessage(error: unknown, fallback: string) {
   if (error instanceof AuthError) return "Your session expired. Please sign in again.";

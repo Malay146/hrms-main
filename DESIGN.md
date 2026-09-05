@@ -121,40 +121,61 @@ Nested `.bg-surface` inside `.bg-surface` becomes `#1E1E20` with `#3F3F46` borde
 
 ## 4. Typography
 
-**Family:** Geist Sans (`next/font/google` → `--font-geist-sans`). Fallback: `ui-sans-serif, system-ui, sans-serif`.  
-**Mono:** Geist Mono — landing window chrome labels only (`text-xs font-mono`). Never use mono for app body copy.  
-**Smoothing:** `antialiased` on `html` and marketing/auth shells.
+**Family:** Geist Sans only for all app UI (`next/font/google` → `--font-geist-sans`). Fallback: `ui-sans-serif, system-ui, sans-serif`.  
+**Mono:** Geist Mono — landing window chrome labels only. Never use mono for app body copy.  
+**Smoothing:** `antialiased` on `html`.
 
-### Scale (from `@theme` in `globals.css`)
+### Locked roles (app shell only)
 
-| Token | Size | Line-height | Tracking | Use |
-| --- | --- | --- | --- | --- |
-| `text-display` | 36px / 2.25rem | 44px | -0.02em | Not used in-app; landing H1 is larger custom |
-| `text-h1` | 28px / 1.75rem | 36px | -0.01em | Page titles (`font-medium`) |
-| `text-h2` | 24px / 1.5rem | 32px | -0.01em | Rare; landing metrics |
-| `text-h3` | 20px / 1.25rem | 28px | -0.005em | Section titles, greeting |
-| `text-h4` | 18px / 1.125rem | 26px | 0 | Sidebar product name |
-| `text-body-lg` | 16px / 1rem | 24px | 0 | Page subtitles (`font-medium text-zinc-500`) |
-| `text-body` / `text-body-md` | 14px / 0.875rem | 20px | 0 | Nav, table cells, buttons |
-| `text-small` | 13px / 0.8125rem | 18px | 0 | Dense UI |
-| `text-caption` / `text-label` | 12px / 0.75rem | 16px | 0.01em | Role under name, table headers (headers also +0.02em via `text-table-header`) |
-| `text-button` | 14px | 20px | 0 | Button labels |
+Five size roles. Prefer the `.type-*` utility classes — they lock size + leading + tracking + default weight + color together.
 
-### Weight rules
+| Role | Class | Size | Leading | Tracking | Weight | Color | Use |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Title | `.type-title` | 28px | 34px | -0.02em | Medium (500) | primary | Page H1 only |
+| Subtitle | `.type-subtitle` | 14px | 20px | 0 | Medium (500) | secondary | One-line page subtitle under H1 |
+| Heading | `.type-heading` | 16px | 22px | -0.01em | Semibold (600) | primary | Section titles, card headers |
+| Body | `.type-body` | 14px | 20px | 0 | Regular (400) | primary | Nav, table cells, buttons, forms |
+| Caption | `.type-caption` | 12px | 16px | +0.01em | Medium (500) | tertiary | Meta, email under name, helpers |
+| Metric | `.type-metric` | 28px | 32px | -0.02em | Semibold (600) | primary | KPI numbers only |
+| Label | `.type-label` | 12px | 16px | +0.02em | Semibold (600) | secondary | Uppercase table headers |
 
-- Page H1: `font-medium` (not bold)
-- Greeting H3: `font-semibold`; muted prefix `text-zinc-500`, name `text-black` / `dark:text-white`
-- KPI numbers: `font-bold` `text-h1` or `text-2xl`
-- Table headers: `text-xs font-semibold uppercase tracking-wider text-zinc-500`
-- Auth labels: `text-xs font-semibold uppercase tracking-wide text-zinc-500`
-- Primary CTA: `font-semibold` (app) or `font-semibold` with ArrowRight (auth/landing)
-- Destructive / logout: `font-bold` or `font-medium` + `text-error`
+Subtitle and Label are **compositions** of Body/Caption — they do not add new sizes.
 
-### Landing type (exception)
+### Weight policy
 
-Hero H1: `text-4xl sm:text-5xl lg:text-6xl font-medium tracking-tight leading-[1.1] text-zinc-950`.  
-Hero body: `text-base sm:text-lg text-zinc-600 leading-relaxed`.  
-Auth title: `text-3xl sm:text-4xl font-medium tracking-tight`.
+**Allowed:** Regular (400), Medium (500), Semibold (600), Bold (700).  
+**Banned:** Light and below; ExtraBold / Black and above. Never use `font-light`, `font-thin`, `font-extrabold`, `font-black`.
+
+| Weight | When |
+| --- | --- |
+| Regular | Body default |
+| Medium | Title, Subtitle, Caption |
+| Semibold | Heading, Metric, Label, primary button label |
+| Bold | Rare emphasis only — unread title, destructive logout label |
+
+### Tracking & leading (Apple)
+
+- Large titles tighten (`-0.02em`); small captions open slightly (`+0.01em`); body stays `0`.
+- Leading is tighter on Title/Metric, airier on Body — hierarchy from the set, not size alone.
+
+### Landing / auth exception
+
+Do **not** force `.type-*` onto marketing or auth pages. Landing keeps its own expressive scale (`text-4xl`–`text-6xl`, etc.). App tokens apply under `/admin/*` and `/employee/*`.
+
+### Status badges & tables
+
+Use shadcn primitives:
+
+- [`components/ui/badge.tsx`](components/ui/badge.tsx) + [`components/ui/status-badge.tsx`](components/ui/status-badge.tsx) for status pills
+- [`components/ui/table.tsx`](components/ui/table.tsx) for data tables (headers use `.type-label`, cells use `.type-body`)
+
+Status tone map: Active/Approved/On Time/Paid → `success`; Pending/Late/On Leave/Processing → `warning`; Rejected → `destructive`; Inactive/Applied → `neutral`.
+
+### Do not
+
+- Invent new sizes (`text-[10px]`, `text-2xl`) in app UI — use Caption or Metric.
+- Mix raw `text-h1` + random `font-bold` when a `.type-*` class exists.
+- Use Light weight for “breathable” UI — breath comes from leading and fewer roles, not thinner type.
 
 ---
 
@@ -176,8 +197,7 @@ Auth title: `text-3xl sm:text-4xl font-medium tracking-tight`.
 | Auth card, auth inputs, auth CTA | `rounded-2xl` / `rounded-xl` | 16 / 12px |
 | Landing nav, landing CTA | `rounded-xl` / `rounded-md` | 12 / 6px |
 | Status badges | `rounded-full` | pill |
-| Avatars (list) | `rounded-full` | circle |
-| Navbar avatar | `rounded-md` 32×32 | 6px square-ish |
+| Avatars | `rounded-lg` | squircle — never `rounded-full` |
 | Coming Soon chip | `rounded-full` | pill |
 | Date chip on dashboard | `rounded-sm` | 2–4px |
 
@@ -309,23 +329,27 @@ Icon 16px, gap-2. Plus / Play / Download sit on the left.
 
 ### Status badges
 
-Pill: `px-2 py-0.5` or `px-2.5 py-0.5`, `text-[10px]` or `text-xs`, `font-bold`, `rounded-full`, 1px border.
+Use shadcn [`Badge`](components/ui/badge.tsx) via [`StatusBadge`](components/ui/status-badge.tsx). Caption size, semibold, `rounded-full`.
 
-| Status | Classes (light; dark remaps automatically) |
+| Status | Variant |
 | --- | --- |
-| Active / Approved / On Time / Paid | `bg-emerald-50 text-emerald-700 border-emerald-200/50` |
-| Pending / Late / On Leave / Processing | `bg-amber-50 text-amber-700 border-amber-200/50` |
-| Rejected / Inactive (destructive) | `bg-red-50 text-red-700 border-red-200/50` |
-| Neutral / Inactive / Coming Soon | `bg-zinc-50` or `bg-zinc-100 text-zinc-500 border-zinc-200` |
-| Dashboard leave chips (token form) | `bg-success-soft border-success/30 text-success` (and warning/error equivalents) |
+| Active / Approved / On Time / Paid / Hired | `success` |
+| Pending / Late / On Leave / Processing | `warning` |
+| Rejected / Absent | `destructive` |
+| Inactive / Applied / Screening | `neutral` |
+| Offer | `info` |
+
+### Tables
+
+Use shadcn [`Table`](components/ui/table.tsx). Outer shell: `border border-border rounded-xl overflow-hidden`. Headers use `.type-label`; cells use `.type-body`; empty state uses `.type-caption`.
 
 ### KPI / metric tiles
 
-- Container: `border border-border rounded-xl p-5 bg-surface min-h-[140px]` (employee stats skip the icon tile)
+- Container: `border border-border rounded-xl p-5 bg-surface min-h-[140px]`
 - Icon well: `size-12 rounded-lg`, white glyph, vertical zinc (or semantic) gradient as in §3
-- Value: `text-h1 font-bold text-zinc-950 leading-none`
-- Delta: `text-sm font-semibold` in `#16A34A` / `#DC2626` / `#1D4ED8` / `#D97706`
-- Label: `text-body-lg font-medium text-primary` (dashboard) or `text-sm font-medium text-zinc-500` above the value (employee)
+- Value: `.type-metric`
+- Label: `.type-caption`
+- Delta: `text-body font-semibold` in success / error / warning tones
 
 Semantic icon gradients already in product:
 
@@ -349,10 +373,10 @@ Semantic icon gradients already in product:
 - Hide until mounted; placeholder `bg-zinc-50 rounded-xl animate-pulse` at chart height (200–250px)
 - Grid: horizontal only, `strokeDasharray="3 3"`, `stroke="var(--divider)"` or `#F4F4F5`
 - No axis lines or tick lines
-- X ticks: 11–12px, `var(--text-secondary)` or `#A1A1AA`, weight 600 on employee
+- X ticks: 11–12px, `var(--text-secondary)` or `#A1A1AA`, weight 600
 - Y ticks: `var(--text-disabled)`
 - Bar radius `[12,12,0,0]` (dashboard) or `[4,4,0,0]` (employee hours), `maxBarSize` 40–60
-- Tooltip: `bg-surface border border-border rounded-md shadow-md px-3 py-1.5 text-xs font-semibold`
+- Tooltip: `bg-surface border border-border rounded-md shadow-md px-3 py-1.5 text-caption font-semibold`
 - Cursor fill `rgba(0,0,0,0.04)` radius 6
 - Pie: zinc grayscale only; legend uses the same hexes as slices
 
@@ -360,24 +384,33 @@ Semantic icon gradients already in product:
 
 - Centered column, `py-24`
 - 64×64 `rounded-2xl` zinc gradient icon well (same as KPI)
-- `text-h3 font-semibold` title
-- `text-sm text-zinc-500 font-medium max-w-sm` body
-- Pill: `Coming Soon` (`text-xs font-bold bg-zinc-100 text-zinc-500 border`)
+- `.type-heading` title
+- `.type-subtitle max-w-sm` body
+- Pill: `Coming Soon` via `<Badge variant="neutral">`
 
 Used on Performance and AI Analytics. Reuse this exact block for any unfinished module.
 
-### Toast ([`components/ui/toast.tsx`](components/ui/toast.tsx))
+### Toast ([`components/ui/sonner.tsx`](components/ui/sonner.tsx) / [`toast.tsx`](components/ui/toast.tsx))
 
-- Fixed `bottom-6 right-6`, `rounded-xl`, `bg-surface/90 backdrop-blur-md shadow-lg`
-- Auto-dismiss 3000ms
-- Types: success / warning / error / info with matching lucide icon colors
-- Message: `text-xs font-bold`
+- Fixed bottom-right, `rounded-xl`, `bg-surface/95`, `border-border` only
+- **Neutral borders for every type** — no emerald/amber/red toast borders
+- Icons stay zinc-500; status meaning comes from copy, not chrome color
+- Auto-dismiss ~3200ms
+- Message: `text-sm font-semibold` / description `text-xs text-zinc-500`
 
 ### Avatars
 
-- List/table: `size-8 rounded-full` initials, 2-letter uppercase
-- Navbar: 32×32 `rounded-md` photo
-- Profile page: `size-20 rounded-full` initials, `text-2xl font-bold`
+Use [`PersonAvatar`](components/ui/person-avatar.tsx) only. Radius is **always** `rounded-lg` (squircle) — do not pass `rounded-full`.
+
+| Context | Size |
+| --- | --- |
+| Dense lists / activity | 28 (`AVATAR_SIZE.sm`) |
+| Tables / navbar / default | 32 (`AVATAR_SIZE.md`) |
+| Primary list rows | 40 (`AVATAR_SIZE.lg`) |
+| Modal identity | 48 (`AVATAR_SIZE.xl`) |
+| Profile hero | 80 (`AVATAR_SIZE.profile`) |
+
+Border (`border-zinc-200`) is built into the component.
 
 ### Dropdowns / popovers
 
@@ -477,14 +510,14 @@ Reuse these layouts instead of inventing new ones.
 <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
   <div className="flex items-start justify-between">
     <div className="flex flex-col text-left">
-      <h1 className="text-h1 font-medium">Title</h1>
-      <p className="text-body-lg text-zinc-500 font-medium">One-line subtitle.</p>
+      <h1 className="type-title">Title</h1>
+      <p className="type-subtitle">One-line subtitle.</p>
     </div>
     <div className="flex items-center gap-3">
-      <button className="cursor-pointer flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover hover:border-border-strong text-sm font-semibold text-zinc-700 shadow-2xs active:scale-98 transition-all">
+      <button className="cursor-pointer flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover hover:border-border-strong text-body font-semibold text-zinc-700 shadow-2xs active:scale-[0.98] transition-[transform,background-color,border-color] duration-150 ease-out">
         Secondary
       </button>
-      <button className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all">
+      <button className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-body font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out">
         Primary
       </button>
     </div>

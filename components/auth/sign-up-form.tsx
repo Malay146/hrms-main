@@ -16,14 +16,7 @@ export function SignUpForm() {
     event.preventDefault();
     setError("");
     setPending(true);
-    const form = new FormData(event.currentTarget);
-    const result = await signUpOrganizationAction({
-      name: String(form.get("name") ?? ""),
-      organizationName: String(form.get("organization-name") ?? ""),
-      organizationEmail: String(form.get("organization-email") ?? ""),
-      password: String(form.get("password") ?? ""),
-      confirmPassword: String(form.get("confirm-password") ?? ""),
-    });
+    const result = await signUpOrganizationAction();
     setPending(false);
     if (!result.ok) {
       setError(result.error);

@@ -7,10 +7,7 @@ export default function LoginPage() {
     <AuthLayout>
       <AuthShell
         title="Welcome Back"
-        description="Sign in to your organization workspace to manage employees, track attendance, process payroll, and stay on top of HR operations."
-        footerText="Don't have an account?"
-        footerLinkHref="/sign-up"
-        footerLinkLabel="Create one"
+        description="Sign in with the account an administrator created for you."
       >
         <LoginForm />
       </AuthShell>

@@ -6,9 +6,9 @@ type AuthShellProps = {
   title: string;
   description: string;
   children: React.ReactNode;
-  footerText: string;
-  footerLinkHref: string;
-  footerLinkLabel: string;
+  footerText?: string;
+  footerLinkHref?: string;
+  footerLinkLabel?: string;
   className?: string;
 };
 
@@ -49,15 +49,21 @@ export function AuthShell({
         {children}
       </div>
 
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        {footerText}{" "}
-        <Link
-          href={footerLinkHref}
-          className="font-semibold text-zinc-950 dark:text-white hover:underline underline-offset-4"
-        >
-          {footerLinkLabel}
-        </Link>
-      </p>
+      {footerText && footerLinkHref && footerLinkLabel ? (
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          {footerText}{" "}
+          <Link
+            href={footerLinkHref}
+            className="font-semibold text-zinc-950 dark:text-white hover:underline underline-offset-4"
+          >
+            {footerLinkLabel}
+          </Link>
+        </p>
+      ) : (
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          Need an account? Ask your administrator to create one.
+        </p>
+      )}
     </div>
   );
 }

@@ -1,28 +1,28 @@
 import { Mail, Phone, Calendar as CalendarIcon, ShieldCheck } from "lucide-react";
 import { getProfileAction } from "@/lib/actions/employees";
 import { getCurrentUser } from "@/lib/session";
+import { PersonAvatar } from "@/components/ui/person-avatar";
 
 export default async function EmployeeProfilePage() {
   const [user, result] = await Promise.all([getCurrentUser(), getProfileAction()]);
   const profile = result.ok ? result.data : null;
+  const displayName = profile?.name ?? user?.fullName ?? "Employee";
 
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6 text-left">
       <div className="flex flex-col">
-        <h1 className="text-h1 font-medium">My Profile</h1>
-        <p className="text-body-lg text-zinc-500 font-medium">
+        <h1 className="type-title">My Profile</h1>
+        <p className="type-subtitle">
           View your registered personal details and employment files.
         </p>
       </div>
 
       <div className="border border-border rounded-xl p-6 bg-surface flex flex-col sm:flex-row items-center sm:items-start gap-6">
-        <div className="size-20 rounded-full bg-zinc-100 border border-zinc-300 text-zinc-800 font-bold text-2xl flex items-center justify-center shrink-0">
-          {profile?.avatar ?? "ME"}
-        </div>
+        <PersonAvatar name={displayName} size={80} />
         <div className="flex-1 flex flex-col gap-2 min-w-0">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <h2 className="text-xl font-bold text-zinc-950 leading-tight">
-              {profile?.name ?? user?.fullName ?? "Employee"}
+              {displayName}
             </h2>
             <span className="bg-emerald-50 text-emerald-700 border border-emerald-200/50 px-2 py-0.5 rounded-full text-[10px] font-bold self-start">
               {profile?.status ?? "Active"}

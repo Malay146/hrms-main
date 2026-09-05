@@ -9,6 +9,9 @@ datasource db {
 
 enum Role {
   admin
+  hr_manager
+  hr_payroll_user
+  hr_payroll_manager
   employee
 }
 
@@ -46,6 +49,7 @@ model User {
   createdAt     DateTime
   updatedAt     DateTime
   role          String    @default("employee")
+  mustChangePassword Boolean @default(false)
   sessions      Session[]
   accounts      Account[]
   profile       EmployeeProfile?
@@ -77,6 +81,7 @@ model Account {
   id                    String    @id
   accountId             String
   providerId            String
+  issuer                String    @default("local:credential")
   userId                String
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?
@@ -89,6 +94,7 @@ model Account {
   createdAt             DateTime
   updatedAt             DateTime
 
+  @@unique([issuer, accountId])
   @@index([userId])
   @@map("account")
 }

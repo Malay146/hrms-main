@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { actionErrorMessage, requireRole } from "@/lib/session";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
 import { mapPayroll } from "@/lib/mappers";
 import { currentPayrollMonth } from "@/lib/dates";
 import { firstZodError, upsertPayrollSchema } from "@/lib/validations";
@@ -11,10 +11,9 @@ import type { ActionResult, PayrollListItem } from "@/lib/types";
 
 export async function listPayroll(): Promise<ActionResult<PayrollListItem[]>> {
   try {
-    await requireRole("admin");
+    await requirePermission("viewPayrollAll");
     const month = currentPayrollMonth();
     const profiles = await prisma.employeeProfile.findMany({
-      where: { role: "employee" },
       include: {
         user: {
           include: {
@@ -73,7 +72,7 @@ export async function listPayroll(): Promise<ActionResult<PayrollListItem[]>> {
 
 export async function getMyPayroll(): Promise<ActionResult<PayrollListItem[]>> {
   try {
-    const user = await requireRole("employee");
+    const user = await requireUser();
     const rows = await prisma.payroll.findMany({
       where: { userId: user.id },
       include: {
@@ -103,7 +102,7 @@ export async function upsertPayrollAction(input: {
   deductions: number;
 }): Promise<ActionResult<PayrollListItem>> {
   try {
-    const admin = await requireRole("admin");
+    const admin = await requirePermission("editPayroll");
     const parsed = upsertPayrollSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };

@@ -146,8 +146,8 @@ export default function EmployeeNotificationsPage() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div className="flex flex-col">
-          <h1 className="text-h1 font-medium">My Notifications</h1>
-          <p className="text-body-lg text-zinc-500 font-medium">
+          <h1 className="type-title">My Notifications</h1>
+          <p className="type-subtitle">
             View, filter, and manage your personal notifications and updates.
           </p>
         </div>
@@ -174,7 +174,7 @@ export default function EmployeeNotificationsPage() {
         
         {/* Left Column */}
         <div className="lg:col-span-8 flex flex-col gap-5">
-          <div className="border border-border rounded-xl p-4 bg-surface grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="relative flex items-center">
               <Search className="absolute left-3 size-4 text-zinc-400 pointer-events-none" />
               <input
@@ -234,7 +234,7 @@ export default function EmployeeNotificationsPage() {
                     notif.read ? "border-border" : "border-zinc-950/80 bg-zinc-50/10 shadow-3xs"
                   )}
                 >
-                  <div className="size-10 rounded-full bg-zinc-50 border border-border flex items-center justify-center text-xl shrink-0">
+                  <div className="size-10 rounded-lg bg-zinc-50 border border-border flex items-center justify-center text-xl shrink-0">
                     {getIcon(notif.type)}
                   </div>
 

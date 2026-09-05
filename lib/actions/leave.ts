@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { actionErrorMessage, requireRole } from "@/lib/session";
+import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
 import { mapLeave } from "@/lib/mappers";
 import {
   dateFromKey,
@@ -29,7 +29,7 @@ function revalidateLeave() {
 
 export async function listLeaveRequests(): Promise<ActionResult<LeaveListItem[]>> {
   try {
-    await requireRole("admin");
+    await requirePermission("approveLeave");
     const rows = await prisma.leaveRequest.findMany({
       include: {
         user: {
@@ -49,7 +49,7 @@ export async function listLeaveRequests(): Promise<ActionResult<LeaveListItem[]>
 
 export async function listMyLeaves(): Promise<ActionResult<LeaveListItem[]>> {
   try {
-    const user = await requireRole("employee");
+    const user = await requireUser();
     const rows = await prisma.leaveRequest.findMany({
       where: { userId: user.id },
       include: {
@@ -70,7 +70,7 @@ export async function listMyLeaves(): Promise<ActionResult<LeaveListItem[]>> {
 
 export async function getLeaveCalendarMarkers(): Promise<ActionResult<CalendarMarker[]>> {
   try {
-    const user = await requireRole("employee");
+    const user = await requireUser();
     const [attendance, leaves] = await Promise.all([
       prisma.attendance.findMany({
         where: { userId: user.id },
@@ -111,7 +111,7 @@ export async function applyLeaveAction(input: {
   remarks: string;
 }): Promise<ActionResult<LeaveListItem>> {
   try {
-    const user = await requireRole("employee");
+    const user = await requireUser();
     const parsed = applyLeaveSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
@@ -177,7 +177,7 @@ export async function decideLeaveAction(input: {
   adminComment: string;
 }): Promise<ActionResult> {
   try {
-    const admin = await requireRole("admin");
+    const admin = await requirePermission("approveLeave");
     const parsed = decideLeaveSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
@@ -252,7 +252,7 @@ export async function decideLeaveAction(input: {
 }
 
 export async function getPaidLeaveBalance() {
-  const user = await requireRole("employee");
+  const user = await requireUser();
   const profile = await prisma.employeeProfile.findUnique({
     where: { userId: user.id },
     select: { paidLeaveBalance: true },

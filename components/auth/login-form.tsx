@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AuthField } from "@/components/auth/auth-field";
 import { PasswordField } from "@/components/auth/password-field";
@@ -27,7 +26,7 @@ export function LoginForm() {
       setError(result.error);
       return;
     }
-    router.push(result.data.role === "admin" ? "/admin" : "/employee");
+    router.push(result.data.redirectTo);
     router.refresh();
   }
 
@@ -51,25 +50,6 @@ export function LoginForm() {
         autoComplete="current-password"
         required
       />
-
-      <div className="flex items-center justify-between gap-4">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            className="size-4 rounded border-zinc-300 dark:border-zinc-700 text-zinc-950 focus:ring-zinc-950/20 dark:focus:ring-white/20"
-          />
-          <span className="text-sm text-zinc-600 dark:text-zinc-400">
-            Remember me
-          </span>
-        </label>
-
-        <Link
-          href="#"
-          className="text-sm font-medium text-zinc-950 dark:text-white hover:underline underline-offset-4 shrink-0"
-        >
-          Forgot password?
-        </Link>
-      </div>
 
       {error ? (
         <p className="text-xs font-semibold text-red-600">{error}</p>

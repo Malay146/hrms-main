@@ -166,8 +166,8 @@ export default function NotificationsPage() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div className="flex flex-col">
-          <h1 className="text-h1 font-medium">Notifications</h1>
-          <p className="text-body-lg text-zinc-500 font-medium">
+          <h1 className="type-title">Notifications</h1>
+          <p className="type-subtitle">
             View, filter, and manage all your notifications and announcements.
           </p>
         </div>
@@ -196,7 +196,7 @@ export default function NotificationsPage() {
         <div className="lg:col-span-8 flex flex-col gap-5">
           
           {/* Filters controls */}
-          <div className="border border-border rounded-xl p-4 bg-surface grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Search */}
             <div className="relative flex items-center">
               <Search className="absolute left-3 size-4 text-zinc-400 pointer-events-none" />
@@ -261,7 +261,7 @@ export default function NotificationsPage() {
                   )}
                 >
                   {/* Category icon */}
-                  <div className="size-10 rounded-full bg-zinc-50 border border-border flex items-center justify-center text-xl shrink-0">
+                  <div className="size-10 rounded-lg bg-zinc-50 border border-border flex items-center justify-center text-xl shrink-0">
                     {getIcon(notif.type)}
                   </div>
 

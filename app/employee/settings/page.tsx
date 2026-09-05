@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { ChevronRight, Lock, CheckCircle2 } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
 import { cn } from "@/utils/cn";
 import ShieldCheckIcon from "@/components/icons/shield-check";
+import { toast } from "sonner";
 
 // Mock Active Sessions
 const initialSessions = [
@@ -20,9 +21,29 @@ const initialSessions = [
 export default function EmployeeSettingsPage() {
   const [activeTab, setActiveTab] = useState<"security">("security");
   const [sessions, setSessions] = useState(initialSessions);
+  const [passwords, setPasswords] = useState({
+    current: "",
+    next: "",
+    confirm: "",
+  });
+  const [savedPasswords, setSavedPasswords] = useState({
+    current: "",
+    next: "",
+    confirm: "",
+  });
 
   const handleRevokeSession = (id: string) => {
     setSessions((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleSaveChanges = () => {
+    setSavedPasswords(passwords);
+    toast.success("Security settings saved");
+  };
+
+  const handleCancelChanges = () => {
+    setPasswords(savedPasswords);
+    toast.info("Changes discarded");
   };
 
   const sidebarItems = [
@@ -38,16 +59,24 @@ export default function EmployeeSettingsPage() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div className="flex flex-col text-left">
-          <h1 className="text-h1 font-medium">Account Settings</h1>
-          <p className="text-body-lg text-zinc-500 font-medium">
+          <h1 className="type-title">Account Settings</h1>
+          <p className="type-subtitle">
             Manage your personal security settings, passwords, and sessions.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="cursor-pointer px-4 py-2 border border-border rounded-md bg-surface hover:bg-surface-hover text-sm font-semibold text-zinc-700 shadow-2xs active:scale-98 transition-all">
+          <button
+            type="button"
+            onClick={handleCancelChanges}
+            className="cursor-pointer px-4 py-2 border border-border rounded-md bg-surface hover:bg-surface-hover text-sm font-semibold text-zinc-700 shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
             Cancel
           </button>
-          <button className="cursor-pointer px-4 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all">
+          <button
+            type="button"
+            onClick={handleSaveChanges}
+            className="cursor-pointer px-4 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
             Save Changes
           </button>
         </div>
@@ -120,6 +149,13 @@ export default function EmployeeSettingsPage() {
                     <input
                       type="password"
                       placeholder="••••••••"
+                      value={passwords.current}
+                      onChange={(e) =>
+                        setPasswords((current) => ({
+                          ...current,
+                          current: e.target.value,
+                        }))
+                      }
                       className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-900 focus:outline-none focus:border-border-strong font-medium"
                     />
                   </div>
@@ -130,6 +166,13 @@ export default function EmployeeSettingsPage() {
                     <input
                       type="password"
                       placeholder="••••••••"
+                      value={passwords.next}
+                      onChange={(e) =>
+                        setPasswords((current) => ({
+                          ...current,
+                          next: e.target.value,
+                        }))
+                      }
                       className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-900 focus:outline-none focus:border-border-strong font-medium"
                     />
                   </div>
@@ -140,6 +183,13 @@ export default function EmployeeSettingsPage() {
                     <input
                       type="password"
                       placeholder="••••••••"
+                      value={passwords.confirm}
+                      onChange={(e) =>
+                        setPasswords((current) => ({
+                          ...current,
+                          confirm: e.target.value,
+                        }))
+                      }
                       className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-900 focus:outline-none focus:border-border-strong font-medium"
                     />
                   </div>
@@ -158,7 +208,7 @@ export default function EmployeeSettingsPage() {
                       className="flex items-center justify-between border border-border rounded-xl p-4 bg-zinc-50/25"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="size-9 rounded-full bg-zinc-50 border border-border flex items-center justify-center text-lg shrink-0">
+                        <div className="size-9 rounded-lg bg-zinc-50 border border-border flex items-center justify-center text-lg shrink-0">
                           {sess.type === "desktop" ? "💻" : "📱"}
                         </div>
                         <div className="flex flex-col">
