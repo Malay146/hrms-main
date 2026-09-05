@@ -187,21 +187,22 @@ model Verification {
 }
 
 model Organization {
-  id               String            @id @default(cuid())
-  name             String
-  email            String
-  slug             String            @unique
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  profiles         EmployeeProfile[]
-  departments      Department[]
-  schedules        WorkingSchedule[]
-  timeOffTypes     TimeOffType[]
-  salaryStructures SalaryStructure[]
-  payruns          Payrun[]
-  aiInsights       AiInsight[]
-  jobOpenings      JobOpening[]
-  candidates       Candidate[]
+  id                    String            @id @default(cuid())
+  name                  String
+  email                 String
+  slug                  String            @unique
+  inactiveEmployeeCount Int               @default(0)
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  profiles              EmployeeProfile[]
+  departments           Department[]
+  schedules             WorkingSchedule[]
+  timeOffTypes          TimeOffType[]
+  salaryStructures      SalaryStructure[]
+  payruns               Payrun[]
+  aiInsights            AiInsight[]
+  jobOpenings           JobOpening[]
+  candidates            Candidate[]
 
   @@map("organization")
 }

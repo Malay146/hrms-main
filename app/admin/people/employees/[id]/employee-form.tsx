@@ -2,6 +2,7 @@
 
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Mail, Phone } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { PersonAvatar } from "@/components/ui/person-avatar";
@@ -18,6 +19,7 @@ const inputClass =
   "h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong";
 
 export function EmployeeForm({ initial }: { initial: EmployeeHubData }) {
+  const router = useRouter();
   const [employee, setEmployee] = useState(initial.employee);
   const [tab, setTab] = useState<Tab>("work");
   const [pending, startTransition] = useTransition();
@@ -60,6 +62,12 @@ export function EmployeeForm({ initial }: { initial: EmployeeHubData }) {
 
   function handleSave(event: React.FormEvent) {
     event.preventDefault();
+    if (status === "inactive") {
+      const confirmed = window.confirm(
+        "Marking this employee inactive permanently deletes their account and related records. Continue?",
+      );
+      if (!confirmed) return;
+    }
     startTransition(async () => {
       const result = await updateEmployeeAction({
         employeeId: employee.employeeId,
@@ -82,7 +90,19 @@ export function EmployeeForm({ initial }: { initial: EmployeeHubData }) {
         setToast({ message: result.error, type: "error" });
         return;
       }
-      applySaved(result.data);
+      if (result.data.kind === "deactivated") {
+        sessionStorage.setItem(
+          "hrms-employee-create-toast",
+          JSON.stringify({
+            message: "Employee deactivated. Account deleted and inactive count updated.",
+            type: "success",
+          }),
+        );
+        router.push("/admin/people/employees");
+        router.refresh();
+        return;
+      }
+      applySaved(result.data.employee);
       setToast({ message: "Employee saved.", type: "success" });
     });
   }

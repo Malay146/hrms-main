@@ -62,10 +62,26 @@ export type EmployeeHubData = {
   options: EmployeeHubOptions;
 };
 
-export async function listEmployees(): Promise<ActionResult<EmployeeListItem[]>> {
+export type EmployeeListResult = {
+  employees: EmployeeListItem[];
+  /** Hard-removed inactive employees (kept for the Inactive KPI). */
+  removedInactiveCount: number;
+};
+
+export type UpdateEmployeeResult =
+  | { kind: "updated"; employee: EmployeeHubRecord }
+  | { kind: "deactivated"; employeeId: string };
+
+export async function listEmployees(): Promise<ActionResult<EmployeeListResult>> {
   try {
-    await requirePermission("managePeople");
+    const viewer = await requirePermission("managePeople");
     const today = kolkataTodayKey();
+    const org = await prisma.employeeProfile.findUnique({
+      where: { userId: viewer.id },
+      select: {
+        organization: { select: { inactiveEmployeeCount: true } },
+      },
+    });
     const [profiles, leavesToday] = await Promise.all([
       prisma.employeeProfile.findMany({
         include: {
@@ -87,7 +103,12 @@ export async function listEmployees(): Promise<ActionResult<EmployeeListItem[]>>
     const onLeave = new Set(leavesToday.map((leave) => leave.userId));
     return {
       ok: true,
-      data: profiles.map((profile) => mapEmployee(profile, onLeave.has(profile.userId))),
+      data: {
+        employees: profiles.map((profile) =>
+          mapEmployee(profile, onLeave.has(profile.userId)),
+        ),
+        removedInactiveCount: org?.organization.inactiveEmployeeCount ?? 0,
+      },
     };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not load employees.") };
@@ -249,9 +270,9 @@ export async function updateEmployeeAction(input: {
   address?: string | null;
   bankAccount?: string | null;
   joinDate?: string | null;
-}): Promise<ActionResult<EmployeeHubRecord>> {
+}): Promise<ActionResult<UpdateEmployeeResult>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requirePermission("managePeople");
     const parsed = updateEmployeeSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
@@ -259,10 +280,47 @@ export async function updateEmployeeAction(input: {
 
     const existing = await prisma.employeeProfile.findUnique({
       where: { employeeId: parsed.data.employeeId },
-      select: { id: true, organizationId: true, userId: true },
+      select: {
+        id: true,
+        organizationId: true,
+        userId: true,
+        status: true,
+        role: true,
+      },
     });
     if (!existing) {
       return { ok: false, error: "Employee not found." };
+    }
+
+    if (parsed.data.status === "inactive") {
+      if (existing.userId === actor.id) {
+        return { ok: false, error: "You cannot deactivate your own account." };
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.employeeProfile.updateMany({
+          where: { managerId: existing.id },
+          data: { managerId: null },
+        });
+        await tx.organization.update({
+          where: { id: existing.organizationId },
+          data: { inactiveEmployeeCount: { increment: 1 } },
+        });
+        // Cascades profile, contracts, allocations, payslips, attendance, leave, sessions, accounts.
+        await tx.user.delete({ where: { id: existing.userId } });
+      });
+
+      logger.info("employee.deactivated_deleted", {
+        employeeId: parsed.data.employeeId,
+        by: actor.id,
+      });
+      revalidatePath("/admin");
+      revalidatePath("/admin/people/employees");
+      revalidatePath("/admin/users");
+      return {
+        ok: true,
+        data: { kind: "deactivated", employeeId: parsed.data.employeeId },
+      };
     }
 
     if (parsed.data.managerId === existing.id) {
@@ -343,7 +401,7 @@ export async function updateEmployeeAction(input: {
     if (!hub.ok) {
       return { ok: false, error: hub.error };
     }
-    return { ok: true, data: hub.data.employee };
+    return { ok: true, data: { kind: "updated", employee: hub.data.employee } };
   } catch (error) {
     return { ok: false, error: actionErrorMessage(error, "Could not update employee.") };
   }

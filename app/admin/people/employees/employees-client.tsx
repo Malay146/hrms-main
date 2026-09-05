@@ -27,8 +27,10 @@ const CREATE_TOAST_KEY = "hrms-employee-create-toast";
 
 export function EmployeesClient({
   initialEmployees,
+  removedInactiveCount = 0,
 }: {
   initialEmployees: EmployeeListItem[];
+  removedInactiveCount?: number;
 }) {
   const [employees] = useState(initialEmployees);
   const [search, setSearch] = useState("");
@@ -80,10 +82,11 @@ export function EmployeesClient({
     return matchesSearch && matchesDept && matchesStatus;
   });
 
-  const totalCount = employees.length;
+  const listedInactive = employees.filter((e) => e.status === "Inactive").length;
+  const inactiveCount = listedInactive + removedInactiveCount;
+  const totalCount = employees.length + removedInactiveCount;
   const activeCount = employees.filter((e) => e.status === "Active").length;
   const onLeaveCount = employees.filter((e) => e.status === "On Leave").length;
-  const inactiveCount = employees.filter((e) => e.status === "Inactive").length;
 
   async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -286,6 +289,8 @@ export function EmployeesClient({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {KANBAN_COLUMNS.map((column) => {
             const cards = filteredEmployees.filter((emp) => emp.status === column);
+            const columnCount =
+              column === "Inactive" ? cards.length + removedInactiveCount : cards.length;
             return (
               <div
                 key={column}
@@ -293,12 +298,14 @@ export function EmployeesClient({
               >
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                   <h2 className="text-sm font-bold text-zinc-950">{column}</h2>
-                  <span className="text-xs font-semibold text-zinc-500">{cards.length}</span>
+                  <span className="text-xs font-semibold text-zinc-500">{columnCount}</span>
                 </div>
                 <div className="flex flex-col gap-3 p-3">
                   {cards.length === 0 ? (
                     <p className="text-xs font-medium text-zinc-400 text-center py-8">
-                      No employees
+                      {column === "Inactive" && removedInactiveCount > 0
+                        ? `${removedInactiveCount} removed from the system`
+                        : "No employees"}
                     </p>
                   ) : (
                     cards.map((emp) => (

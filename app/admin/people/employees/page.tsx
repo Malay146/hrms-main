@@ -3,5 +3,10 @@ import { listEmployees } from "@/lib/actions/people/employees";
 
 export default async function EmployeesPage() {
   const result = await listEmployees();
-  return <EmployeesClient initialEmployees={result.ok ? result.data : []} />;
+  return (
+    <EmployeesClient
+      initialEmployees={result.ok ? result.data.employees : []}
+      removedInactiveCount={result.ok ? result.data.removedInactiveCount : 0}
+    />
+  );
 }
