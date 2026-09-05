@@ -18,9 +18,16 @@ export function isRetryableInfrastructureError(error: unknown): boolean {
   return /timeout|ECONNREFUSED|connection pool|Can't reach database/i.test(message);
 }
 
+function isInternalInfrastructureMessage(message: string): boolean {
+  return /prisma\.|Invalid `prisma|PrismaClient|connection pool|Can't reach database/i.test(message);
+}
+
 export function publicActionError(error: unknown, fallback: string): string {
   const code = codeOf(error);
   if (code === "P2002") return CONFLICT;
   if (isRetryableInfrastructureError(error)) return RETRY;
+  if (error instanceof Error && error.message && !isInternalInfrastructureMessage(error.message)) {
+    return error.message;
+  }
   return fallback;
 }

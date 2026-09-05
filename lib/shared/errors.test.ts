@@ -24,4 +24,9 @@ describe("publicActionError", () => {
     const err = new Error('Invalid `prisma.user.findUnique()` invocation');
     assert.equal(publicActionError(err, "Could not save."), "Could not save.");
   });
+
+  it("preserves safe domain error messages", () => {
+    const err = new Error("Not enough remaining allocation balance.");
+    assert.equal(publicActionError(err, "Could not save."), "Not enough remaining allocation balance.");
+  });
 });
