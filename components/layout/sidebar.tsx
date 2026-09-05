@@ -92,9 +92,24 @@ const adminNavItems: SidebarItemType[] = [
     icon: PeopleIcon,
     children: [
       { label: "Employees", href: "/admin/people/employees" },
-      { label: "Department", href: "/admin/people/department" },
+      { label: "Contracts", href: "/admin/people/contracts" },
+      { label: "Working Schedules", href: "/admin/people/schedules" },
+      { label: "Departments", href: "/admin/people/department" },
       { label: "Attendance", href: "/admin/people/attendance" },
-      { label: "Leave", href: "/admin/people/leave" },
+      { label: "Time Off Requests", href: "/admin/people/leave" },
+      { label: "Allocations", href: "/admin/people/leave/allocations" },
+      { label: "Types", href: "/admin/people/leave/types" },
+    ],
+  },
+  {
+    label: "Payroll",
+    icon: CreditCardIcon,
+    children: [
+      { label: "Payruns", href: "/admin/hr/payroll" },
+      { label: "Payslips", href: "/admin/hr/payroll/payslips" },
+      { label: "Structures", href: "/admin/hr/payroll/structures" },
+      { label: "Rules", href: "/admin/hr/payroll/rules" },
+      { label: "Dashboard", href: "/admin" },
     ],
   },
   {
@@ -102,9 +117,13 @@ const adminNavItems: SidebarItemType[] = [
     icon: HRIcon,
     children: [
       { label: "Recruitment", href: "/admin/hr/recruitment" },
-      { label: "Payroll", href: "/admin/hr/payroll" },
       { label: "Performance", href: "/admin/hr/performance" },
     ],
+  },
+  {
+    label: "Users",
+    icon: MyProfileIcon,
+    href: "/admin/users",
   },
   {
     label: "AI Analytics",
@@ -213,8 +232,9 @@ export default function Sidebar() {
   const [expandedSections, setExpandedSections] = useState<
     Record<string, boolean>
   >({
-    People: true, // Expanded by default as in the screenshot
-    HR: true, // Expanded by default as in the screenshot
+    People: true,
+    Payroll: true,
+    HR: false,
   });
 
   // Toggle expandable navigation section
@@ -285,11 +305,16 @@ export default function Sidebar() {
               ));
 
           const activeChildIndex = item.children
-            ? item.children.findIndex(
-                (child) =>
+            ? item.children.reduce((best, child, index) => {
+                const match =
                   pathname === child.href ||
-                  pathname.startsWith(child.href + "/"),
-              )
+                  pathname.startsWith(child.href + "/");
+                if (!match) return best;
+                if (best < 0) return index;
+                return child.href.length > (item.children?.[best]?.href.length ?? 0)
+                  ? index
+                  : best;
+              }, -1)
             : -1;
 
           // Base styling for top-level item
@@ -338,10 +363,8 @@ export default function Sidebar() {
                       activeChildIndex={activeChildIndex}
                     />
 
-                    {item.children.map((child) => {
-                      const isChildActive =
-                        pathname === child.href ||
-                        pathname.startsWith(child.href + "/");
+                    {item.children.map((child, childIndex) => {
+                      const isChildActive = childIndex === activeChildIndex;
                       return (
                         <Link
                           key={child.label}

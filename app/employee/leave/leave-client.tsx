@@ -12,18 +12,38 @@ export function EmployeeLeaveClient({
   initialRequests,
   markers,
   balances,
+  options,
 }: {
   initialRequests: LeaveListItem[];
   markers: CalendarMarker[];
   balances: { paid: number; paidTotal: number; sickUsed: number; unpaidUsed: number };
+  options: {
+    types: { id: string; code: string; name: string; requiresAllocation: boolean }[];
+    allocations: {
+      id: string;
+      typeId: string;
+      typeName: string;
+      remaining: number;
+      validityYear: number;
+    }[];
+  };
 }) {
   const [requests, setRequests] = useState(initialRequests);
-  const [type, setType] = useState<LeaveType>("paid");
+  const defaultType = (options.types.find((t) => t.code === "paid")?.code ??
+    options.types[0]?.code ??
+    "paid") as LeaveType;
+  const [type, setType] = useState<LeaveType>(defaultType);
+  const [allocationId, setAllocationId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const selectedType = options.types.find((row) => row.code === type);
+  const matchingAllocations = options.allocations.filter(
+    (row) => row.typeId === selectedType?.id,
+  );
 
   const modifierDates = useMemo(() => ({
     present: markers.filter((m) => m.kind === "present").map((m) => dateFromKey(m.date)),
@@ -39,6 +59,7 @@ export function EmployeeLeaveClient({
       startDate: from,
       endDate: to,
       remarks: reason,
+      allocationId: allocationId || null,
     });
     setPending(false);
     if (!result.ok) {
@@ -81,11 +102,42 @@ export function EmployeeLeaveClient({
         <div className="lg:col-span-4 border border-border rounded-xl p-5 flex flex-col gap-4">
           <h2 className="text-base font-bold text-zinc-950">New Leave Request</h2>
           <form onSubmit={onSubmit} className="flex flex-col gap-3">
-            <select value={type} onChange={(e) => setType(e.target.value as LeaveType)} className="h-10 px-3 border border-border rounded-lg text-sm">
-              <option value="paid">Paid Leave</option>
-              <option value="sick">Sick Leave</option>
-              <option value="unpaid">Unpaid Leave</option>
+            <select
+              value={type}
+              onChange={(e) => {
+                setType(e.target.value as LeaveType);
+                setAllocationId("");
+              }}
+              className="h-10 px-3 border border-border rounded-lg text-sm"
+            >
+              {(options.types.length
+                ? options.types
+                : [
+                    { code: "paid", name: "Paid Leave" },
+                    { code: "sick", name: "Sick Leave" },
+                    { code: "unpaid", name: "Unpaid Leave" },
+                  ]
+              ).map((row) => (
+                <option key={row.code} value={row.code}>
+                  {row.name}
+                </option>
+              ))}
             </select>
+            {selectedType?.requiresAllocation ? (
+              <select
+                value={allocationId}
+                onChange={(e) => setAllocationId(e.target.value)}
+                required
+                className="h-10 px-3 border border-border rounded-lg text-sm"
+              >
+                <option value="">Select allocation</option>
+                {matchingAllocations.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.typeName} · {row.remaining} left ({row.validityYear})
+                  </option>
+                ))}
+              </select>
+            ) : null}
             <input type="date" min={type === "sick" ? undefined : kolkataTodayKey()} value={from} onChange={(e) => setFrom(e.target.value)} className="h-10 px-3 border border-border rounded-lg text-sm" required />
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-10 px-3 border border-border rounded-lg text-sm" required />
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Brief reason for leave..." className="h-20 p-3 border border-border rounded-lg text-sm resize-none" />

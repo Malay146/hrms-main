@@ -75,9 +75,16 @@ export function minutesSinceMidnightKolkata(value: Date) {
   return hour * 60 + minute;
 }
 
-export function isLateCheckIn(checkIn: Date | null | undefined) {
+export function isLateCheckIn(
+  checkIn: Date | null | undefined,
+  scheduleStartMin?: number | null,
+  graceMin = 0,
+) {
   if (!checkIn) return false;
-  return minutesSinceMidnightKolkata(checkIn) > LATE_AFTER_MINUTES;
+  if (scheduleStartMin == null) {
+    return minutesSinceMidnightKolkata(checkIn) > LATE_AFTER_MINUTES;
+  }
+  return minutesSinceMidnightKolkata(checkIn) > scheduleStartMin + graceMin;
 }
 
 export function inclusiveDayCount(startKey: string, endKey: string) {

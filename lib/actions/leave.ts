@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { actionErrorMessage, requirePermission, requireUser } from "@/lib/session";
-import { mapLeave } from "@/lib/mappers";
+import { leaveTypeFromCode, mapLeave } from "@/lib/mappers";
 import {
   dateFromKey,
   eachDateKey,
@@ -17,6 +17,12 @@ import {
   paidLeaveDays,
   validateLeaveDates,
 } from "@/lib/leave-rules";
+import {
+  canSubmitRequest,
+  remaining,
+  takenAfterApproval,
+  takenAfterRefusal,
+} from "@/lib/time-off-balance";
 import { applyLeaveSchema, decideLeaveSchema, firstZodError } from "@/lib/validations";
 import type { ActionResult, CalendarMarker, LeaveListItem, LeaveType } from "@/lib/types";
 
@@ -25,20 +31,47 @@ function revalidateLeave() {
   revalidatePath("/employee");
   revalidatePath("/admin");
   revalidatePath("/admin/people/leave");
+  revalidatePath("/admin/people/leave/allocations");
+}
+
+const leaveInclude = {
+  type: { select: { code: true, name: true, requiresAllocation: true } },
+  user: {
+    select: {
+      email: true,
+      profile: {
+        select: {
+          fullName: true,
+          department: { select: { name: true } },
+        },
+      },
+    },
+  },
+} as const;
+
+async function resolveTimeOffType(userId: string, code: LeaveType) {
+  const profile = await prisma.employeeProfile.findUnique({
+    where: { userId },
+    select: { organizationId: true, id: true },
+  });
+  if (!profile) throw new Error("Employee profile is missing.");
+  const type = await prisma.timeOffType.findUnique({
+    where: {
+      organizationId_code: {
+        organizationId: profile.organizationId,
+        code,
+      },
+    },
+  });
+  if (!type) throw new Error(`Time off type "${code}" is not configured.`);
+  return { type, profileId: profile.id, organizationId: profile.organizationId };
 }
 
 export async function listLeaveRequests(): Promise<ActionResult<LeaveListItem[]>> {
   try {
     await requirePermission("approveLeave");
     const rows = await prisma.leaveRequest.findMany({
-      include: {
-        user: {
-          select: {
-            email: true,
-            profile: { select: { fullName: true, department: true } },
-          },
-        },
-      },
+      include: leaveInclude,
       orderBy: { createdAt: "desc" },
     });
     return { ok: true, data: rows.map((row) => mapLeave(row)) };
@@ -52,14 +85,7 @@ export async function listMyLeaves(): Promise<ActionResult<LeaveListItem[]>> {
     const user = await requireUser();
     const rows = await prisma.leaveRequest.findMany({
       where: { userId: user.id },
-      include: {
-        user: {
-          select: {
-            email: true,
-            profile: { select: { fullName: true, department: true } },
-          },
-        },
-      },
+      include: leaveInclude,
       orderBy: { createdAt: "desc" },
     });
     return { ok: true, data: rows.map((row) => mapLeave(row)) };
@@ -104,11 +130,66 @@ export async function getLeaveCalendarMarkers(): Promise<ActionResult<CalendarMa
   }
 }
 
+export async function listMyLeaveFormOptions(): Promise<
+  ActionResult<{
+    types: { id: string; code: string; name: string; requiresAllocation: boolean }[];
+    allocations: {
+      id: string;
+      typeId: string;
+      typeName: string;
+      remaining: number;
+      validityYear: number;
+    }[];
+  }>
+> {
+  try {
+    const user = await requireUser();
+    const profile = await prisma.employeeProfile.findUnique({
+      where: { userId: user.id },
+      select: { id: true, organizationId: true },
+    });
+    if (!profile) return { ok: false, error: "Profile missing." };
+
+    const [types, allocations] = await Promise.all([
+      prisma.timeOffType.findMany({
+        where: { organizationId: profile.organizationId },
+        orderBy: { name: "asc" },
+      }),
+      prisma.timeOffAllocation.findMany({
+        where: { employeeId: profile.id, status: "approved" },
+        include: { type: { select: { name: true } } },
+      }),
+    ]);
+
+    return {
+      ok: true,
+      data: {
+        types: types.map((row) => ({
+          id: row.id,
+          code: row.code,
+          name: row.name,
+          requiresAllocation: row.requiresAllocation,
+        })),
+        allocations: allocations.map((row) => ({
+          id: row.id,
+          typeId: row.typeId,
+          typeName: row.type.name,
+          remaining: remaining(Number(row.allocated), Number(row.taken)),
+          validityYear: row.validityYear,
+        })),
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not load leave options.") };
+  }
+}
+
 export async function applyLeaveAction(input: {
   type: LeaveType;
   startDate: string;
   endDate: string;
   remarks: string;
+  allocationId?: string | null;
 }): Promise<ActionResult<LeaveListItem>> {
   try {
     const user = await requireUser();
@@ -144,23 +225,43 @@ export async function applyLeaveAction(input: {
       return { ok: false, error: "This range overlaps another pending or approved leave." };
     }
 
+    const { type } = await resolveTimeOffType(user.id, parsed.data.type);
+    const duration = inclusiveDayCount(parsed.data.startDate, parsed.data.endDate);
+
+    let allocationId: string | null = parsed.data.allocationId ?? null;
+    if (type.requiresAllocation) {
+      if (!allocationId) {
+        return { ok: false, error: "Select an approved allocation for this leave type." };
+      }
+      const allocation = await prisma.timeOffAllocation.findUnique({
+        where: { id: allocationId },
+      });
+      if (!allocation || allocation.typeId !== type.id) {
+        return { ok: false, error: "Allocation does not match the selected leave type." };
+      }
+      const block = canSubmitRequest({
+        requiresAllocation: true,
+        remaining: remaining(Number(allocation.allocated), Number(allocation.taken)),
+        duration,
+        allocationStatus: allocation.status,
+      });
+      if (block) return { ok: false, error: block };
+    } else {
+      allocationId = null;
+    }
+
     const created = await prisma.leaveRequest.create({
       data: {
         userId: user.id,
-        type: parsed.data.type,
+        typeId: type.id,
+        allocationId,
         startDate: dateFromKey(parsed.data.startDate),
         endDate: dateFromKey(parsed.data.endDate),
+        duration,
         remarks: parsed.data.remarks,
         status: "pending",
       },
-      include: {
-        user: {
-          select: {
-            email: true,
-            profile: { select: { fullName: true, department: true } },
-          },
-        },
-      },
+      include: leaveInclude,
     });
 
     logger.info("leave.applied", { leaveId: created.id, userId: user.id });
@@ -185,6 +286,9 @@ export async function decideLeaveAction(input: {
 
     const leave = await prisma.leaveRequest.findUnique({
       where: { id: parsed.data.leaveId },
+      include: {
+        type: { select: { code: true, requiresAllocation: true } },
+      },
     });
     if (!leave) {
       return { ok: false, error: "Leave request not found." };
@@ -196,25 +300,61 @@ export async function decideLeaveAction(input: {
       return { ok: true, data: undefined };
     }
 
-    const days = paidLeaveDays(leave.type, toDateKey(leave.startDate), toDateKey(leave.endDate));
+    const leaveType = leaveTypeFromCode(leave.type.code);
+    const days = Number(leave.duration) || paidLeaveDays(
+      leaveType,
+      toDateKey(leave.startDate),
+      toDateKey(leave.endDate),
+    );
 
     await prisma.$transaction(async (tx) => {
-      if (parsed.data.decision === "approved" && leave.status === "pending" && days > 0) {
-        const profile = await tx.employeeProfile.findUnique({ where: { userId: leave.userId } });
-        if (!profile || profile.paidLeaveBalance < days) {
-          throw new Error("Not enough paid leave balance to approve this request.");
+      if (parsed.data.decision === "approved" && leave.status === "pending") {
+        if (leave.allocationId && leave.type.requiresAllocation) {
+          const allocation = await tx.timeOffAllocation.findUnique({
+            where: { id: leave.allocationId },
+          });
+          if (!allocation || allocation.status !== "approved") {
+            throw new Error("Allocation is not approved.");
+          }
+          const rem = remaining(Number(allocation.allocated), Number(allocation.taken));
+          if (days > rem) {
+            throw new Error("Not enough remaining allocation balance.");
+          }
+          await tx.timeOffAllocation.update({
+            where: { id: allocation.id },
+            data: { taken: takenAfterApproval(Number(allocation.taken), days) },
+          });
+        } else if (leaveType === "paid" && days > 0) {
+          const profile = await tx.employeeProfile.findUnique({
+            where: { userId: leave.userId },
+          });
+          if (!profile || profile.paidLeaveBalance < days) {
+            throw new Error("Not enough paid leave balance to approve this request.");
+          }
+          await tx.employeeProfile.update({
+            where: { userId: leave.userId },
+            data: { paidLeaveBalance: { decrement: days } },
+          });
         }
-        await tx.employeeProfile.update({
-          where: { userId: leave.userId },
-          data: { paidLeaveBalance: { decrement: days } },
-        });
       }
 
-      if (parsed.data.decision === "rejected" && leave.status === "approved" && days > 0) {
-        await tx.employeeProfile.update({
-          where: { userId: leave.userId },
-          data: { paidLeaveBalance: { increment: days } },
-        });
+      if (parsed.data.decision === "rejected" && leave.status === "approved") {
+        if (leave.allocationId && leave.type.requiresAllocation) {
+          const allocation = await tx.timeOffAllocation.findUnique({
+            where: { id: leave.allocationId },
+          });
+          if (allocation) {
+            await tx.timeOffAllocation.update({
+              where: { id: allocation.id },
+              data: { taken: takenAfterRefusal(Number(allocation.taken), days) },
+            });
+          }
+        } else if (leaveType === "paid" && days > 0) {
+          await tx.employeeProfile.update({
+            where: { userId: leave.userId },
+            data: { paidLeaveBalance: { increment: days } },
+          });
+        }
       }
 
       await tx.leaveRequest.update({
@@ -255,17 +395,59 @@ export async function getPaidLeaveBalance() {
   const user = await requireUser();
   const profile = await prisma.employeeProfile.findUnique({
     where: { userId: user.id },
-    select: { paidLeaveBalance: true },
+    select: { id: true, paidLeaveBalance: true, organizationId: true },
   });
+
+  const paidType = profile
+    ? await prisma.timeOffType.findUnique({
+        where: {
+          organizationId_code: {
+            organizationId: profile.organizationId,
+            code: "paid",
+          },
+        },
+      })
+    : null;
+
+  const paidAllocation =
+    profile && paidType
+      ? await prisma.timeOffAllocation.findFirst({
+          where: {
+            employeeId: profile.id,
+            typeId: paidType.id,
+            status: "approved",
+          },
+          orderBy: { validityYear: "desc" },
+        })
+      : null;
+
   const used = await prisma.leaveRequest.findMany({
     where: { userId: user.id, status: "approved" },
+    include: { type: { select: { code: true } } },
   });
   const sickUsed = used
-    .filter((row) => row.type === "sick")
-    .reduce((sum, row) => sum + inclusiveDayCount(toDateKey(row.startDate), toDateKey(row.endDate)), 0);
+    .filter((row) => row.type.code === "sick")
+    .reduce(
+      (sum, row) => sum + inclusiveDayCount(toDateKey(row.startDate), toDateKey(row.endDate)),
+      0,
+    );
   const unpaidUsed = used
-    .filter((row) => row.type === "unpaid")
-    .reduce((sum, row) => sum + inclusiveDayCount(toDateKey(row.startDate), toDateKey(row.endDate)), 0);
+    .filter((row) => row.type.code === "unpaid")
+    .reduce(
+      (sum, row) => sum + inclusiveDayCount(toDateKey(row.startDate), toDateKey(row.endDate)),
+      0,
+    );
+
+  if (paidAllocation) {
+    const allocated = Number(paidAllocation.allocated);
+    const rem = remaining(allocated, Number(paidAllocation.taken));
+    return {
+      paid: rem,
+      paidTotal: allocated,
+      sickUsed,
+      unpaidUsed,
+    };
+  }
 
   return {
     paid: profile?.paidLeaveBalance ?? 20,

@@ -46,16 +46,22 @@ export type EmployeeListItem = {
 export type AttendanceLogItem = {
   id: string;
   userId: string;
+  employeeCode: string | null;
   name: string;
   email: string;
   avatar: string;
   department: string;
   date: string;
+  dateKey: string;
   checkIn: string;
   checkOut: string;
   workingHours: string;
+  workedHours: number | null;
+  overtimeHours: number | null;
   status: string;
   late: boolean;
+  manualEdit: boolean;
+  missingCheckout: boolean;
 };
 
 export type LeaveListItem = {
