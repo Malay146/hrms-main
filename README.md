@@ -43,11 +43,17 @@ Public sign-up is closed. Admins create users from **Employees → Add User**.
 
 ## Wired to Postgres
 
-Auth, employees, departments, attendance, leave, payroll, dashboards, profile, password change.
+Auth, employees, departments, attendance, leave, payroll, dashboards, profile, password change, AI Analytics metrics.
+
+## AI Analytics
+
+Admin and HR Manager can open **AI Analytics** (`/admin/analytics`). Live health, attendance, leave, and payroll metrics work without a model. Written insight cards need `OPENAI_API_KEY` in `.env`. The copilot still answers attendance/leave count questions from the database when no key is set.
+
+Payroll-only roles and employees cannot open `/admin/analytics`.
 
 ## Still UI-only / Coming Soon
 
-Recruitment, Notifications, Performance, AI Analytics, Admin Settings chrome.
+Recruitment, Notifications, Performance, Admin Settings chrome.
 
 ## Useful scripts
 

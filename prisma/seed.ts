@@ -98,6 +98,7 @@ async function main() {
   await prisma.salaryStructure.deleteMany();
   await prisma.payroll.deleteMany();
   await prisma.leaveRequest.deleteMany();
+  await prisma.aiInsight.deleteMany();
   await prisma.attendance.deleteMany();
   await prisma.session.deleteMany();
   await prisma.account.deleteMany();
@@ -282,6 +283,24 @@ async function main() {
         remarks: "Personal errand",
         status: "rejected",
         adminComment: "Insufficient notice",
+      },
+      // AI Analytics demo: overlapping Engineering leave for clash detection
+      {
+        userId: userIds["bruce.banner@oddo.com"],
+        type: "paid",
+        startDate: dateFromKey(daysAgo(1)),
+        endDate: dateFromKey(daysAgo(-1)),
+        remarks: "On-site workshop with the frontend team",
+        status: "approved",
+        adminComment: "Approved",
+      },
+      {
+        userId: userIds["john.cena@oddo.com"],
+        type: "paid",
+        startDate: dateFromKey(daysAgo(1)),
+        endDate: dateFromKey(daysAgo(-1)),
+        remarks: "Family in town overlapping the workshop week",
+        status: "pending",
       },
     ],
   });
