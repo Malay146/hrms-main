@@ -60,6 +60,10 @@ export const decideLeaveSchema = z.object({
   adminComment: z.string().min(1, "Add a comment for the employee."),
 });
 
+export const copilotQuestionSchema = z.object({
+  question: z.string().trim().min(3, "Enter a question.").max(500, "Keep questions under 500 characters."),
+});
+
 export const upsertPayrollSchema = z.object({
   userId: z.string().min(1),
   month: z.string().regex(/^\d{4}-\d{2}$/, "Month must be YYYY-MM."),

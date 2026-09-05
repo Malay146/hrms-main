@@ -138,10 +138,6 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
   }
 
   async function onAsk() {
-    if (!data.aiEnabled) {
-      toast("Connect an AI provider to ask the HR copilot.");
-      return;
-    }
     setAsking(true);
     const result = await askHrCopilot(question);
     setAsking(false);
