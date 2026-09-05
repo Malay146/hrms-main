@@ -66,6 +66,21 @@ enum AllocationStatus {
   refused
 }
 
+enum JobOpeningStatus {
+  active
+  closed
+}
+
+enum CandidateStage {
+  applied
+  screening
+  interview
+  technical
+  offer
+  hired
+  rejected
+}
+
 enum SalaryCategory {
   basic
   allowance
@@ -183,6 +198,8 @@ model Organization {
   salaryStructures SalaryStructure[]
   payruns          Payrun[]
   aiInsights       AiInsight[]
+  jobOpenings      JobOpening[]
+  candidates       Candidate[]
 
   @@map("organization")
 }
@@ -501,6 +518,52 @@ model AiInsight {
 
   @@index([organizationId, generatedAt])
   @@map("ai_insight")
+}
+
+model JobOpening {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  code           String
+  title          String
+  department     String
+  description    String           @default("")
+  deadline       DateTime         @db.Date
+  status         JobOpeningStatus @default(active)
+  candidates     Candidate[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@map("job_opening")
+}
+
+model Candidate {
+  id               String         @id @default(cuid())
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobOpeningId     String?
+  jobOpening       JobOpening?    @relation(fields: [jobOpeningId], references: [id], onDelete: SetNull)
+  code             String
+  name             String
+  email            String?
+  position         String
+  experienceYears  Int            @default(0)
+  stage            CandidateStage @default(applied)
+  rating           Decimal        @default(0) @db.Decimal(3, 1)
+  source           String?
+  appliedAt        DateTime       @default(now()) @db.Date
+  interviewAt      DateTime?
+  interviewType    String?
+  interviewer      String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@unique([organizationId, code])
+  @@index([organizationId, stage])
+  @@index([jobOpeningId])
+  @@map("candidate")
 }
 
 /// Legacy payroll rows — keep until Krishil retires in payrun Phase 3.
