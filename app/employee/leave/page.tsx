@@ -1,15 +1,27 @@
 "use client";
 
 import React, { useState } from "react";
-import {
-  Calendar as CalendarIcon,
-  FileSpreadsheet,
-  Plus,
-  CheckCircle,
-  Clock,
-  XCircle,
-} from "lucide-react";
 import { cn } from "@/utils/cn";
+import { toast } from "sonner";
+
+const formatDisplayDate = (value: string) => {
+  const date = new Date(`${value}T00:00:00`);
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const calculateDuration = (from: string, to: string) => {
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  const days = Math.max(
+    1,
+    Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+  );
+  return `${days} Day${days === 1 ? "" : "s"}`;
+};
 
 const initialMyRequests = [
   {
@@ -47,17 +59,27 @@ export default function EmployeeLeavePage() {
 
   const handleRequestSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reason.trim()) return;
+    if (!reason.trim() || !from || !to) return;
+
+    const duration = calculateDuration(from, to);
+    const dates =
+      from === to
+        ? formatDisplayDate(from)
+        : `${formatDisplayDate(from)} - ${formatDisplayDate(to)}`;
+
     const newReq = {
       id: `L-${Date.now().toString().slice(-3)}`,
       type: leaveType,
-      duration: "5 Days", // Static for mock calculations
-      dates: "10 Aug - 15 Aug 2026",
+      duration,
+      dates,
       reason: reason.trim(),
       status: "Pending",
     };
     setRequests((prev) => [newReq, ...prev]);
     setReason("");
+    toast.success("Leave request submitted", {
+      description: `${leaveType} for ${duration} sent for approval.`,
+    });
   };
 
   const getStatusBadge = (status: string) => {
@@ -77,8 +99,8 @@ export default function EmployeeLeavePage() {
       {/* Header */}
       <div className="flex justify-between items-start">
         <div className="flex flex-col text-left">
-          <h1 className="text-h1 font-medium">My Leave Requests</h1>
-          <p className="text-body-lg text-zinc-500 font-medium">
+          <h1 className="type-title">My Leave Requests</h1>
+          <p className="type-subtitle">
             Request leaves, track approvals, and view your remaining balances.
           </p>
         </div>
@@ -132,7 +154,7 @@ export default function EmployeeLeavePage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Request Form */}
         <div className="lg:col-span-4 border border-border rounded-xl p-5 bg-surface flex flex-col gap-4 text-left">
-          <h2 className="text-base font-bold text-zinc-950">
+          <h2 className="type-heading">
             New Leave Request
           </h2>
           <form onSubmit={handleRequestSubmit} className="flex flex-col gap-3">
@@ -194,7 +216,7 @@ export default function EmployeeLeavePage() {
 
         {/* Right Column: Request Logs */}
         <div className="lg:col-span-8 flex flex-col gap-4 text-left">
-          <h2 className="text-base font-bold text-zinc-950">
+          <h2 className="type-heading">
             My Request History
           </h2>
           <div className="border border-border rounded-xl bg-surface overflow-hidden">

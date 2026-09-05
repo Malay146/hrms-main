@@ -26,6 +26,8 @@ import {
 import { cn } from "@/utils/cn";
 import CustomCalendarIcon from "@/components/icons/calendar";
 import ShiftClockIcon from "@/components/icons/late";
+import { Modal } from "@/components/ui/modal";
+import { toast } from "sonner";
 
 // Mock Weekly Hours Chart
 const weeklyHoursData = [
@@ -50,13 +52,28 @@ export default function EmployeeDashboard() {
   // Tasks list
   const [tasks, setTasks] = useState(initialTasks);
   const [newTaskText, setNewTaskText] = useState("");
+  const [isTimesheetOpen, setIsTimesheetOpen] = useState(false);
+  const [timesheetNotes, setTimesheetNotes] = useState("");
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const handleToggleClock = () => {
-    setIsClockedIn(prev => !prev);
+    setIsClockedIn((prev) => {
+      const next = !prev;
+      setWorkedHours(next ? "08:12" : "00:00");
+      toast.success(next ? "Clocked in" : "Clocked out");
+      return next;
+    });
+  };
+
+  const handleSubmitTimesheet = () => {
+    setIsTimesheetOpen(false);
+    toast.success("Timesheet submitted", {
+      description: "Your weekly hours were sent to HR for review.",
+    });
+    setTimesheetNotes("");
   };
 
   const handleToggleTask = (id: string) => {
@@ -85,13 +102,17 @@ export default function EmployeeDashboard() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col text-left">
-          <h1 className="text-h1 font-medium">Welcome Back, William</h1>
-          <p className="text-body-lg text-zinc-500 font-medium">
+          <h1 className="type-title">Welcome Back, William</h1>
+          <p className="type-subtitle">
             Here is your workspace summary for today, 19th July 2026.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="cursor-pointer px-4 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover text-sm font-semibold text-zinc-700 shadow-2xs active:scale-98 transition-all">
+          <button
+            type="button"
+            onClick={() => setIsTimesheetOpen(true)}
+            className="cursor-pointer px-4 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover text-sm font-semibold text-zinc-700 shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
             Submit Timesheet
           </button>
           <button 
@@ -271,7 +292,7 @@ export default function EmployeeDashboard() {
                 Request Leave
               </Link>
               <Link 
-                href="/employee/attendance"
+                href="/employee/attendance?adjust=1"
                 className="flex flex-col items-center justify-center p-4 border border-border rounded-xl bg-surface hover:border-zinc-300 text-zinc-700 hover:text-zinc-950 transition-all text-center gap-2 cursor-pointer shadow-3xs"
               >
                 <ShiftClockIcon className="size-6 text-zinc-500" />
@@ -326,6 +347,36 @@ export default function EmployeeDashboard() {
         </div>
 
       </div>
+
+      <Modal
+        open={isTimesheetOpen}
+        onClose={() => setIsTimesheetOpen(false)}
+        title="Submit Timesheet"
+        description="Week ending 19 Jul 2026"
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <p className="text-sm text-zinc-600 font-medium">
+            Total hours logged this week: <strong>40.0 hrs</strong>
+          </p>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Notes for HR (optional)
+            <textarea
+              value={timesheetNotes}
+              onChange={(e) => setTimesheetNotes(e.target.value)}
+              rows={3}
+              placeholder="Any context about overtime or corrections..."
+              className="px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong resize-none"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleSubmitTimesheet}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white active:scale-[0.98]"
+          >
+            Submit Timesheet
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

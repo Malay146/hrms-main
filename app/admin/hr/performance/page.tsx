@@ -7,8 +7,8 @@ export default function PerformancePage() {
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
       {/* Page Header */}
       <div className="flex flex-col text-left">
-        <h1 className="text-h1 font-medium">Performance</h1>
-        <p className="text-body-lg text-zinc-500 font-medium">
+        <h1 className="type-title">Performance</h1>
+        <p className="type-subtitle">
           Track employee performance, reviews, and KPIs.
         </p>
       </div>

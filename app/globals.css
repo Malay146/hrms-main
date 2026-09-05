@@ -81,58 +81,76 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  /* Typography Scale */
-  --text-display: 2.25rem;
-  --text-display--line-height: 2.75rem;
-  --text-display--letter-spacing: -0.02em;
+  /*
+   * App typography — 5 roles only (Geist Sans).
+   * Weights allowed: Regular (400), Medium (500), Semibold (600), Bold (700).
+   * Banned: Light and below, ExtraBold/Black and above.
+   * Landing/auth may still use raw Tailwind sizes — leave those alone.
+   */
+  --text-title: 1.75rem;
+  --text-title--line-height: 2.125rem;
+  --text-title--letter-spacing: -0.02em;
 
-  --text-h1: 1.75rem;
-  --text-h1--line-height: 2.25rem;
-  --text-h1--letter-spacing: -0.01em;
-
-  --text-h2: 1.5rem;
-  --text-h2--line-height: 2rem;
-  --text-h2--letter-spacing: -0.01em;
-
-  --text-h3: 1.25rem;
-  --text-h3--line-height: 1.75rem;
-  --text-h3--letter-spacing: -0.005em;
-
-  --text-h4: 1.125rem;
-  --text-h4--line-height: 1.625rem;
-  --text-h4--letter-spacing: 0em;
-
-  --text-body-lg: 1rem;
-  --text-body-lg--line-height: 1.5rem;
-  --text-body-lg--letter-spacing: 0em;
+  --text-heading: 1rem;
+  --text-heading--line-height: 1.375rem;
+  --text-heading--letter-spacing: -0.01em;
 
   --text-body: 0.875rem;
   --text-body--line-height: 1.25rem;
   --text-body--letter-spacing: 0em;
 
-  --text-body-md: 0.875rem;
-  --text-body-md--line-height: 1.25rem;
-  --text-body-md--letter-spacing: 0em;
-
-  --text-small: 0.8125rem;
-  --text-small--line-height: 1.125rem;
-  --text-small--letter-spacing: 0em;
-
   --text-caption: 0.75rem;
   --text-caption--line-height: 1rem;
   --text-caption--letter-spacing: 0.01em;
 
-  --text-label: 0.75rem;
-  --text-label--line-height: 1rem;
-  --text-label--letter-spacing: 0.01em;
+  --text-metric: 1.75rem;
+  --text-metric--line-height: 2rem;
+  --text-metric--letter-spacing: -0.02em;
 
-  --text-button: 0.875rem;
-  --text-button--line-height: 1.25rem;
-  --text-button--letter-spacing: 0em;
+  /* Legacy aliases → map to new roles (avoid breaking existing classes mid-migrate) */
+  --text-h1: var(--text-title);
+  --text-h1--line-height: var(--text-title--line-height);
+  --text-h1--letter-spacing: var(--text-title--letter-spacing);
 
-  --text-table-header: 0.8125rem;
-  --text-table-header--line-height: 1.125rem;
+  --text-h2: var(--text-heading);
+  --text-h2--line-height: var(--text-heading--line-height);
+  --text-h2--letter-spacing: var(--text-heading--letter-spacing);
+
+  --text-h3: var(--text-heading);
+  --text-h3--line-height: var(--text-heading--line-height);
+  --text-h3--letter-spacing: var(--text-heading--letter-spacing);
+
+  --text-h4: var(--text-heading);
+  --text-h4--line-height: var(--text-heading--line-height);
+  --text-h4--letter-spacing: var(--text-heading--letter-spacing);
+
+  --text-body-lg: var(--text-body);
+  --text-body-lg--line-height: var(--text-body--line-height);
+  --text-body-lg--letter-spacing: var(--text-body--letter-spacing);
+
+  --text-body-md: var(--text-body);
+  --text-body-md--line-height: var(--text-body--line-height);
+  --text-body-md--letter-spacing: var(--text-body--letter-spacing);
+
+  --text-small: var(--text-caption);
+  --text-small--line-height: var(--text-caption--line-height);
+  --text-small--letter-spacing: var(--text-caption--letter-spacing);
+
+  --text-label: var(--text-caption);
+  --text-label--line-height: var(--text-caption--line-height);
+  --text-label--letter-spacing: var(--text-caption--letter-spacing);
+
+  --text-button: var(--text-body);
+  --text-button--line-height: var(--text-body--line-height);
+  --text-button--letter-spacing: var(--text-body--letter-spacing);
+
+  --text-table-header: var(--text-caption);
+  --text-table-header--line-height: var(--text-caption--line-height);
   --text-table-header--letter-spacing: 0.02em;
+
+  --text-display: 2.25rem;
+  --text-display--line-height: 2.75rem;
+  --text-display--letter-spacing: -0.02em;
 
   /* Semantic Theme Colors */
   --color-surface: var(--surface);
@@ -527,9 +545,72 @@ body {
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground text-body font-normal;
   }
   html {
     @apply font-sans;
+  }
+}
+
+/*
+ * Locked type roles — prefer these over ad-hoc text-* + font-* combos in app UI.
+ * Landing/auth pages should not use these; they keep their own scale.
+ */
+@layer components {
+  .type-title {
+    font-size: var(--text-title);
+    line-height: var(--text-title--line-height);
+    letter-spacing: var(--text-title--letter-spacing);
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .type-subtitle {
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    letter-spacing: var(--text-body--letter-spacing);
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .type-heading {
+    font-size: var(--text-heading);
+    line-height: var(--text-heading--line-height);
+    letter-spacing: var(--text-heading--letter-spacing);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .type-body {
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    letter-spacing: var(--text-body--letter-spacing);
+    font-weight: 400;
+    color: var(--text-primary);
+  }
+
+  .type-caption {
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
+    letter-spacing: var(--text-caption--letter-spacing);
+    font-weight: 500;
+    color: var(--text-tertiary);
+  }
+
+  .type-metric {
+    font-size: var(--text-metric);
+    line-height: var(--text-metric--line-height);
+    letter-spacing: var(--text-metric--letter-spacing);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .type-label {
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
+    letter-spacing: 0.02em;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-secondary);
   }
 }

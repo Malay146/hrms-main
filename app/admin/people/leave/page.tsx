@@ -25,6 +25,10 @@ import {
   Tooltip,
 } from "recharts";
 import { cn } from "@/utils/cn";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { Modal } from "@/components/ui/modal";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { toast } from "sonner";
 
 // Mock Monthly Area Chart Data
 const monthlyLeaveData = [
@@ -179,6 +183,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 
 export default function LeaveManagementPage() {
   const [mounted, setMounted] = useState(false);
+  const [leaveRequests, setLeaveRequests] = useState(initialLeaveRequests);
   const [search, setSearch] = useState("");
   const [selectedDept, setSelectedDept] = useState("All");
   const [selectedType, setSelectedType] = useState("All");
@@ -186,11 +191,24 @@ export default function LeaveManagementPage() {
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<(typeof initialLeaveRequests)[0] | null>(null);
+  const [isNewOpen, setIsNewOpen] = useState(false);
+  const [draftRequest, setDraftRequest] = useState({
+    name: "",
+    email: "",
+    department: "Engineering",
+    leaveType: "Annual Leave",
+    duration: "1 Day",
+    from: "",
+    to: "",
+  });
 
   const dropdownRef = useRef<HTMLTableCellElement>(null);
 
   useEffect(() => {
     setMounted(true);
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setSearch(q);
     function handleClickOutside(event: MouseEvent) {
       if (
         dropdownRef.current &&
@@ -204,7 +222,7 @@ export default function LeaveManagementPage() {
   }, []);
 
   // Filter Logic
-  const filteredRequests = initialLeaveRequests.filter((req) => {
+  const filteredRequests = leaveRequests.filter((req) => {
     const matchesSearch =
       req.name.toLowerCase().includes(search.toLowerCase()) ||
       req.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -268,31 +286,88 @@ export default function LeaveManagementPage() {
   const leaveTypes = ["All", "Annual Leave", "Sick Leave", "Casual Leave"];
   const statuses = ["All", "Approved", "Pending", "Rejected"];
 
-  // Stats calculation
-  const pendingCount = initialLeaveRequests.filter(
-    (r) => r.status === "Pending",
-  ).length;
-  const approvedCount = initialLeaveRequests.filter(
-    (r) => r.status === "Approved",
-  ).length;
+  const pendingCount = leaveRequests.filter((r) => r.status === "Pending").length;
+  const approvedCount = leaveRequests.filter((r) => r.status === "Approved").length;
   const onLeaveToday = activeLeavesToday.length;
+
+  const updateRequestStatus = (id: string, status: "Approved" | "Rejected") => {
+    setLeaveRequests((current) =>
+      current.map((req) => (req.id === id ? { ...req, status } : req)),
+    );
+    setSelectedRequest((current) =>
+      current?.id === id ? { ...current, status } : current,
+    );
+    toast.success(status === "Approved" ? "Leave approved" : "Leave rejected");
+    setActiveMenuId(null);
+  };
+
+  const handleCreateRequest = () => {
+    if (!draftRequest.name.trim() || !draftRequest.from || !draftRequest.to) {
+      toast.error("Name and dates are required");
+      return;
+    }
+    const id = `REQ${String(leaveRequests.length + 1).padStart(3, "0")}`;
+    setLeaveRequests((current) => [
+      {
+        id,
+        name: draftRequest.name.trim(),
+        email: draftRequest.email.trim() || "employee@organization.com",
+        avatar: draftRequest.name
+          .split(" ")
+          .map((part) => part[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase(),
+        department: draftRequest.department,
+        leaveType: draftRequest.leaveType,
+        duration: draftRequest.duration,
+        from: draftRequest.from,
+        to: draftRequest.to,
+        status: "Pending",
+      },
+      ...current,
+    ]);
+    setDraftRequest({
+      name: "",
+      email: "",
+      department: "Engineering",
+      leaveType: "Annual Leave",
+      duration: "1 Day",
+      from: "",
+      to: "",
+    });
+    setIsNewOpen(false);
+    toast.success("Leave request submitted");
+  };
 
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div className="flex flex-col">
-          <h1 className="text-h1 font-medium">Leave Management</h1>
-          <p className="text-body-lg text-zinc-500 font-medium">
+          <h1 className="type-title">Leave Management</h1>
+          <p className="type-subtitle">
             Manage employee leave requests, balances, and approvals.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="cursor-pointer flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover hover:border-border-strong text-sm font-semibold text-zinc-700 shadow-2xs active:scale-98 transition-all">
+          <button
+            type="button"
+            onClick={() =>
+              toast("Export started", {
+                description: "Leave report will download shortly.",
+              })
+            }
+            className="cursor-pointer flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover hover:border-border-strong text-sm font-semibold text-zinc-700 shadow-2xs active:scale-[0.98] transition-[transform,background-color,border-color] duration-150 ease-out"
+          >
             <Download className="size-4 text-zinc-500" />
             Export Report
           </button>
-          <button className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all">
+          <button
+            type="button"
+            onClick={() => setIsNewOpen(true)}
+            className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
             <Plus className="size-4" />
             New Leave Request
           </button>
@@ -419,7 +494,7 @@ export default function LeaveManagementPage() {
           {/* Filters Bar & Table */}
           <div className="flex flex-col gap-4">
             {/* Filter controls */}
-            <div className="border border-border rounded-xl p-4 bg-surface grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {/* Search */}
               <div className="relative flex items-center">
                 <Search className="absolute left-3 size-4 text-zinc-400 pointer-events-none" />
@@ -551,9 +626,10 @@ export default function LeaveManagementPage() {
                           </td>
                           <td className="py-3.5 px-6">
                             <div className="flex items-center gap-3">
-                              <div className="size-8 rounded-full bg-zinc-100 flex items-center justify-center font-bold text-[10px] text-zinc-800 border border-zinc-200 shrink-0">
-                                {req.avatar}
-                              </div>
+                              <PersonAvatar
+                                name={req.name}
+                                size={32}
+                              />
                               <div className="flex flex-col min-w-0">
                                 <span className="font-semibold text-zinc-950 leading-tight truncate">
                                   {req.name}
@@ -580,14 +656,7 @@ export default function LeaveManagementPage() {
                             {req.to}
                           </td>
                           <td className="py-3.5 px-6">
-                            <span
-                              className={cn(
-                                "whitespace-nowrap inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold",
-                                getStatusBadgeClass(req.status),
-                              )}
-                            >
-                              {req.status}
-                            </span>
+                            <StatusBadge status={req.status} />
                           </td>
                           <td
                             className="py-3.5 px-6 text-right relative"
@@ -606,21 +675,46 @@ export default function LeaveManagementPage() {
 
                             {activeMenuId === req.id && (
                               <div className="absolute right-6 top-10 w-40 bg-surface border border-border rounded-lg shadow-lg py-1 z-40 text-left animate-in fade-in duration-100">
-                                <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedRequest(req);
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                                >
                                   View Details
                                 </button>
                                 {req.status === "Pending" && (
                                   <>
-                                    <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-emerald-600 hover:bg-emerald-50">
+                                    <button
+                                      type="button"
+                                      onClick={() => updateRequestStatus(req.id, "Approved")}
+                                      className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-emerald-600 hover:bg-emerald-50"
+                                    >
                                       Approve Request
                                     </button>
-                                    <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
+                                    <button
+                                      type="button"
+                                      onClick={() => updateRequestStatus(req.id, "Rejected")}
+                                      className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+                                    >
                                       Reject Request
                                     </button>
                                   </>
                                 )}
                                 <hr className="border-border my-1" />
-                                <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-500 hover:bg-zinc-50">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLeaveRequests((current) =>
+                                      current.filter((item) => item.id !== req.id),
+                                    );
+                                    toast.success("Request deleted");
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-500 hover:bg-zinc-50"
+                                >
                                   Delete Request
                                 </button>
                               </div>
@@ -669,7 +763,7 @@ export default function LeaveManagementPage() {
               Pending Action List
             </h3>
             <div className="flex flex-col divide-y divide-border">
-              {initialLeaveRequests
+              {leaveRequests
                 .filter((r) => r.status === "Pending")
                 .map((req) => (
                   <div
@@ -685,10 +779,18 @@ export default function LeaveManagementPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <button className="p-1 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors shadow-3xs cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={() => updateRequestStatus(req.id, "Approved")}
+                        className="p-1 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors shadow-3xs cursor-pointer active:scale-95"
+                      >
                         <Check className="size-3.5" />
                       </button>
-                      <button className="p-1 rounded-md border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors shadow-3xs cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={() => updateRequestStatus(req.id, "Rejected")}
+                        className="p-1 rounded-md border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors shadow-3xs cursor-pointer active:scale-95"
+                      >
                         <X className="size-3.5" />
                       </button>
                     </div>
@@ -706,13 +808,13 @@ export default function LeaveManagementPage() {
             <div className="flex items-center gap-2">
               <div className="flex -space-x-2.5 overflow-hidden">
                 {activeLeavesToday.map((leave, i) => (
-                  <div
+                  <PersonAvatar
                     key={i}
+                    name={leave.name}
+                    size={32}
                     title={leave.name}
-                    className="size-8 rounded-full bg-zinc-100 border-2 border-white text-xs font-bold text-zinc-800 flex items-center justify-center shrink-0 shadow-3xs cursor-pointer"
-                  >
-                    {leave.avatar}
-                  </div>
+                    className="-2 -white shadow-3xs cursor-pointer"
+                  />
                 ))}
               </div>
               <span className="text-xs font-semibold text-zinc-400 ml-1">
@@ -775,6 +877,131 @@ export default function LeaveManagementPage() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={isNewOpen}
+        onClose={() => setIsNewOpen(false)}
+        title="New Leave Request"
+        description="Submit on behalf of an employee"
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Employee name
+            <input
+              value={draftRequest.name}
+              onChange={(e) =>
+                setDraftRequest((current) => ({ ...current, name: e.target.value }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              Department
+              <select
+                value={draftRequest.department}
+                onChange={(e) =>
+                  setDraftRequest((current) => ({
+                    ...current,
+                    department: e.target.value,
+                  }))
+                }
+                className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong cursor-pointer"
+              >
+                {departments.filter((d) => d !== "All").map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              Leave type
+              <select
+                value={draftRequest.leaveType}
+                onChange={(e) =>
+                  setDraftRequest((current) => ({
+                    ...current,
+                    leaveType: e.target.value,
+                  }))
+                }
+                className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong cursor-pointer"
+              >
+                {leaveTypes.filter((t) => t !== "All").map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              From
+              <input
+                type="date"
+                value={draftRequest.from}
+                onChange={(e) =>
+                  setDraftRequest((current) => ({ ...current, from: e.target.value }))
+                }
+                className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              To
+              <input
+                type="date"
+                value={draftRequest.to}
+                onChange={(e) =>
+                  setDraftRequest((current) => ({ ...current, to: e.target.value }))
+                }
+                className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={handleCreateRequest}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white active:scale-[0.98]"
+          >
+            Submit Request
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(selectedRequest)}
+        onClose={() => setSelectedRequest(null)}
+        title="Leave Request"
+        description={selectedRequest?.id}
+      >
+        {selectedRequest ? (
+          <div className="flex flex-col gap-4 text-left">
+            <div className="flex items-center gap-3">
+              <PersonAvatar
+                name={selectedRequest.name}
+                size={48}
+              />
+              <div>
+                <p className="text-sm font-bold text-zinc-950">{selectedRequest.name}</p>
+                <p className="text-xs text-zinc-400">{selectedRequest.department}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
+              <div><span className="text-zinc-400">Type</span><p className="text-zinc-900 mt-1">{selectedRequest.leaveType}</p></div>
+              <div><span className="text-zinc-400">Duration</span><p className="text-zinc-900 mt-1">{selectedRequest.duration}</p></div>
+              <div><span className="text-zinc-400">From</span><p className="text-zinc-900 mt-1">{selectedRequest.from}</p></div>
+              <div><span className="text-zinc-400">To</span><p className="text-zinc-900 mt-1">{selectedRequest.to}</p></div>
+            </div>
+            {selectedRequest.status === "Pending" ? (
+              <div className="flex gap-3">
+                <button type="button" onClick={() => updateRequestStatus(selectedRequest.id, "Approved")} className="cursor-pointer flex-1 px-3 py-2 rounded-lg bg-zinc-900 text-white text-sm font-semibold">Approve</button>
+                <button type="button" onClick={() => updateRequestStatus(selectedRequest.id, "Rejected")} className="cursor-pointer flex-1 px-3 py-2 rounded-lg bg-red-50 text-red-700 border border-red-200/50 text-sm font-semibold">Reject</button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

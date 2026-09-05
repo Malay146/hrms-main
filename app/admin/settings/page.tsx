@@ -17,6 +17,8 @@ import BuildingIcon from "@/components/icons/building";
 import ShieldCheckIcon from "@/components/icons/shield-check";
 import CreditCardIcon from "@/components/icons/credit-card";
 import VisaIcon from "@/components/icons/visa";
+import { Modal } from "@/components/ui/modal";
+import { toast } from "sonner";
 
 // Mock Active Sessions
 const initialSessions = [
@@ -84,6 +86,41 @@ export default function SettingsPage() {
       isDefault: true,
     },
   ]);
+  const [isEditCardOpen, setIsEditCardOpen] = useState(false);
+  const [savedSnapshot, setSavedSnapshot] = useState({
+    orgName: "William Joseph Corp",
+    orgSubdomain: "williamjoseph",
+    currency: "USD",
+    timezone: "GMT+5:30",
+    twoFactor: true,
+    sessionTimeout: "30m",
+  });
+
+  const handleSaveChanges = () => {
+    setSavedSnapshot({
+      orgName,
+      orgSubdomain,
+      currency,
+      timezone,
+      twoFactor,
+      sessionTimeout,
+    });
+    toast.success("Settings saved");
+  };
+
+  const handleCancelChanges = () => {
+    setOrgName(savedSnapshot.orgName);
+    setOrgSubdomain(savedSnapshot.orgSubdomain);
+    setCurrency(savedSnapshot.currency);
+    setTimezone(savedSnapshot.timezone);
+    setTwoFactor(savedSnapshot.twoFactor);
+    setSessionTimeout(savedSnapshot.sessionTimeout);
+    toast.info("Changes discarded");
+  };
+
+  const handleDownloadInvoice = (invoiceId: string) => {
+    toast.success("Invoice downloaded", { description: `${invoiceId}.pdf saved.` });
+  };
 
   const handleRevokeSession = (id: string) => {
     setSessions((prev) => prev.filter((s) => s.id !== id));
@@ -108,17 +145,25 @@ export default function SettingsPage() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div className="flex flex-col">
-          <h1 className="text-h1 font-medium">Settings</h1>
-          <p className="text-body-lg text-zinc-500 font-medium">
+          <h1 className="type-title">Settings</h1>
+          <p className="type-subtitle">
             Manage your organization configurations, security settings, and
             profile details.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="cursor-pointer px-4 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover text-sm font-semibold text-zinc-700 shadow-2xs active:scale-98 transition-all">
+          <button
+            type="button"
+            onClick={handleCancelChanges}
+            className="cursor-pointer px-4 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover text-sm font-semibold text-zinc-700 shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
             Cancel
           </button>
-          <button className="cursor-pointer px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all">
+          <button
+            type="button"
+            onClick={handleSaveChanges}
+            className="cursor-pointer px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
             Save Changes
           </button>
         </div>
@@ -245,7 +290,10 @@ export default function SettingsPage() {
                 <span className="text-xs font-semibold text-zinc-700">
                   Organization Logo
                 </span>
-                <div className="border border-dashed border-border rounded-xl p-6 flex flex-col items-center justify-center gap-2 bg-zinc-50/20">
+                <div
+                  onClick={() => toast.success("Logo upload queued")}
+                  className="border border-dashed border-border rounded-xl p-6 flex flex-col items-center justify-center gap-2 bg-zinc-50/20 cursor-pointer hover:bg-zinc-50/40 transition-colors"
+                >
                   <Upload className="size-6 text-zinc-400" />
                   <p className="text-xs font-semibold text-zinc-500">
                     Drag logo image here, or{" "}
@@ -368,7 +416,7 @@ export default function SettingsPage() {
                       className="flex items-center justify-between border border-border rounded-xl p-4 bg-zinc-50/25"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="size-9 rounded-full bg-zinc-50 border border-border flex items-center justify-center text-lg shrink-0">
+                        <div className="size-9 rounded-lg bg-zinc-50 border border-border flex items-center justify-center text-lg shrink-0">
                           {sess.type === "desktop" ? "💻" : "📱"}
                         </div>
                         <div className="flex flex-col">
@@ -428,7 +476,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="flex flex-col items-start md:items-end shrink-0">
-                  <span className="text-2xl font-black text-zinc-950">
+                  <span className="text-2xl font-semibold text-zinc-950">
                     $499.00
                   </span>
                   <span className="text-xs font-semibold text-zinc-400">
@@ -471,7 +519,11 @@ export default function SettingsPage() {
                         </span>
                       </div>
                     </div>
-                    <button className="cursor-pointer px-3 py-1.5 border border-border bg-surface hover:bg-zinc-50 text-zinc-700 text-xs font-bold rounded-lg shadow-3xs active:scale-98 transition-all shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditCardOpen(true)}
+                      className="cursor-pointer px-3 py-1.5 border border-border bg-surface hover:bg-surface-hover text-zinc-700 text-xs font-bold rounded-lg shadow-3xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out shrink-0"
+                    >
                       Edit Card
                     </button>
                   </div>
@@ -512,7 +564,11 @@ export default function SettingsPage() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-right">
-                            <button className="cursor-pointer p-1.5 border border-border bg-surface hover:bg-zinc-50 text-zinc-500 hover:text-zinc-900 rounded-lg shadow-3xs transition-colors">
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadInvoice(inv.id)}
+                              className="cursor-pointer p-1.5 border border-border bg-surface hover:bg-surface-hover text-zinc-500 hover:text-zinc-900 rounded-lg shadow-3xs active:scale-95 transition-[transform,background-color,color] duration-150 ease-out"
+                            >
                               <Download className="size-3.5" />
                             </button>
                           </td>
@@ -526,6 +582,33 @@ export default function SettingsPage() {
           )}
         </div>
       </div>
+
+      <Modal
+        open={isEditCardOpen}
+        onClose={() => setIsEditCardOpen(false)}
+        title="Edit Payment Card"
+        description="Visa ending in 4242"
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Expiry date
+            <input
+              defaultValue="12/28"
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setIsEditCardOpen(false);
+              toast.success("Payment card updated");
+            }}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white active:scale-[0.98]"
+          >
+            Save Card
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

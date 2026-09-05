@@ -18,6 +18,9 @@ import {
   Info
 } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { Modal } from "@/components/ui/modal";
+import { toast } from "sonner";
 
 // Employee Database (matching the list page)
 const employeesDatabase = [
@@ -208,9 +211,33 @@ export default function EmployeeProfilePage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("Overview");
 
-  // Get Employee ID from route params
   const empId = params.id as string;
-  const employee = employeesDatabase.find((emp) => emp.id === empId);
+  const dbEmployee = employeesDatabase.find((emp) => emp.id === empId);
+  const [employee, setEmployee] = useState(dbEmployee);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [draftProfile, setDraftProfile] = useState({
+    phone: dbEmployee?.phone ?? "",
+    address: dbEmployee?.address ?? "",
+    designation: dbEmployee?.designation ?? "",
+    location: dbEmployee?.location ?? "",
+  });
+
+  const handleDownload = (label: string) => {
+    toast.success("Download started", { description: `${label} saved locally.` });
+  };
+
+  const handleSaveProfile = () => {
+    if (!employee) return;
+    setEmployee({
+      ...employee,
+      phone: draftProfile.phone.trim(),
+      address: draftProfile.address.trim(),
+      designation: draftProfile.designation.trim(),
+      location: draftProfile.location.trim(),
+    });
+    setIsEditOpen(false);
+    toast.success("Profile updated", { description: `${employee.name}'s details saved.` });
+  };
 
   if (!employee) {
     return (
@@ -218,7 +245,7 @@ export default function EmployeeProfilePage() {
         <h2 className="text-xl font-bold text-zinc-950">Employee Not Found</h2>
         <p className="text-zinc-500 max-w-sm">The employee ID you entered does not exist or has been removed.</p>
         <button 
-          onClick={() => router.push("/people/employees")}
+          onClick={() => router.push("/admin/people/employees")}
           className="cursor-pointer px-4 py-2 bg-zinc-950 text-white rounded-lg text-sm font-semibold hover:bg-zinc-800 transition-colors"
         >
           Back to Employees List
@@ -257,14 +284,26 @@ export default function EmployeeProfilePage() {
       {/* Top Breadcrumb & Actions */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => router.push("/people/employees")}
+          onClick={() => router.push("/admin/people/employees")}
           className="cursor-pointer flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 font-semibold transition-colors"
         >
           <ArrowLeft className="size-4" />
           Back to Employees
         </button>
         <div className="flex items-center gap-3">
-          <button className="cursor-pointer px-3.5 py-1.5 border border-border bg-surface hover:bg-surface-hover hover:border-border-strong text-zinc-700 text-sm font-semibold rounded-lg shadow-2xs active:scale-98 transition-all">
+          <button
+            type="button"
+            onClick={() => {
+              setDraftProfile({
+                phone: employee.phone,
+                address: employee.address,
+                designation: employee.designation,
+                location: employee.location,
+              });
+              setIsEditOpen(true);
+            }}
+            className="cursor-pointer px-3.5 py-1.5 border border-border bg-surface hover:bg-surface-hover hover:border-border-strong text-zinc-700 text-sm font-semibold rounded-lg shadow-2xs active:scale-[0.98] transition-[transform,background-color,border-color] duration-150 ease-out"
+          >
             Edit Profile
           </button>
         </div>
@@ -272,9 +311,10 @@ export default function EmployeeProfilePage() {
 
       {/* Profile Header Banner */}
       <div className="border border-border rounded-xl p-6 bg-surface flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-5">
-        <div className="size-20 rounded-full bg-zinc-100 flex items-center justify-center font-bold text-2xl text-zinc-800 border border-zinc-200">
-          {employee.avatar}
-        </div>
+        <PersonAvatar
+          name={employee.name}
+          size={80}
+        />
         <div className="flex-1 flex flex-col gap-2 min-w-0">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
             <h2 className="text-2xl font-medium text-zinc-950 leading-tight">{employee.name}</h2>
@@ -568,7 +608,11 @@ export default function EmployeeProfilePage() {
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="text-sm font-bold text-zinc-950">{slip.amount}</span>
-                      <button className="cursor-pointer p-1.5 rounded-lg border border-border hover:border-border-strong bg-surface hover:bg-surface-hover text-zinc-500 hover:text-zinc-900 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(`${slip.month} payslip`)}
+                        className="cursor-pointer p-1.5 rounded-lg border border-border hover:border-border-strong bg-surface hover:bg-surface-hover text-zinc-500 hover:text-zinc-900 active:scale-95 transition-[transform,background-color,border-color,color] duration-150 ease-out"
+                      >
                         <Download className="size-4" />
                       </button>
                     </div>
@@ -694,7 +738,11 @@ export default function EmployeeProfilePage() {
                     <td className="py-4 px-6 text-zinc-500">{doc.size}</td>
                     <td className="py-4 px-6 text-zinc-400">{doc.date}</td>
                     <td className="py-4 px-6 text-right">
-                      <button className="cursor-pointer p-1.5 rounded-lg border border-border hover:border-border-strong bg-surface hover:bg-surface-hover text-zinc-500 hover:text-zinc-900 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => handleDownload(doc.name)}
+                        className="cursor-pointer p-1.5 rounded-lg border border-border hover:border-border-strong bg-surface hover:bg-surface-hover text-zinc-500 hover:text-zinc-900 active:scale-95 transition-[transform,background-color,border-color,color] duration-150 ease-out"
+                      >
                         <Download className="size-4" />
                       </button>
                     </td>
@@ -735,6 +783,76 @@ export default function EmployeeProfilePage() {
           </div>
         )}
       </div>
+
+      <Modal
+        open={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+        title="Edit Profile"
+        description={employee.name}
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Designation
+            <input
+              value={draftProfile.designation}
+              onChange={(e) =>
+                setDraftProfile((current) => ({
+                  ...current,
+                  designation: e.target.value,
+                }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Phone
+            <input
+              value={draftProfile.phone}
+              onChange={(e) =>
+                setDraftProfile((current) => ({
+                  ...current,
+                  phone: e.target.value,
+                }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Location
+            <input
+              value={draftProfile.location}
+              onChange={(e) =>
+                setDraftProfile((current) => ({
+                  ...current,
+                  location: e.target.value,
+                }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Address
+            <textarea
+              value={draftProfile.address}
+              onChange={(e) =>
+                setDraftProfile((current) => ({
+                  ...current,
+                  address: e.target.value,
+                }))
+              }
+              rows={2}
+              className="px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong resize-none"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleSaveProfile}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
+            Save Changes
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

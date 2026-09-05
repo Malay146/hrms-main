@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
 import { cn } from "@/utils/cn";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { Modal } from "@/components/ui/modal";
+import { toast } from "sonner";
 
 // Mock Kanban Pipeline Candidates
 const initialPipeline = {
@@ -90,27 +93,42 @@ const initialPipeline = {
 };
 
 // Mock Active Job Openings
-const activeJobs = [
+const initialJobs = [
   {
+    id: "JOB001",
     title: "Frontend Engineer",
+    department: "Engineering",
     applicants: 48,
     inInterview: 6,
     offers: 1,
     deadline: "15 Aug 2026",
+    description:
+      "Build responsive dashboard interfaces and internal HR tools using React and TypeScript.",
+    status: "Active" as const,
   },
   {
+    id: "JOB002",
     title: "Backend Architect",
+    department: "Engineering",
     applicants: 32,
     inInterview: 4,
     offers: 0,
     deadline: "20 Aug 2026",
+    description:
+      "Design scalable APIs, database schemas, and payroll processing services.",
+    status: "Active" as const,
   },
   {
+    id: "JOB003",
     title: "Product Manager",
+    department: "Product",
     applicants: 24,
     inInterview: 2,
     offers: 1,
     deadline: "10 Aug 2026",
+    description:
+      "Own the hiring roadmap, candidate experience, and cross-team delivery.",
+    status: "Active" as const,
   },
 ];
 
@@ -245,17 +263,45 @@ const ChartTooltip = ({ active, payload }: any) => {
   return null;
 };
 
+type Applicant = (typeof initialApplicants)[0];
+type JobOpening = (typeof initialJobs)[0];
+
 export default function RecruitmentPage() {
   const [mounted, setMounted] = useState(false);
   const [pipeline, setPipeline] = useState(initialPipeline);
+  const [jobs, setJobs] = useState(initialJobs);
+  const [applicants, setApplicants] = useState(initialApplicants);
   const [search, setSearch] = useState("");
   const [selectedPosition, setSelectedPosition] = useState("All");
   const [selectedStage, setSelectedStage] = useState("All");
   const [selectedExp, setSelectedExp] = useState("All");
 
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [activeKanbanMenuId, setActiveKanbanMenuId] = useState<string | null>(
+    null,
+  );
+  const [isAddJobOpen, setIsAddJobOpen] = useState(false);
+  const [viewJob, setViewJob] = useState<JobOpening | null>(null);
+  const [viewApplicant, setViewApplicant] = useState<Applicant | null>(null);
+  const [scheduleTarget, setScheduleTarget] = useState<Applicant | null>(null);
+  const [moveStageTarget, setMoveStageTarget] = useState<Applicant | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<Applicant | null>(null);
+  const [draftJob, setDraftJob] = useState({
+    title: "",
+    department: "Engineering",
+    deadline: "",
+    description: "",
+  });
+  const [draftInterview, setDraftInterview] = useState({
+    date: "",
+    time: "",
+    type: "",
+    interviewer: "Sarah Mills",
+  });
+  const [moveToStage, setMoveToStage] = useState("Screening");
 
   const dropdownRef = useRef<HTMLTableCellElement>(null);
+  const kanbanMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -265,6 +311,12 @@ export default function RecruitmentPage() {
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setActiveMenuId(null);
+      }
+      if (
+        kanbanMenuRef.current &&
+        !kanbanMenuRef.current.contains(event.target as Node)
+      ) {
+        setActiveKanbanMenuId(null);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -306,10 +358,147 @@ export default function RecruitmentPage() {
         [targetStage]: targetList,
       };
     });
+
+    setApplicants((prev) =>
+      prev.map((app) =>
+        app.id === candidateId ? { ...app, stage: targetStage } : app,
+      ),
+    );
+  };
+
+  const handleAddJob = () => {
+    if (!draftJob.title.trim() || !draftJob.deadline.trim()) {
+      toast.error("Missing fields", {
+        description: "Title and deadline are required.",
+      });
+      return;
+    }
+
+    const newJob: JobOpening = {
+      id: `JOB${String(jobs.length + 1).padStart(3, "0")}`,
+      title: draftJob.title.trim(),
+      department: draftJob.department,
+      applicants: 0,
+      inInterview: 0,
+      offers: 0,
+      deadline: draftJob.deadline.trim(),
+      description: draftJob.description.trim() || "No description provided.",
+      status: "Active",
+    };
+
+    setJobs((prev) => [newJob, ...prev]);
+    setIsAddJobOpen(false);
+    setDraftJob({
+      title: "",
+      department: "Engineering",
+      deadline: "",
+      description: "",
+    });
+    toast.success("Job opening created", {
+      description: `${newJob.title} is now live.`,
+    });
+  };
+
+  const findApplicantByName = (name: string) =>
+    applicants.find((app) => app.name === name);
+
+  const handleApplicantAction = (
+    action: "view" | "schedule" | "move" | "reject",
+    app: Applicant,
+  ) => {
+    setActiveMenuId(null);
+    setActiveKanbanMenuId(null);
+
+    if (action === "view") {
+      setViewApplicant(app);
+      return;
+    }
+    if (action === "schedule") {
+      setScheduleTarget(app);
+      setDraftInterview({
+        date: "",
+        time: "",
+        type: `${app.position} Interview`,
+        interviewer: "Sarah Mills",
+      });
+      return;
+    }
+    if (action === "move") {
+      setMoveStageTarget(app);
+      setMoveToStage(app.stage === "Applied" ? "Screening" : "Interview");
+      return;
+    }
+    setRejectTarget(app);
+  };
+
+  const handleScheduleInterview = () => {
+    if (!scheduleTarget || !draftInterview.date || !draftInterview.time) {
+      toast.error("Missing fields", {
+        description: "Date and time are required.",
+      });
+      return;
+    }
+
+    setScheduleTarget(null);
+    toast.success("Interview scheduled", {
+      description: `${scheduleTarget.name} on ${draftInterview.date} at ${draftInterview.time}.`,
+    });
+  };
+
+  const handleMoveStage = () => {
+    if (!moveStageTarget) return;
+
+    setApplicants((prev) =>
+      prev.map((app) =>
+        app.id === moveStageTarget.id ? { ...app, stage: moveToStage } : app,
+      ),
+    );
+
+    setPipeline((prev) => {
+      const next = { ...prev };
+      (Object.keys(next) as Array<keyof typeof next>).forEach((stage) => {
+        next[stage] = next[stage].filter(
+          (c) => c.name !== moveStageTarget.name,
+        );
+      });
+      const candidate = {
+        id: moveStageTarget.id,
+        name: moveStageTarget.name,
+        position: moveStageTarget.position,
+        date: moveStageTarget.date.split(" ")[0] ?? moveStageTarget.date,
+        rating: Math.round(moveStageTarget.rating),
+        avatar: moveStageTarget.avatar,
+      };
+      const targetKey = moveToStage as keyof typeof next;
+      next[targetKey] = [...(next[targetKey] ?? []), candidate];
+      return next;
+    });
+
+    setMoveStageTarget(null);
+    toast.success("Stage updated", {
+      description: `${moveStageTarget.name} moved to ${moveToStage}.`,
+    });
+  };
+
+  const handleRejectApplicant = () => {
+    if (!rejectTarget) return;
+
+    setApplicants((prev) => prev.filter((app) => app.id !== rejectTarget.id));
+    setPipeline((prev) => {
+      const next = { ...prev };
+      (Object.keys(next) as Array<keyof typeof next>).forEach((stage) => {
+        next[stage] = next[stage].filter((c) => c.id !== rejectTarget.id);
+      });
+      return next;
+    });
+    setRejectTarget(null);
+    toast.success("Applicant rejected", {
+      description: `${rejectTarget.name} was removed from the pipeline.`,
+    });
   };
 
   // Filter Logic
-  const filteredApplicants = initialApplicants.filter((app) => {
+  const filteredApplicants = applicants.filter((app) => {
     const matchesSearch =
       app.name.toLowerCase().includes(search.toLowerCase()) ||
       app.id.toLowerCase().includes(search.toLowerCase());
@@ -379,12 +568,16 @@ export default function RecruitmentPage() {
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div className="flex flex-col">
-          <h1 className="text-h1 font-medium">Recruitment</h1>
-          <p className="text-body-lg text-zinc-500 font-medium">
+          <h1 className="type-title">Recruitment</h1>
+          <p className="type-subtitle">
             Manage job openings, candidates, and the hiring process.
           </p>
         </div>
-        <button className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all">
+        <button
+          type="button"
+          onClick={() => setIsAddJobOpen(true)}
+          className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+        >
           <Plus className="size-4" />
           New Job Opening
         </button>
@@ -427,7 +620,7 @@ export default function RecruitmentPage() {
 
       {/* Recruitment Pipeline Kanban Board */}
       <div className="flex flex-col gap-4">
-        <h2 className="text-base font-bold text-zinc-950">
+        <h2 className="type-heading">
           Recruitment Pipeline
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-3 pb-2 overflow-x-auto">
@@ -464,9 +657,10 @@ export default function RecruitmentPage() {
                       >
                         <div className="flex items-start justify-between gap-1.5">
                           <div className="flex items-center gap-3.5 min-w-0">
-                            <div className="size-8 rounded-full bg-zinc-100 flex items-center justify-center font-bold text-[10px] text-zinc-800 border border-zinc-200 shrink-0">
-                              {candidate.avatar}
-                            </div>
+                            <PersonAvatar
+                              name={candidate.name}
+                              size={32}
+                            />
                             <div className="flex flex-col min-w-0 text-left">
                               <span className="text-sm font-semibold text-zinc-950 leading-tight truncate">
                                 {candidate.name}
@@ -476,9 +670,75 @@ export default function RecruitmentPage() {
                               </span>
                             </div>
                           </div>
-                          <button className="cursor-pointer p-0.5 rounded hover:bg-zinc-100 border border-transparent text-zinc-400 hover:text-zinc-800 transition-colors shrink-0">
-                            <MoreHorizontal className="size-4" />
-                          </button>
+                          <div
+                            className="relative"
+                            ref={
+                              activeKanbanMenuId === candidate.id
+                                ? kanbanMenuRef
+                                : null
+                            }
+                          >
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActiveKanbanMenuId(
+                                  activeKanbanMenuId === candidate.id
+                                    ? null
+                                    : candidate.id,
+                                )
+                              }
+                              className="cursor-pointer p-0.5 rounded hover:bg-zinc-100 border border-transparent text-zinc-400 hover:text-zinc-800 active:scale-95 transition-[transform,background-color,color] duration-150 ease-out shrink-0"
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </button>
+                            {activeKanbanMenuId === candidate.id && (
+                              <div className="absolute right-0 top-6 w-40 bg-surface border border-border rounded-lg shadow-lg py-1.5 z-40 text-left animate-in fade-in slide-in-from-top-2 duration-150">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const app = findApplicantByName(candidate.name);
+                                    if (app) handleApplicantAction("view", app);
+                                  }}
+                                  className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                                >
+                                  View Profile
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const app = findApplicantByName(candidate.name);
+                                    if (app)
+                                      handleApplicantAction("schedule", app);
+                                  }}
+                                  className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                                >
+                                  Schedule Interview
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const app = findApplicantByName(candidate.name);
+                                    if (app) handleApplicantAction("move", app);
+                                  }}
+                                  className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                                >
+                                  Move Stage
+                                </button>
+                                <hr className="border-border my-1" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const app = findApplicantByName(candidate.name);
+                                    if (app)
+                                      handleApplicantAction("reject", app);
+                                  }}
+                                  className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700"
+                                >
+                                  Reject Applicant
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <div className="flex items-center justify-between text-xs text-zinc-400 font-medium mt-1">
                           <span>Applied {candidate.date}</span>
@@ -499,14 +759,14 @@ export default function RecruitmentPage() {
 
       {/* Active Job Openings Grid */}
       <div className="flex flex-col gap-4">
-        <h2 className="text-base font-bold text-zinc-950">
+        <h2 className="type-heading">
           Active Job Openings
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {activeJobs.map((job, idx) => (
+          {jobs.map((job) => (
             <div
-              key={idx}
-              className="border border-border rounded-2xl p-5 bg-surface hover:border-zinc-300 hover:shadow-2xs transition-all flex flex-col justify-between min-h-[220px] relative group select-none"
+              key={job.id}
+              className="border border-border rounded-2xl p-5 bg-surface hover:border-zinc-300 hover:shadow-2xs transition-[border-color,box-shadow] duration-150 ease-out flex flex-col justify-between min-h-[220px] relative group select-none"
             >
               {/* Header */}
               <div className="flex items-center justify-between">
@@ -556,7 +816,11 @@ export default function RecruitmentPage() {
 
               {/* Footer */}
               <div className="mt-4 pt-3 border-t border-border flex justify-end">
-                <button className="cursor-pointer px-3 py-1.5 border border-border bg-surface hover:bg-zinc-950 hover:text-white hover:border-zinc-950 text-zinc-700 text-xs font-bold rounded-lg shadow-3xs active:scale-98 transition-all shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewJob(job)}
+                  className="cursor-pointer px-3 py-1.5 border border-border bg-surface hover:bg-zinc-950 hover:text-white hover:border-zinc-950 text-zinc-700 text-xs font-bold rounded-lg shadow-3xs active:scale-[0.98] transition-[transform,background-color,border-color,color] duration-150 ease-out shrink-0"
+                >
                   View Details
                 </button>
               </div>
@@ -567,10 +831,10 @@ export default function RecruitmentPage() {
 
       {/* Filter bar & Applicants Table */}
       <div className="flex flex-col gap-4">
-        <h2 className="text-base font-bold text-zinc-950">Applicants List</h2>
+        <h2 className="type-heading">Applicants List</h2>
 
         {/* Filters Controls */}
-        <div className="border border-border rounded-xl p-4 bg-surface grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Search */}
           <div className="relative flex items-center">
             <Search className="absolute left-3 size-4 text-zinc-400 pointer-events-none" />
@@ -678,9 +942,10 @@ export default function RecruitmentPage() {
                     >
                       <td className="py-3.5 px-6">
                         <div className="flex items-center gap-3">
-                          <div className="size-8 rounded-full bg-zinc-100 flex items-center justify-center font-bold text-[10px] text-zinc-800 border border-zinc-200 shrink-0">
-                            {app.avatar}
-                          </div>
+                          <PersonAvatar
+                            name={app.name}
+                            size={32}
+                          />
                           <span className="font-semibold text-zinc-950 leading-tight">
                             {app.name}
                           </span>
@@ -706,29 +971,50 @@ export default function RecruitmentPage() {
                         ref={activeMenuId === app.id ? dropdownRef : null}
                       >
                         <button
+                          type="button"
                           onClick={() =>
                             setActiveMenuId(
                               activeMenuId === app.id ? null : app.id,
                             )
                           }
-                          className="cursor-pointer p-1.5 rounded-lg border border-transparent hover:border-zinc-200 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 transition-colors"
+                          className="cursor-pointer p-1.5 rounded-lg border border-transparent hover:border-zinc-200 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-900 active:scale-95 transition-[transform,background-color,border-color,color] duration-150 ease-out"
                         >
                           <MoreHorizontal className="size-4" />
                         </button>
 
                         {activeMenuId === app.id && (
-                          <div className="absolute right-6 top-10 w-40 bg-surface border border-border rounded-lg shadow-lg py-1.5 z-40 text-left animate-in fade-in duration-100">
-                            <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950">
+                          <div className="absolute right-6 top-10 w-40 bg-surface border border-border rounded-lg shadow-lg py-1.5 z-40 text-left animate-in fade-in slide-in-from-top-2 duration-150">
+                            <button
+                              type="button"
+                              onClick={() => handleApplicantAction("view", app)}
+                              className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                            >
                               View Profile
                             </button>
-                            <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleApplicantAction("schedule", app)
+                              }
+                              className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                            >
                               Schedule Interview
                             </button>
-                            <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950">
+                            <button
+                              type="button"
+                              onClick={() => handleApplicantAction("move", app)}
+                              className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                            >
                               Move Stage
                             </button>
                             <hr className="border-border my-1" />
-                            <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleApplicantAction("reject", app)
+                              }
+                              className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700"
+                            >
                               Reject Applicant
                             </button>
                           </div>
@@ -888,6 +1174,304 @@ export default function RecruitmentPage() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={isAddJobOpen}
+        onClose={() => setIsAddJobOpen(false)}
+        title="New Job Opening"
+        description="Publish a role to the careers portal"
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Job title
+            <input
+              value={draftJob.title}
+              onChange={(e) =>
+                setDraftJob((current) => ({ ...current, title: e.target.value }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-900 bg-surface focus:outline-none focus:border-border-strong"
+              placeholder="Senior Frontend Engineer"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              Department
+              <select
+                value={draftJob.department}
+                onChange={(e) =>
+                  setDraftJob((current) => ({
+                    ...current,
+                    department: e.target.value,
+                  }))
+                }
+                className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-700 bg-surface focus:outline-none focus:border-border-strong cursor-pointer"
+              >
+                {["Engineering", "Product", "Design", "HR", "Sales"].map(
+                  (dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              Application deadline
+              <input
+                type="text"
+                value={draftJob.deadline}
+                onChange={(e) =>
+                  setDraftJob((current) => ({
+                    ...current,
+                    deadline: e.target.value,
+                  }))
+                }
+                className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-900 bg-surface focus:outline-none focus:border-border-strong"
+                placeholder="15 Aug 2026"
+              />
+            </label>
+          </div>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Description
+            <textarea
+              value={draftJob.description}
+              onChange={(e) =>
+                setDraftJob((current) => ({
+                  ...current,
+                  description: e.target.value,
+                }))
+              }
+              rows={3}
+              className="px-3 py-2 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong resize-none"
+              placeholder="What the candidate will work on..."
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleAddJob}
+            className="cursor-pointer mt-1 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
+            Publish Opening
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(viewJob)}
+        onClose={() => setViewJob(null)}
+        title={viewJob?.title ?? "Job Opening"}
+        description={viewJob?.id}
+      >
+        {viewJob ? (
+          <div className="flex flex-col gap-4 text-left">
+            <p className="text-sm text-zinc-600 leading-relaxed">
+              {viewJob.description}
+            </p>
+            <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
+              <div>
+                <span className="text-zinc-400">Department</span>
+                <p className="text-zinc-900 mt-1">{viewJob.department}</p>
+              </div>
+              <div>
+                <span className="text-zinc-400">Deadline</span>
+                <p className="text-zinc-900 mt-1">{viewJob.deadline}</p>
+              </div>
+              <div>
+                <span className="text-zinc-400">Applicants</span>
+                <p className="text-zinc-900 mt-1">{viewJob.applicants}</p>
+              </div>
+              <div>
+                <span className="text-zinc-400">In interview</span>
+                <p className="text-zinc-900 mt-1">{viewJob.inInterview}</p>
+              </div>
+            </div>
+            <span className="inline-flex w-fit px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/50">
+              {viewJob.status}
+            </span>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(viewApplicant)}
+        onClose={() => setViewApplicant(null)}
+        title={viewApplicant?.name ?? "Candidate"}
+        description={viewApplicant?.position}
+      >
+        {viewApplicant ? (
+          <div className="flex flex-col gap-4 text-left">
+            <div className="flex items-center gap-3">
+              <PersonAvatar
+                name={viewApplicant.name}
+                size={48}
+              />
+              <div>
+                <p className="text-sm font-bold text-zinc-950">
+                  {viewApplicant.name}
+                </p>
+                <p className="text-xs text-zinc-400 font-semibold">
+                  {viewApplicant.id}
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
+              <div>
+                <span className="text-zinc-400">Experience</span>
+                <p className="text-zinc-900 mt-1">{viewApplicant.exp}</p>
+              </div>
+              <div>
+                <span className="text-zinc-400">Applied</span>
+                <p className="text-zinc-900 mt-1">{viewApplicant.date}</p>
+              </div>
+              <div>
+                <span className="text-zinc-400">Stage</span>
+                <p className="text-zinc-900 mt-1">{viewApplicant.stage}</p>
+              </div>
+              <div>
+                <span className="text-zinc-400">Rating</span>
+                <p className="text-zinc-900 mt-1">{viewApplicant.rating}/5</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(scheduleTarget)}
+        onClose={() => setScheduleTarget(null)}
+        title="Schedule Interview"
+        description={scheduleTarget?.name}
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Date
+            <input
+              type="date"
+              value={draftInterview.date}
+              onChange={(e) =>
+                setDraftInterview((current) => ({
+                  ...current,
+                  date: e.target.value,
+                }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Time
+            <input
+              type="time"
+              value={draftInterview.time}
+              onChange={(e) =>
+                setDraftInterview((current) => ({
+                  ...current,
+                  time: e.target.value,
+                }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Interview type
+            <input
+              value={draftInterview.type}
+              onChange={(e) =>
+                setDraftInterview((current) => ({
+                  ...current,
+                  type: e.target.value,
+                }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Interviewer
+            <select
+              value={draftInterview.interviewer}
+              onChange={(e) =>
+                setDraftInterview((current) => ({
+                  ...current,
+                  interviewer: e.target.value,
+                }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong cursor-pointer"
+            >
+              {["Sarah Mills", "Bruce Banner", "William Joseph"].map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={handleScheduleInterview}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
+            Schedule Interview
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(moveStageTarget)}
+        onClose={() => setMoveStageTarget(null)}
+        title="Move Stage"
+        description={moveStageTarget?.name}
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            New stage
+            <select
+              value={moveToStage}
+              onChange={(e) => setMoveToStage(e.target.value)}
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong cursor-pointer"
+            >
+              {stages.filter((s) => s !== "All").map((stage) => (
+                <option key={stage} value={stage}>
+                  {stage}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={handleMoveStage}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
+            Update Stage
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(rejectTarget)}
+        onClose={() => setRejectTarget(null)}
+        title="Reject applicant"
+        description={rejectTarget?.name}
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <p className="text-sm text-zinc-600 font-medium">
+            This removes the candidate from the pipeline and applicants list.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setRejectTarget(null)}
+              className="cursor-pointer flex-1 px-3.5 py-2 rounded-lg border border-border text-sm font-semibold text-zinc-700 active:scale-[0.98] transition-transform duration-150 ease-out"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleRejectApplicant}
+              className="cursor-pointer flex-1 px-3.5 py-2 rounded-lg bg-red-50 text-red-700 border border-red-200/50 text-sm font-semibold active:scale-[0.98] transition-transform duration-150 ease-out"
+            >
+              Reject
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

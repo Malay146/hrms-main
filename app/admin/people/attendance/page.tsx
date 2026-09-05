@@ -24,12 +24,13 @@ import {
   Tooltip,
 } from "recharts";
 import { cn } from "@/utils/cn";
-import { color } from "motion";
 import PresentTodayIcon from "@/components/icons/present-today";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { Modal } from "@/components/ui/modal";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { toast } from "sonner";
 import LeaveTodayIcon from "@/components/icons/leave-today";
 import LateIcon from "@/components/icons/late";
-import HomeIcon from "@/components/icons/sidebar/home";
-import Late from "@/components/icons/late";
 import RemoteIcon from "@/components/icons/remote";
 
 // Mock Weekly Chart Data
@@ -156,6 +157,7 @@ const ChartTooltip = ({ active, payload, label }: any) => {
 
 export default function AttendancePage() {
   const [mounted, setMounted] = useState(false);
+  const [attendanceLogs, setAttendanceLogs] = useState(initialAttendanceLogs);
   const [search, setSearch] = useState("");
   const [selectedDept, setSelectedDept] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
@@ -163,11 +165,23 @@ export default function AttendancePage() {
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [selectedLog, setSelectedLog] = useState<(typeof initialAttendanceLogs)[0] | null>(null);
+  const [adjustTarget, setAdjustTarget] = useState<(typeof initialAttendanceLogs)[0] | null>(null);
+  const [draftAdjust, setDraftAdjust] = useState({ checkIn: "09:00", checkOut: "17:00" });
+  const [isMarkOpen, setIsMarkOpen] = useState(false);
+  const [draftLog, setDraftLog] = useState({
+    name: "",
+    department: "Engineering",
+    checkIn: "09:00",
+    status: "On Time",
+  });
 
   const dropdownRef = useRef<HTMLTableCellElement>(null);
 
   useEffect(() => {
     setMounted(true);
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setSearch(q);
     function handleClickOutside(event: MouseEvent) {
       if (
         dropdownRef.current &&
@@ -181,7 +195,7 @@ export default function AttendancePage() {
   }, []);
 
   // Filter Logic
-  const filteredLogs = initialAttendanceLogs.filter((log) => {
+  const filteredLogs = attendanceLogs.filter((log) => {
     const matchesSearch =
       log.name.toLowerCase().includes(search.toLowerCase()) ||
       log.email.toLowerCase().includes(search.toLowerCase()) ||
@@ -219,6 +233,25 @@ export default function AttendancePage() {
     setSelectedIds([]);
   };
 
+  const handleSaveAdjust = () => {
+    if (!adjustTarget) return;
+    setAttendanceLogs((current) =>
+      current.map((log) =>
+        log.id === adjustTarget.id
+          ? {
+              ...log,
+              checkIn: draftAdjust.checkIn,
+              checkOut: draftAdjust.checkOut,
+            }
+          : log,
+      ),
+    );
+    setAdjustTarget(null);
+    toast.success("Times updated", {
+      description: `${adjustTarget.name}'s log was adjusted.`,
+    });
+  };
+
   // Status Badge Class Helper
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
@@ -244,22 +277,64 @@ export default function AttendancePage() {
   ];
   const statuses = ["All", "On Time", "Late", "Absent", "Half Day"];
 
+  const handleMarkAttendance = () => {
+    if (!draftLog.name.trim()) {
+      toast.error("Employee name is required");
+      return;
+    }
+    const id = `LOG${String(attendanceLogs.length + 1).padStart(3, "0")}`;
+    setAttendanceLogs((current) => [
+      {
+        id,
+        name: draftLog.name.trim(),
+        email: `${draftLog.name.toLowerCase().replace(/\s+/g, ".")}@organization.com`,
+        avatar: draftLog.name
+          .split(" ")
+          .map((part) => part[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase(),
+        department: draftLog.department,
+        checkIn: draftLog.checkIn,
+        checkOut: "--:--",
+        workingHours: "0.0 hrs",
+        status: draftLog.status,
+      },
+      ...current,
+    ]);
+    setDraftLog({ name: "", department: "Engineering", checkIn: "09:00", status: "On Time" });
+    setIsMarkOpen(false);
+    toast.success("Attendance marked");
+  };
+
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
       {/* Page Header */}
       <div className="flex items-start justify-between">
         <div className="flex flex-col">
-          <h1 className="text-h1 font-medium">Attendance</h1>
-          <p className="text-body-lg text-zinc-500 font-medium">
+          <h1 className="type-title">Attendance</h1>
+          <p className="type-subtitle">
             Monitor employee attendance, working hours, and attendance trends.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="cursor-pointer flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover hover:border-border-strong text-sm font-semibold text-zinc-700 shadow-2xs active:scale-98 transition-all">
+          <button
+            type="button"
+            onClick={() =>
+              toast("Export started", {
+                description: "Attendance report will download shortly.",
+              })
+            }
+            className="cursor-pointer flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover hover:border-border-strong text-sm font-semibold text-zinc-700 shadow-2xs active:scale-[0.98] transition-[transform,background-color,border-color] duration-150 ease-out"
+          >
             <Download className="size-4 text-zinc-500" />
             Export Report
           </button>
-          <button className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all">
+          <button
+            type="button"
+            onClick={() => setIsMarkOpen(true)}
+            className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
             <Plus className="size-4" />
             Mark Attendance
           </button>
@@ -274,39 +349,39 @@ export default function AttendancePage() {
             value: "231 / 248",
             color: "text-green-600",
             icon: PresentTodayIcon,
-            bgStart: "#059669",
-            bgEnd: "#34D399",
-            strokeColor: "4, 120, 87",
-            shadowColor: "rgba(5, 150, 105, 0.15)",
+            bgStart: "#18181B",
+            bgEnd: "#71717A",
+            strokeColor: "39, 39, 42",
+            shadowColor: "rgba(24, 24, 27, 0.15)",
           },
           {
             label: "Absent Today",
             value: "11 Employees",
             color: "text-red-500",
             icon: LeaveTodayIcon,
-            bgStart: "#DC2626",
-            bgEnd: "#F87171",
-            strokeColor: "185, 28, 28",
-            shadowColor: "rgba(220, 38, 38, 0.15)",
+            bgStart: "#18181B",
+            bgEnd: "#71717A",
+            strokeColor: "39, 39, 42",
+            shadowColor: "rgba(24, 24, 27, 0.15)",
           },
           {
             label: "Late Arrivals",
             value: "4 Employees",
             color: "text-amber-500",
             icon: LateIcon,
-            bgStart: "#D97706",
-            bgEnd: "#FBBF24",
-            strokeColor: "180, 83, 9",
-            shadowColor: "rgba(217, 119, 6, 0.15)",
+            bgStart: "#18181B",
+            bgEnd: "#71717A",
+            strokeColor: "39, 39, 42",
+            shadowColor: "rgba(24, 24, 27, 0.15)",
           },
           {
             label: "Remote Employees",
             value: "35 Employees",
             icon: RemoteIcon,
-            bgStart: "#2563EB",
-            bgEnd: "#60A5FA",
-            strokeColor: "29, 78, 216",
-            shadowColor: "rgba(37, 99, 235, 0.15)",
+            bgStart: "#18181B",
+            bgEnd: "#71717A",
+            strokeColor: "39, 39, 42",
+            shadowColor: "rgba(24, 24, 27, 0.15)",
           },
         ].map((stat, idx) => {
           const Icon = stat.icon;
@@ -432,7 +507,7 @@ export default function AttendancePage() {
           {/* Filters Bar & Logs Table Card */}
           <div className="flex flex-col gap-4">
             {/* Filter controls */}
-            <div className="border border-border rounded-xl p-4 bg-surface grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               {/* Search */}
               <div className="relative flex items-center">
                 <Search className="absolute left-3 size-4 text-zinc-400 pointer-events-none" />
@@ -558,9 +633,10 @@ export default function AttendancePage() {
                           </td>
                           <td className="py-3.5 px-6">
                             <div className="flex items-center gap-3">
-                              <div className="size-8 rounded-full bg-zinc-100 flex items-center justify-center font-bold text-[10px] text-zinc-800 border border-zinc-200 shrink-0">
-                                {log.avatar}
-                              </div>
+                              <PersonAvatar
+                                name={log.name}
+                                size={32}
+                              />
                               <div className="flex flex-col min-w-0">
                                 <span className="font-semibold text-zinc-950 leading-tight truncate">
                                   {log.name}
@@ -582,14 +658,7 @@ export default function AttendancePage() {
                             {log.workingHours}
                           </td>
                           <td className="py-3.5 px-6">
-                            <span
-                              className={cn(
-                                "whitespace-nowrap inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold",
-                                getStatusBadgeClass(log.status),
-                              )}
-                            >
-                              {log.status}
-                            </span>
+                            <StatusBadge status={log.status} />
                           </td>
                           <td
                             className="py-3.5 px-6 text-right relative"
@@ -608,14 +677,42 @@ export default function AttendancePage() {
 
                             {activeMenuId === log.id && (
                               <div className="absolute right-6 top-10 w-40 bg-surface border border-border rounded-lg shadow-lg py-1 z-40 text-left animate-in fade-in duration-100">
-                                <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedLog(log);
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                                >
                                   View Log Details
                                 </button>
-                                <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAdjustTarget(log);
+                                    setDraftAdjust({
+                                      checkIn: "09:00",
+                                      checkOut: "17:00",
+                                    });
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-950"
+                                >
                                   Adjust Times
                                 </button>
                                 <hr className="border-border my-1" />
-                                <button className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAttendanceLogs((current) =>
+                                      current.filter((item) => item.id !== log.id),
+                                    );
+                                    toast.success("Log deleted");
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="cursor-pointer w-full text-left flex px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700"
+                                >
                                   Delete Log
                                 </button>
                               </div>
@@ -675,9 +772,13 @@ export default function AttendancePage() {
               {lateArrivals.map((late, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center justify-between py-3 first:pt-0 last:pb-0"
+                  className="flex items-center justify-between py-3 first:pt-0 last:pb-0 gap-3"
                 >
-                  <div className="flex flex-col min-w-0">
+                  <PersonAvatar
+                    name={late.name}
+                    size={32}
+                  />
+                  <div className="flex flex-col min-w-0 flex-1">
                     <span className="text-xs font-bold text-zinc-900 leading-tight truncate">
                       {late.name}
                     </span>
@@ -726,7 +827,11 @@ export default function AttendancePage() {
             <div className="flex flex-col gap-3">
               {recentLogs.map((activity, idx) => (
                 <div key={idx} className="flex items-start gap-2.5 text-xs">
-                  <div className="size-2 bg-zinc-300 rounded-full mt-1.5 shrink-0" />
+                  <PersonAvatar
+                    name={activity.name}
+                    size={28}
+                    className="mt-0.5"
+                  />
                   <div className="flex flex-col min-w-0">
                     <p className="text-zinc-800 leading-tight">
                       <span className="font-bold text-zinc-905">
@@ -744,6 +849,132 @@ export default function AttendancePage() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={isMarkOpen}
+        onClose={() => setIsMarkOpen(false)}
+        title="Mark Attendance"
+        description="Record check-in for an employee"
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Employee name
+            <input
+              value={draftLog.name}
+              onChange={(e) =>
+                setDraftLog((current) => ({ ...current, name: e.target.value }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              Department
+              <select
+                value={draftLog.department}
+                onChange={(e) =>
+                  setDraftLog((current) => ({
+                    ...current,
+                    department: e.target.value,
+                  }))
+                }
+                className="h-10 px-3 border border-border rounded-lg text-sm bg-surface cursor-pointer"
+              >
+                {departments.filter((d) => d !== "All").map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              Check in
+              <input
+                type="time"
+                value={draftLog.checkIn}
+                onChange={(e) =>
+                  setDraftLog((current) => ({ ...current, checkIn: e.target.value }))
+                }
+                className="h-10 px-3 border border-border rounded-lg text-sm bg-surface"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={handleMarkAttendance}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white active:scale-[0.98]"
+          >
+            Save Log
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(selectedLog)}
+        onClose={() => setSelectedLog(null)}
+        title="Attendance Log"
+        description={selectedLog?.id}
+      >
+        {selectedLog ? (
+          <div className="flex flex-col gap-4 text-left">
+            <div className="flex items-center gap-3">
+              <PersonAvatar
+                name={selectedLog.name}
+                size={48}
+              />
+              <div>
+                <p className="text-sm font-bold text-zinc-950">{selectedLog.name}</p>
+                <p className="text-xs text-zinc-400">{selectedLog.email}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs font-semibold">
+              <div><span className="text-zinc-400">Check in</span><p className="text-zinc-900 mt-1">{selectedLog.checkIn}</p></div>
+              <div><span className="text-zinc-400">Check out</span><p className="text-zinc-900 mt-1">{selectedLog.checkOut}</p></div>
+              <div><span className="text-zinc-400">Hours</span><p className="text-zinc-900 mt-1">{selectedLog.workingHours}</p></div>
+              <div><span className="text-zinc-400">Status</span><p className="text-zinc-900 mt-1">{selectedLog.status}</p></div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={Boolean(adjustTarget)}
+        onClose={() => setAdjustTarget(null)}
+        title="Adjust Times"
+        description={adjustTarget?.name}
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Check in
+            <input
+              type="time"
+              value={draftAdjust.checkIn}
+              onChange={(e) =>
+                setDraftAdjust((current) => ({ ...current, checkIn: e.target.value }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+            Check out
+            <input
+              type="time"
+              value={draftAdjust.checkOut}
+              onChange={(e) =>
+                setDraftAdjust((current) => ({ ...current, checkOut: e.target.value }))
+              }
+              className="h-10 px-3 border border-border rounded-lg text-sm bg-surface focus:outline-none focus:border-border-strong"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleSaveAdjust}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white active:scale-[0.98]"
+          >
+            Save Adjustments
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }

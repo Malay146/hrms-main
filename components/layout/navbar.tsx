@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { PersonAvatar } from "@/components/ui/person-avatar";
 import SearchIcon from "@/components/icons/navbar/search";
 import CommandIcon from "@/components/icons/navbar/command";
 import NotificationIcon from "@/components/icons/notification";
@@ -214,7 +214,7 @@ export default function Navbar() {
                         !notif.read && "bg-zinc-50/20",
                       )}
                     >
-                      <div className="size-9 rounded-full bg-zinc-50 border border-border flex items-center justify-center text-lg shrink-0">
+                      <div className="size-9 rounded-lg bg-zinc-50 border border-border flex items-center justify-center text-lg shrink-0">
                         {getIcon(notif.type)}
                       </div>
                       <div className="flex-1 flex flex-col min-w-0 text-left">
@@ -248,7 +248,7 @@ export default function Navbar() {
               {/* Footer */}
               <div className="px-4 pt-1.5 border-t border-border flex justify-center">
                 <Link
-                  href="/notifications"
+                  href={isAdmin ? "/admin/notifications" : "/employee/notifications"}
                   onClick={() => setIsOpen(false)}
                   className="text-xs font-bold text-zinc-500 hover:text-zinc-950 transition-colors cursor-pointer w-full text-center py-1"
                 >
@@ -271,16 +271,10 @@ export default function Navbar() {
             )}
             aria-label="User profile menu"
           >
-            <div className="relative w-8 h-8 rounded-md border border-border overflow-hidden shrink-0 bg-surface-secondary">
-              <Image
-                src="/person.jpg"
-                alt="William Joseph Profile Avatar"
-                fill
-                sizes="32px"
-                priority
-                className="object-cover"
-              />
-            </div>
+            <PersonAvatar
+              name="William Joseph"
+              size={32}
+            />
             <div className="flex flex-col leading-tight overflow-hidden">
               <span className="text-body-md font-semibold text-text-primary truncate">
                 William Joseph

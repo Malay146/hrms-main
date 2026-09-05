@@ -38,6 +38,9 @@ import TotalPayrollIcon from "@/components/icons/total-payroll";
 import PendingPayrollIcon from "@/components/icons/pending-payroll";
 import AverageSalaryIcon from "@/components/icons/average-salary";
 import CalendarIcon from "@/components/icons/calendar";
+import { PersonAvatar } from "@/components/ui/person-avatar";
+import { Modal } from "@/components/ui/modal";
+import { toast } from "sonner";
 
 // Types
 interface PayrollHistoryEntry {
@@ -424,6 +427,10 @@ export default function PayrollPage() {
     useState<EmployeePayroll[]>(initialEmployees);
   const [selectedEmployee, setSelectedEmployee] =
     useState<EmployeePayroll | null>(null);
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isRunConfirmOpen, setIsRunConfirmOpen] = useState(false);
+  const [isPayslipsOpen, setIsPayslipsOpen] = useState(false);
+  const [isBonusesOpen, setIsBonusesOpen] = useState(false);
 
   // Filters state
   const [search, setSearch] = useState("");
@@ -434,7 +441,17 @@ export default function PayrollPage() {
 
   useEffect(() => {
     setMounted(true);
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setSearch(q);
   }, []);
+
+  useEffect(() => {
+    if (!selectedEmployee) return;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [selectedEmployee]);
 
   // Compute stats based on current employees list
   const stats = useMemo(() => {
@@ -487,11 +504,60 @@ export default function PayrollPage() {
 
   // Handle Action: Run Payroll (simulate changing Pending/Processing to Paid)
   const handleRunPayroll = () => {
+    const pendingCount = employees.filter((emp) => emp.status !== "Paid").length;
+    if (pendingCount === 0) {
+      toast.info("Nothing to process", {
+        description: "All payroll records are already marked as paid.",
+      });
+      setIsRunConfirmOpen(false);
+      return;
+    }
+
     setEmployees((prev) =>
       prev.map((emp) =>
         emp.status !== "Paid" ? { ...emp, status: "Paid" } : emp,
       ),
     );
+    setIsRunConfirmOpen(false);
+    toast.success("Payroll run complete", {
+      description: `${pendingCount} employee records processed for ${selectedMonth}.`,
+    });
+  };
+
+  const handleExportPayroll = () => {
+    setIsExportOpen(false);
+    toast.success("Export started", {
+      description: `Payroll report for ${selectedMonth} will download shortly.`,
+    });
+  };
+
+  const handleGeneratePayslips = () => {
+    setIsPayslipsOpen(false);
+    toast.success("Payslips queued", {
+      description: `${filteredEmployees.length} payslips will be generated.`,
+    });
+  };
+
+  const handleApproveBonuses = () => {
+    setIsBonusesOpen(false);
+    toast.success("Bonuses approved", {
+      description: "Pending bonus payouts are cleared for this cycle.",
+    });
+  };
+
+  const handleDownloadPayslip = (employeeName?: string) => {
+    toast.success("Payslip downloaded", {
+      description: employeeName
+        ? `${employeeName}'s payslip saved as PDF.`
+        : "Payslip saved as PDF.",
+    });
+  };
+
+  const handleEmailPayslip = () => {
+    if (!selectedEmployee) return;
+    toast.success("Payslip emailed", {
+      description: `Sent to ${selectedEmployee.email}.`,
+    });
   };
 
   const getStatusBadgeClass = (status: string) => {
@@ -544,19 +610,24 @@ export default function PayrollPage() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col text-left">
-          <h1 className="text-h1 font-medium">Payroll</h1>
-          <p className="text-body-lg text-zinc-500 font-medium">
+          <h1 className="type-title">Payroll</h1>
+          <p className="type-subtitle">
             Manage employee salaries, payroll processing, and payslips.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="cursor-pointer flex items-center gap-2 px-4 py-2 border border-border rounded-lg bg-surface hover:bg-zinc-50 text-sm font-semibold text-zinc-700 shadow-2xs active:scale-98 transition-all">
+          <button
+            type="button"
+            onClick={() => setIsExportOpen(true)}
+            className="cursor-pointer flex items-center gap-2 px-4 py-2 border border-border rounded-lg bg-surface hover:bg-surface-hover hover:border-border-strong text-sm font-semibold text-zinc-700 shadow-2xs active:scale-[0.98] transition-[transform,background-color,border-color] duration-150 ease-out"
+          >
             <Download className="size-4" />
             Export Payroll
           </button>
           <button
-            onClick={handleRunPayroll}
-            className="cursor-pointer flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-98 transition-all"
+            type="button"
+            onClick={() => setIsRunConfirmOpen(true)}
+            className="cursor-pointer flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
           >
             <Play className="size-4 fill-white" />
             Run Payroll
@@ -604,7 +675,7 @@ export default function PayrollPage() {
                 </span>
                 <Icon className="size-12 text-zinc-600 shrink-0" />
               </div>
-              <span className="text-3xl font-extrabold text-zinc-950 mt-5 leading-none">
+              <span className="text-3xl font-semibold text-zinc-950 mt-5 leading-none">
                 {stat.value}
               </span>
               <span className="text-sm font-semibold text-zinc-400 mt-2.5 leading-none">
@@ -839,9 +910,10 @@ export default function PayrollPage() {
                     >
                       <td className="py-3.5 px-5">
                         <div className="flex items-center gap-3">
-                          <div className="size-8 rounded-lg bg-zinc-100 flex items-center justify-center font-bold text-[10px] text-zinc-800 border border-zinc-200 shrink-0">
-                            {emp.avatar}
-                          </div>
+                          <PersonAvatar
+                            name={emp.name}
+                            size={32}
+                          />
                           <div className="flex flex-col text-left">
                             <span className="font-semibold text-zinc-950 group-hover:text-zinc-800 transition-colors">
                               {emp.name}
@@ -981,7 +1053,7 @@ export default function PayrollPage() {
           <div className="mt-4 pt-3 border-t border-border">
             <div className="flex justify-between items-center text-base font-bold">
               <span className="text-zinc-950">Net Payroll</span>
-              <span className="text-zinc-950 font-black">$57,000</span>
+              <span className="text-zinc-950 font-semibold">$57,000</span>
             </div>
           </div>
         </div>
@@ -1022,10 +1094,18 @@ export default function PayrollPage() {
               Quick Actions
             </h3>
             <div className="grid grid-cols-2 gap-2 text-xs font-bold">
-              <button className="cursor-pointer border border-border rounded-md py-2 text-center bg-surface hover:bg-zinc-50 text-zinc-700 shadow-3xs active:scale-98 transition-all">
+              <button
+                type="button"
+                onClick={() => setIsPayslipsOpen(true)}
+                className="cursor-pointer border border-border rounded-md py-2 text-center bg-surface hover:bg-surface-hover text-zinc-700 shadow-3xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+              >
                 Generate Payslips
               </button>
-              <button className="cursor-pointer border border-border rounded-md py-2 text-center bg-surface hover:bg-zinc-50 text-zinc-700 shadow-3xs active:scale-98 transition-all">
+              <button
+                type="button"
+                onClick={() => setIsBonusesOpen(true)}
+                className="cursor-pointer border border-border rounded-md py-2 text-center bg-surface hover:bg-surface-hover text-zinc-700 shadow-3xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+              >
                 Approve Bonuses
               </button>
             </div>
@@ -1062,15 +1142,15 @@ export default function PayrollPage() {
           {/* Backdrop overlay */}
           <div
             onClick={() => setSelectedEmployee(null)}
-            className="fixed inset-0 bg-black/15 z-40 transition-opacity duration-300 backdrop-blur-3xs"
+            className="fixed inset-0 bg-overlay z-[100] transition-opacity duration-200 backdrop-blur-[2px]"
           />
 
           {/* Slide-over Drawer */}
-          <div className="fixed inset-y-0 right-0 w-full sm:w-[500px] bg-surface border-l border-border shadow-2xl z-50 transform transition-transform duration-300 ease-out flex flex-col text-left">
+          <div className="fixed inset-y-0 right-0 w-full sm:w-[500px] bg-surface border-l border-border shadow-2xl z-[110] transform transition-transform duration-300 ease-out flex flex-col text-left">
             {/* Drawer Header */}
             <div className="px-6 py-5 border-b border-border flex items-center justify-between">
               <div className="flex flex-col">
-                <h2 className="text-base font-bold text-zinc-950">
+                <h2 className="type-heading">
                   Payroll Profile
                 </h2>
                 <p className="text-xs text-zinc-400 font-semibold">
@@ -1089,9 +1169,10 @@ export default function PayrollPage() {
             <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 scrollbar-none">
               {/* Employee Summary Card */}
               <div className="border border-border rounded-xl p-4 bg-zinc-50/50 flex items-center gap-4">
-                <div className="size-12 rounded-xl bg-zinc-150 border border-zinc-300 flex items-center justify-center font-bold text-base text-zinc-800 shrink-0 select-none">
-                  {selectedEmployee.avatar}
-                </div>
+                <PersonAvatar
+                  name={selectedEmployee.name}
+                  size={48}
+                />
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-bold text-zinc-950 leading-tight">
                     {selectedEmployee.name}
@@ -1151,7 +1232,7 @@ export default function PayrollPage() {
                   <div className="border-t border-border my-1" />
                   <div className="flex justify-between items-center text-sm font-bold text-zinc-950">
                     <span>Net Monthly Take-home</span>
-                    <span className="font-black">
+                    <span className="font-semibold">
                       ${selectedEmployee.netSalary.toLocaleString()}
                     </span>
                   </div>
@@ -1191,7 +1272,13 @@ export default function PayrollPage() {
                             </span>
                           </td>
                           <td className="py-2.5 px-4 text-right">
-                            <button className="cursor-pointer text-zinc-400 hover:text-zinc-800">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDownloadPayslip(selectedEmployee.name)
+                              }
+                              className="cursor-pointer text-zinc-400 hover:text-zinc-800 active:scale-95 transition-[transform,color] duration-150 ease-out"
+                            >
                               <FileDown className="size-4" />
                             </button>
                           </td>
@@ -1295,7 +1382,7 @@ export default function PayrollPage() {
 
                   <div className="border-t-2 border-dashed border-zinc-300 pt-3 flex justify-between items-center text-xs font-bold text-zinc-900">
                     <span>NET DISTRIBUTED SALARY</span>
-                    <span className="text-sm font-black">
+                    <span className="text-sm font-semibold">
                       ${selectedEmployee.netSalary.toLocaleString()}.00
                     </span>
                   </div>
@@ -1305,16 +1392,117 @@ export default function PayrollPage() {
 
             {/* Drawer Footer Actions */}
             <div className="px-6 py-4 border-t border-border flex items-center gap-3">
-              <button className="cursor-pointer flex-1 py-2 border border-border bg-surface hover:bg-zinc-50 rounded-lg text-xs font-semibold text-zinc-700 shadow-3xs active:scale-98 transition-all text-center">
+              <button
+                type="button"
+                onClick={() => handleDownloadPayslip(selectedEmployee.name)}
+                className="cursor-pointer flex-1 py-2 border border-border bg-surface hover:bg-surface-hover rounded-lg text-xs font-semibold text-zinc-700 shadow-3xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out text-center"
+              >
                 Download Payslip PDF
               </button>
-              <button className="cursor-pointer flex-1 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-xs font-semibold text-white shadow-3xs active:scale-98 transition-all text-center">
+              <button
+                type="button"
+                onClick={handleEmailPayslip}
+                className="cursor-pointer flex-1 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-xs font-semibold text-white shadow-3xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out text-center"
+              >
                 Email Payslip Advice
               </button>
             </div>
           </div>
         </>
       )}
+
+      <Modal
+        open={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        title="Export Payroll"
+        description={`Export data for ${selectedMonth}`}
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <p className="text-sm text-zinc-600 font-medium">
+            Download a CSV with employee net pay, bonuses, deductions, and
+            status for the selected cycle.
+          </p>
+          <button
+            type="button"
+            onClick={handleExportPayroll}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
+            Download CSV
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={isRunConfirmOpen}
+        onClose={() => setIsRunConfirmOpen(false)}
+        title="Run Payroll"
+        description={selectedMonth}
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <p className="text-sm text-zinc-600 font-medium">
+            This marks all pending and processing records as paid for the
+            current cycle.
+          </p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setIsRunConfirmOpen(false)}
+              className="cursor-pointer flex-1 px-3.5 py-2 rounded-lg border border-border text-sm font-semibold text-zinc-700 active:scale-[0.98] transition-transform duration-150 ease-out"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleRunPayroll}
+              className="cursor-pointer flex-1 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+            >
+              Run Payroll
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={isPayslipsOpen}
+        onClose={() => setIsPayslipsOpen(false)}
+        title="Generate Payslips"
+        description={`${filteredEmployees.length} employees in current view`}
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <p className="text-sm text-zinc-600 font-medium">
+            Generate PDF payslips for filtered employees and queue them for
+            email delivery.
+          </p>
+          <button
+            type="button"
+            onClick={handleGeneratePayslips}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
+            Generate All
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={isBonusesOpen}
+        onClose={() => setIsBonusesOpen(false)}
+        title="Approve Bonuses"
+        description="July 2026 cycle"
+      >
+        <div className="flex flex-col gap-4 text-left">
+          <p className="text-sm text-zinc-600 font-medium">
+            Approve $4,200 in pending bonus payouts across engineering and
+            product teams.
+          </p>
+          <button
+            type="button"
+            onClick={handleApproveBonuses}
+            className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out"
+          >
+            Approve Bonuses
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
