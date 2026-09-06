@@ -12,7 +12,8 @@ function formatElapsed(ms: number) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(totalSec / 3600);
   const m = Math.floor((totalSec % 3600) / 60);
-  return `${h}h ${String(m).padStart(2, "0")}m`;
+  const s = totalSec % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 export function AttendanceWidget() {
@@ -47,7 +48,7 @@ export function AttendanceWidget() {
     if (!checkInAt || checkedOut) return;
     const tick = () => setElapsed(formatElapsed(Date.now() - checkInAt.getTime()));
     tick();
-    const id = window.setInterval(tick, 30_000);
+    const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
   }, [checkInAt, checkedOut]);
 
@@ -70,7 +71,9 @@ export function AttendanceWidget() {
           setMessage(result.error);
           return;
         }
-        await refresh();
+        setCheckedIn(true);
+        setCheckedOut(false);
+        setCheckInAt(new Date(result.data.checkInAt));
         setMessage(`Checked in at ${result.data.checkIn}`);
         return;
       }
@@ -112,6 +115,11 @@ export function AttendanceWidget() {
                   ? "Checked out for today"
                   : "Not checked in"}
             </p>
+            {checkedIn && !checkedOut ? (
+              <p className="text-[10px] font-semibold text-zinc-400 mt-1 uppercase tracking-wider">
+                Hours · Minutes · Seconds
+              </p>
+            ) : null}
           </div>
           {message ? <p className="text-xs font-medium text-zinc-600">{message}</p> : null}
           <button

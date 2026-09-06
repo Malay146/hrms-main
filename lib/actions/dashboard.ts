@@ -314,6 +314,8 @@ export async function getEmployeeDashboard(): Promise<ActionResult<EmployeeDashb
               hour12: true,
             }).format(todayRow.checkIn)
           : "",
+        checkInAt:
+          todayRow?.checkIn && !todayRow.checkOut ? todayRow.checkIn.toISOString() : null,
         workedHours: formatHours(
           todayRow?.checkIn
             ? workingHours(todayRow.checkIn, todayRow.checkOut ?? new Date())

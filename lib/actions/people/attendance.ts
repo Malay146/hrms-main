@@ -404,7 +404,7 @@ export async function upsertAttendanceAction(input: {
   }
 }
 
-export async function clockInAction(): Promise<ActionResult<{ checkIn: string }>> {
+export async function clockInAction(): Promise<ActionResult<{ checkIn: string; checkInAt: string }>> {
   try {
     const user = await requireUser();
     const today = kolkataTodayKey();
@@ -426,16 +426,39 @@ export async function clockInAction(): Promise<ActionResult<{ checkIn: string }>
     }
 
     const checkIn = new Date();
-    await prisma.attendance.create({
-      data: {
-        userId: user.id,
-        organizationId: keys.organizationId,
-        employeeId: keys.employeeId,
-        date: dateFromKey(today),
-        checkIn,
-        status: "present",
-      },
+    const existing = await prisma.attendance.findUnique({
+      where: { userId_date: { userId: user.id, date: dateFromKey(today) } },
     });
+    if (existing?.checkIn && !existing.checkOut) {
+      return {
+        ok: true,
+        data: {
+          checkIn: formatDisplayTime(existing.checkIn),
+          checkInAt: existing.checkIn.toISOString(),
+        },
+      };
+    }
+    if (existing?.checkOut) {
+      return { ok: false, error: "You have already completed your shift today." };
+    }
+
+    if (existing) {
+      await prisma.attendance.update({
+        where: { id: existing.id },
+        data: { checkIn, status: "present" },
+      });
+    } else {
+      await prisma.attendance.create({
+        data: {
+          userId: user.id,
+          organizationId: keys.organizationId,
+          employeeId: keys.employeeId,
+          date: dateFromKey(today),
+          checkIn,
+          status: "present",
+        },
+      });
+    }
 
     if (minutesSinceMidnightKolkata(checkIn) > LATE_AFTER_MINUTES) {
       const profile = await prisma.employeeProfile.findUnique({
@@ -466,7 +489,10 @@ export async function clockInAction(): Promise<ActionResult<{ checkIn: string }>
       const orgId = await organizationIdForUser(user.id);
       if (orgId) await recomputeAttendanceDailyRollup(orgId, today);
     })().catch(() => undefined);
-    return { ok: true, data: { checkIn: formatDisplayTime(checkIn) } };
+    return {
+      ok: true,
+      data: { checkIn: formatDisplayTime(checkIn), checkInAt: checkIn.toISOString() },
+    };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       logger.warn("attendance.duplicate_checkin", { date: kolkataTodayKey() });

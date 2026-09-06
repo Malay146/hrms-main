@@ -5,6 +5,7 @@ import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { cn } from "@/utils/cn";
 import ShiftClockIcon from "@/components/icons/late";
+import { ShiftElapsedTimer } from "@/components/attendance/shift-elapsed-timer";
 import { toast } from "sonner";
 import { clockInAction, clockOutAction } from "@/lib/actions/people/attendance";
 import { BarChartTooltip, chartCursor, chartTooltipWrapperStyle } from "@/components/charts/chart-tooltip";
@@ -29,11 +30,20 @@ export function EmployeeDashboardClient({
     }
     const payload = result.data;
     if ("hours" in payload) {
-      const hours = payload.hours;
-      setData((prev) => ({ ...prev, isClockedIn: false, workedHours: hours }));
+      setData((prev) => ({
+        ...prev,
+        isClockedIn: false,
+        checkInAt: null,
+        checkInLabel: "",
+        workedHours: payload.hours,
+      }));
     } else {
-      const checkIn = payload.checkIn;
-      setData((prev) => ({ ...prev, isClockedIn: true, checkInLabel: checkIn }));
+      setData((prev) => ({
+        ...prev,
+        isClockedIn: true,
+        checkInLabel: payload.checkIn,
+        checkInAt: payload.checkInAt,
+      }));
     }
     toast.success(data.isClockedIn ? "Clocked out." : "Clocked in.");
   }
@@ -66,20 +76,35 @@ export function EmployeeDashboardClient({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { label: "Today's Work Status", value: data.isClockedIn ? "Clocked In" : "Clocked Out", color: data.isClockedIn ? "text-emerald-600" : "text-red-500" },
+          {
+            label: "Today's Work Status",
+            value: data.isClockedIn ? "Clocked In" : "Clocked Out",
+            color: data.isClockedIn ? "text-emerald-600" : "text-red-500",
+          },
           { label: "Remaining Leave Balance", value: `${data.remainingLeave} Days` },
           { label: "Hours today", value: data.workedHours },
-          { label: "Latest rating", value: data.latestRating == null ? "—" : `${data.latestRating.toFixed(1)} / 5` },
+          {
+            label: "Latest rating",
+            value: data.latestRating == null ? "—" : `${data.latestRating.toFixed(1)} / 5`,
+          },
           { label: "Upcoming leave", value: data.upcomingLabel },
         ].map((stat) => (
           <div key={stat.label} className="border border-border rounded-xl p-5 bg-surface">
             <span className="text-sm font-medium text-zinc-500">{stat.label}</span>
-            <span className={cn("text-2xl font-bold text-zinc-950 mt-2 block leading-tight", stat.color, stat.label === "Upcoming leave" && "text-lg")}>{stat.value}</span>
+            <span
+              className={cn(
+                "text-2xl font-bold text-zinc-950 mt-2 block leading-tight",
+                stat.color,
+                stat.label === "Upcoming leave" && "text-lg",
+              )}
+            >
+              {stat.value}
+            </span>
           </div>
         ))}
       </div>
 
-      <div className="border border-border rounded-2xl p-5 bg-surface flex flex-col sm:flex-row items-center justify-between gap-6">
+      <div className="border border-border rounded-2xl p-5 bg-surface flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
         <div className="flex items-center gap-4 text-left">
           <ShiftClockIcon className="size-13 text-zinc-600 shrink-0 mr-2" />
           <div className="flex flex-col">
@@ -87,9 +112,12 @@ export function EmployeeDashboardClient({
             <span className="text-xl font-bold text-zinc-950 mt-1">
               {data.isClockedIn ? `Clocked In at ${data.checkInLabel}` : "Not Clocked In"}
             </span>
-            <p className="text-xs text-zinc-400 font-semibold mt-0.5">Hours Worked Today: {data.workedHours}</p>
+            <p className="text-xs text-zinc-400 font-semibold mt-0.5">
+              Hours Worked Today: {data.workedHours}
+            </p>
           </div>
         </div>
+        <ShiftElapsedTimer checkInAt={data.checkInAt} running={data.isClockedIn} />
       </div>
 
       <div className="border border-border rounded-2xl p-5 bg-surface">
@@ -105,7 +133,12 @@ export function EmployeeDashboardClient({
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F4F4F5" />
-                <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: "#A1A1AA", fontSize: 11, fontWeight: 600 }} />
+                <XAxis
+                  dataKey="day"
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fill: "#A1A1AA", fontSize: 11, fontWeight: 600 }}
+                />
                 <YAxis
                   tickLine={false}
                   axisLine={false}
