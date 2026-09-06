@@ -360,6 +360,7 @@ export async function applyLeaveAction(input: {
     revalidateLeave();
     return { ok: true, data: mapLeave(created) };
   } catch (error) {
+    // 23P01 exclusion_violation → "Those dates overlap an approved leave."
     return { ok: false, error: actionErrorMessage(error, "Could not submit leave.") };
   }
 }
@@ -453,6 +454,7 @@ export async function applyLeaveForEmployeeAction(input: {
     revalidateLeave();
     return { ok: true, data: mapLeave(created) };
   } catch (error) {
+    // 23P01 exclusion_violation → "Those dates overlap an approved leave."
     return { ok: false, error: actionErrorMessage(error, "Could not submit leave.") };
   }
 }
@@ -583,6 +585,7 @@ export async function decideLeaveAction(input: {
     revalidateLeave();
     return { ok: true, data: undefined };
   } catch (error) {
+    // 23P01 exclusion_violation → "Those dates overlap an approved leave."
     return { ok: false, error: actionErrorMessage(error, "Could not update leave.") };
   }
 }

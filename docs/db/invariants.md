@@ -1,6 +1,6 @@
 # Database invariants
 
-Catalog of PeoplePay360 facts that PostgreSQL must eventually enforce. Status is as of Task 3 (CHECK constraints + BCNF unique keys). Later tasks copy `INVARIANT_SQL` from `lib/db/invariants.ts` **verbatim** into Prisma migrations.
+Catalog of PeoplePay360 facts that PostgreSQL must eventually enforce. Status is as of Task 5 (CHECK constraints + BCNF unique keys + approved-leave exclusion). Later tasks copy `INVARIANT_SQL` from `lib/db/invariants.ts` **verbatim** into Prisma migrations.
 
 **Status values**
 
@@ -10,9 +10,9 @@ Catalog of PeoplePay360 facts that PostgreSQL must eventually enforce. Status is
 | `app-only` | TypeScript / Zod / action checks; a crash or race can persist a violation |
 | `enforced` | Already a UNIQUE / PK / FK / CHECK in Postgres (`prisma/schema.prisma` or a Task 2+ migration) |
 
-Task 2 applied `INVARIANT_SQL.checks` in `prisma/migrations/20260906010000_check_constraints`. Task 3 applied `INVARIANT_SQL.uniques` plus the other BCNF uniques (including SQL-only `lower()` / `COALESCE` indexes) in `prisma/migrations/20260906020000_bcnf_unique_keys`. EXCLUDE and RLS are still not in Postgres. Existing UNIQUE indexes in the schema stay `enforced`.
+Task 2 applied `INVARIANT_SQL.checks` in `prisma/migrations/20260906010000_check_constraints`. Task 3 applied `INVARIANT_SQL.uniques` plus the other BCNF uniques (including SQL-only `lower()` / `COALESCE` indexes) in `prisma/migrations/20260906020000_bcnf_unique_keys`. Task 5 applied `INVARIANT_SQL.exclusion.noOverlappingApprovedLeave` in `prisma/migrations/20260906040000_leave_exclusion`. RLS is still not in Postgres. Existing UNIQUE indexes in the schema stay `enforced`.
 
-Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariants.ts) (`INVARIANT_SQL.checks` / `.uniques` / `.exclusion`). Task 3 copied **`.uniques`** verbatim.
+Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariants.ts) (`INVARIANT_SQL.checks` / `.uniques` / `.exclusion`). Task 5 copied **`.exclusion.noOverlappingApprovedLeave`** verbatim.
 
 ---
 
@@ -120,8 +120,8 @@ Source of truth for SQL strings: [`lib/db/invariants.ts`](../../lib/db/invariant
 ### `no_overlapping_approved_leave`
 
 - **SQL:** `btree_gist` exclusion on `leave_request` (`leave_request_no_approved_overlap`) — `EXCLUDE USING gist` on `employeeId` + `daterange(startDate, endDate, '[]')` where `status = 'approved'`
-- **Status:** `app-only`
-- **Notes:** `findOverlappingLeave` in `lib/people/leave-rules.ts` is advisory. Two approvers can still persist overlapping approved rows. Task 5 copies `INVARIANT_SQL.exclusion.noOverlappingApprovedLeave` after Task 4 adds `employeeId` on `leave_request`.
+- **Status:** `enforced`
+- **Notes:** Applied by Task 5 after repairing overlapping approved rows (newer → `rejected`). `findOverlappingLeave` in `lib/people/leave-rules.ts` is still the app-layer check. `publicActionError` maps SQLSTATE `23P01` to a leave-overlap message if the constraint fires.
 
 ---
 
@@ -197,7 +197,7 @@ ALTER TABLE "performance_goal"
   CHECK ("progress" >= 0 AND "progress" <= 100);
 ```
 
-## Task 5 exclusion SQL (copy from `INVARIANT_SQL.exclusion`)
+## Task 5 exclusion SQL (copied from `INVARIANT_SQL.exclusion`)
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS btree_gist;

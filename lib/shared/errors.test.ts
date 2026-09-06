@@ -29,4 +29,17 @@ describe("publicActionError", () => {
     const err = new Error("Not enough remaining allocation balance.");
     assert.equal(publicActionError(err, "Could not save."), "Not enough remaining allocation balance.");
   });
+
+  it("maps exclusion violations to a leave overlap message", () => {
+    const err = Object.assign(new Error("conflicting key value violates exclusion constraint"), {
+      code: "P2010",
+      meta: { code: "23P01" },
+    });
+    assert.match(publicActionError(err, "Could not save."), /overlap/i);
+    assert.doesNotMatch(publicActionError(err, "Could not save."), /prisma|P2010|23P01|exclusion constraint/i);
+
+    const pg = { code: "23P01" };
+    assert.match(publicActionError(pg, "Could not save."), /overlap/i);
+    assert.equal(publicActionError(pg, "Could not save."), "Those dates overlap an approved leave.");
+  });
 });

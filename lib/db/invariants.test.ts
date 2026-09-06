@@ -15,6 +15,11 @@ const UNIQUE_MIGRATION_PATH = join(
   "prisma/migrations/20260906020000_bcnf_unique_keys/migration.sql",
 );
 
+const EXCLUSION_MIGRATION_PATH = join(
+  process.cwd(),
+  "prisma/migrations/20260906040000_leave_exclusion/migration.sql",
+);
+
 const CHECK_CONSTRAINT_NAMES = Object.values(INVARIANT_SQL.checks).map((sql) => {
   const match = sql.match(/ADD CONSTRAINT "([^"]+)"/);
   assert.ok(match, `CHECK SQL must name a constraint:\n${sql}`);
@@ -137,6 +142,22 @@ describe("db invariants catalog", () => {
         `migration must include INVARIANT_SQL.uniques.${name} verbatim`,
       );
     }
+  });
+
+  it("leave-exclusion migration includes INVARIANT_SQL.exclusion.noOverlappingApprovedLeave verbatim", () => {
+    assert.ok(
+      existsSync(EXCLUSION_MIGRATION_PATH),
+      `expected migration at ${EXCLUSION_MIGRATION_PATH}`,
+    );
+    const sql = readFileSync(EXCLUSION_MIGRATION_PATH, "utf8").replace(/\r\n/g, "\n");
+    assert.ok(
+      sql.includes(INVARIANT_SQL.exclusion.noOverlappingApprovedLeave),
+      "migration must include INVARIANT_SQL.exclusion.noOverlappingApprovedLeave verbatim",
+    );
+    assert.match(sql, /status\s*=\s*'rejected'/i);
+    assert.match(sql, /overlapping approved leave \(constraint migration\)/);
+    assert.doesNotMatch(sql, /DELETE\s+FROM\s+"leave_request"/i);
+    assert.doesNotMatch(sql, /DELETE\s+FROM\s+"payslip"/i);
   });
 
   it("check-constraints migration includes every INVARIANT_SQL.checks snippet verbatim", () => {
