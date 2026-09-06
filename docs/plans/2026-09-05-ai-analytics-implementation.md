@@ -474,7 +474,7 @@ Primary button classes: `rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-s
 npm run dev
 ```
 
-Login `admin@oddo.com` / `admin@oddo@1234` → sidebar **AI Analytics**. Confirm KPIs move with seed attendance/leave. Login a payroll-only user if seeded — expect redirect or forbidden, not named risk rows.
+Login `admin@odoo.com` / `admin@odoo@1234` → sidebar **AI Analytics**. Confirm KPIs move with seed attendance/leave. Login a payroll-only user if seeded — expect redirect or forbidden, not named risk rows.
 
 **Step 4: Commit**
 

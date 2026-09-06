@@ -622,7 +622,7 @@ npx prisma validate
 
 **Step 3:** `npx prisma migrate dev --name oxp_domain` then `npx prisma generate`.
 
-**Step 4:** `npx prisma validate` PASS. `npm run db:seed` still logs in `admin@oddo.com`.
+**Step 4:** `npx prisma validate` PASS. `npm run db:seed` still logs in `admin@odoo.com`.
 
 **Step 5: Commit**
 
@@ -1242,7 +1242,7 @@ Create:
 - Sample attendance (missing checkout, late, present)
 - One paid January payrun and one draft March payrun with a warning
 
-Keep `admin@oddo.com` / `admin@oddo@1234`.
+Keep `admin@odoo.com` / `admin@odoo@1234`.
 
 **Commit:** `chore: seed a full employee-to-payslip demo dataset`
 
@@ -1272,7 +1272,7 @@ npx prisma validate
 npm run build
 ```
 
-Browser (required before calling a phase done), login `admin@oddo.com` / `admin@oddo@1234`:
+Browser (required before calling a phase done), login `admin@odoo.com` / `admin@odoo@1234`:
 
 1. HR Manager cannot open Payroll; can approve leave and edit employees.
 2. HR Payroll User can create a payrun and compute, cannot Mark Paid, cannot edit salary rules.

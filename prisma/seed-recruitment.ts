@@ -75,7 +75,7 @@ const JOBS: JobSeed[] = [
     code: "JOB006",
     title: "Account Executive",
     department: "Sales",
-    description: "Own mid-market pipeline for Oddo HRMS and hit quarterly bookings targets.",
+    description: "Own mid-market pipeline for Odoo HRMS and hit quarterly bookings targets.",
     deadline: "2026-11-01",
     status: "active",
   },

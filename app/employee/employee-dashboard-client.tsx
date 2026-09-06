@@ -128,11 +128,11 @@ export function EmployeeDashboardClient({
               <BarChart data={data.weeklyHours} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
                 <defs>
                   <linearGradient id="hoursGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#E4E4E7" />
-                    <stop offset="100%" stopColor="#18181B" />
+                    <stop offset="0%" stopColor="var(--chart-bar-from)" />
+                    <stop offset="100%" stopColor="var(--chart-bar-to)" />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#F4F4F5" />
+                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--divider)" />
                 <XAxis
                   dataKey="day"
                   tickLine={false}

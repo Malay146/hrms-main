@@ -49,7 +49,7 @@ prisma/                 # schema.prisma, migrations/, seed.ts
 | Domain | Tables | Purpose |
 | --- | --- | --- |
 | Auth (Better Auth) | `user`, `session`, `account`, `verification` | Login, cookies, credential password hash |
-| Tenant | `organization` | One company (seeded as Oddo / `ODDO`) |
+| Tenant | `organization` | One company (seeded as Odoo / `ODOO`) |
 | People master | `department`, `working_schedule`, `working_schedule_line`, `employee_profile`, `contract` | Employee hub, contracts, schedules |
 | Time | `attendance`, `time_off_type`, `time_off_allocation`, `leave_request` | Attendance punches and leave |
 | Payroll | `salary_structure`, `salary_rule`, `payrun`, `payslip`, `payslip_line` | Rules → payruns → payslips |
@@ -287,14 +287,14 @@ Better Auth one-time tokens (email verify, reset, etc.). No FK to `user`.
 
 ### 4.5 `organization`
 
-Tenant. Seed uses name `Oddo`, slug `ODDO`.
+Tenant. Seed uses name `Odoo`, slug `ODOO`.
 
 | Column | Type | Constraints | Default | Notes |
 | --- | --- | --- | --- | --- |
 | `id` | `TEXT` | PK | `cuid()` | |
 | `name` | `TEXT` | NN | — | |
 | `email` | `TEXT` | NN | — | Org contact |
-| `slug` | `TEXT` | NN, UQ | — | Used in employee IDs (`ODDO-2026-001`) |
+| `slug` | `TEXT` | NN, UQ | — | Used in employee IDs (`ODOO-2026-001`) |
 | `createdAt` | `TIMESTAMP` | NN | `now()` | |
 | `updatedAt` | `TIMESTAMP` | NN | `@updatedAt` | |
 
@@ -375,7 +375,7 @@ HR master record. **Exactly one per user** (`userId` unique).
 | `id` | `TEXT` | PK | `cuid()` | Payslip / contract / allocation parent |
 | `userId` | `TEXT` | NN, UQ, FK → `user.id` | — | **ON DELETE CASCADE** |
 | `organizationId` | `TEXT` | NN, FK → `organization.id` | — | **ON DELETE CASCADE** |
-| `employeeId` | `TEXT` | NN, UQ | — | Human code `ODDO-YYYY-NNN` (`lib/people/employee-id.ts`) |
+| `employeeId` | `TEXT` | NN, UQ | — | Human code `ODOO-YYYY-NNN` (`lib/people/employee-id.ts`) |
 | `fullName` | `TEXT` | NN | — | |
 | `role` | `Role` | NN | — | Enum copy of access role |
 | `departmentId` | `TEXT` | NN, FK → `department.id` | — | Required department |
@@ -761,9 +761,9 @@ Rules **not** in the database (application only): overlapping running contracts 
 | --- | --- | --- |
 | `user.id` | `user` | Auth, sessions, attendance, leave requests, legacy payroll |
 | `employee_profile.id` | `employee_profile` | Contracts, allocations, **payslips** |
-| `employee_profile.employeeId` | same row | Display code `ODDO-2026-008` — not a FK |
+| `employee_profile.employeeId` | same row | Display code `ODOO-2026-008` — not a FK |
 
-`payslip.employeeId` is **`employee_profile.id`**, not `user.id` and not `ODDO-2026-…`.
+`payslip.employeeId` is **`employee_profile.id`**, not `user.id` and not `ODOO-2026-…`.
 
 ---
 
@@ -794,8 +794,8 @@ Regenerate the client with `npx prisma generate`. The client is emitted to `gene
 
 `npm run db:seed` (`prisma/seed.ts`) typically creates:
 
-- Organization Oddo (`ODDO`)
-- Admin `admin@oddo.com`
+- Organization Odoo (`ODOO`)
+- Admin `admin@odoo.com`
 - Demo employees, departments, and related HR/payroll sample rows (including Regular Salary and sample payruns when payroll seed is present)
 
 Never commit real `DATABASE_URL` / SMTP secrets; only `.env.example` placeholders.

@@ -230,14 +230,14 @@ export function mapPayroll(row: {
 }
 
 export const PIE_COLORS = [
-  "#18181B",
-  "#3F3F46",
-  "#52525B",
-  "#71717A",
-  "#A1A1AA",
-  "#D4D4D8",
-  "#27272A",
-  "#09090B",
-  "#636363",
-  "#8A8A8A",
+  "var(--pie-1)",
+  "var(--pie-2)",
+  "var(--pie-3)",
+  "var(--pie-4)",
+  "var(--pie-5)",
+  "var(--pie-6)",
+  "var(--pie-7)",
+  "var(--pie-8)",
+  "var(--pie-9)",
+  "var(--pie-10)",
 ];

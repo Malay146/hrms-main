@@ -58,7 +58,7 @@ describe("employee ids", () => {
   });
 
   it("allocates a unique org slug when the base is taken", () => {
-    assert.equal(allocateOrgSlug("Acme Inc.", ["ODDO"]), "ACME");
+    assert.equal(allocateOrgSlug("Acme Inc.", ["ODOO"]), "ACME");
     assert.equal(allocateOrgSlug("Acme Inc.", ["ACME", "ACME2"]), "ACME3");
   });
 });

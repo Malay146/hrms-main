@@ -64,7 +64,7 @@ prisma/                   schema, migrations, seed
 | --- | --- |
 | Who can open this route? | `lib/auth/permissions.ts` |
 | Current user + profile.department.name | `lib/auth/session.ts` |
-| Employee code `ODDO-2026-008` | `lib/people/employee-id.ts` |
+| Employee code `ODOO-2026-008` | `lib/people/employee-id.ts` |
 | Two Running contracts | `lib/people/contract-period.ts` |
 | Schedule weekly hours | `lib/people/schedule-hours.ts` |
 | Late / overtime | `lib/people/attendance-metrics.ts` |
@@ -80,7 +80,7 @@ prisma/                   schema, migrations, seed
 ## 0.1 Thirty-second architecture
 
 - **PostgreSQL + Prisma 7.** Physical table names come from `@@map("snake_case")`.
-- **Tenant:** one `organization` (seeded Oddo / slug `ODDO`).
+- **Tenant:** one `organization` (seeded Odoo / slug `ODOO`).
 - **Two identities:**
   - `user` = login (Better Auth). Attendance and leave hang off **`user.id`**.
   - `employee_profile` = HR master (1:1 with `user`). Contracts, allocations, payslips hang off **`employee_profile.id`**.
@@ -195,7 +195,7 @@ Same page, different permission. `getPayrollDashboard` (`lib/actions/payroll/pay
 **Q. Where is the schedule FK on the employee?**  
 `employee_profile.scheduleId` → `working_schedule.id`. Optional. Restrict.
 
-**Q. Is `employeeId` like `ODDO-2026-008` a foreign key?**  
+**Q. Is `employeeId` like `ODOO-2026-008` a foreign key?**  
 No. It is a **unique business code** on `employee_profile.employeeId`. Generated in `lib/people/employee-id.ts` from org slug + year + sequence.
 
 **Q. Employee vs user — which id do contracts use?**  

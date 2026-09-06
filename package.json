@@ -12,6 +12,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed-more": "tsx prisma/seed-more-employees.ts",
     "db:repair": "tsx prisma/repair-demo-data.ts",
     "db:seed-employee-extras": "tsx prisma/seed-employee-extras.ts",
     "db:studio": "prisma studio"

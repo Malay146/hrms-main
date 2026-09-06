@@ -195,8 +195,8 @@ export default function Dashboard({
                 <BarChart data={stats.weeklyAttendance} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="attendanceGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#E4E4E7" />
-                      <stop offset="100%" stopColor="#18181B" />
+                      <stop offset="0%" stopColor="var(--chart-bar-from)" />
+                      <stop offset="100%" stopColor="var(--chart-bar-to)" />
                     </linearGradient>
                   </defs>
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--divider)" />
@@ -372,8 +372,8 @@ export default function Dashboard({
                 <BarChart data={payroll.salaryByDepartment} margin={{ top: 10, right: 10, left: -10, bottom: 40 }}>
                   <defs>
                     <linearGradient id="salaryGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#E4E4E7" />
-                      <stop offset="100%" stopColor="#18181B" />
+                      <stop offset="0%" stopColor="var(--chart-bar-from)" />
+                      <stop offset="100%" stopColor="var(--chart-bar-to)" />
                     </linearGradient>
                   </defs>
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--divider)" />

@@ -16,7 +16,7 @@ export default async function PayslipPrintPage({
       <style>{`@media print { nav, aside, button { display: none !important; } }`}</style>
       <div className="max-w-2xl mx-auto border border-zinc-200 rounded-xl p-8">
         <h1 className="text-2xl font-semibold">Payslip</h1>
-        <p className="text-sm text-zinc-500 mt-1">PeoplePay360 / Oddo</p>
+        <p className="text-sm text-zinc-500 mt-1">PeoplePay360 / Odoo</p>
         <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
           <p><span className="text-zinc-500">Employee</span><br />{slip.employeeName} ({slip.employeeCode})</p>
           <p><span className="text-zinc-500">Period</span><br />{slip.periodStart} — {slip.periodEnd}</p>

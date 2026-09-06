@@ -47,14 +47,14 @@ function cookieHeader(setCookie: string[]) {
 }
 
 async function main() {
-  const oddoBefore = await prisma.organization.findUnique({
-    where: { slug: "ODDO" },
+  const odooBefore = await prisma.organization.findUnique({
+    where: { slug: "ODOO" },
     select: { id: true, _count: { select: { profiles: true } } },
   });
   record(
-    "Oddo demo tenant still exists",
-    Boolean(oddoBefore),
-    oddoBefore ? `${oddoBefore._count.profiles} profiles` : "ODDO missing",
+    "Odoo demo tenant still exists",
+    Boolean(odooBefore),
+    odooBefore ? `${odooBefore._count.profiles} profiles` : "ODOO missing",
   );
 
   // --- DB: bootstrap a tenant the same way signup does (no Next headers) ---
@@ -110,13 +110,13 @@ async function main() {
     return org;
   });
 
-  const [deptCount, typeCount, scheduleCount, ruleCount, profileCount, oddoAfter] = await Promise.all([
+  const [deptCount, typeCount, scheduleCount, ruleCount, profileCount, odooAfter] = await Promise.all([
     prisma.department.count({ where: { organizationId: organization.id } }),
     prisma.timeOffType.count({ where: { organizationId: organization.id } }),
     prisma.workingSchedule.count({ where: { organizationId: organization.id } }),
     prisma.salaryRule.count({ where: { structure: { organizationId: organization.id } } }),
     prisma.employeeProfile.count({ where: { organizationId: organization.id } }),
-    prisma.employeeProfile.count({ where: { organizationId: oddoBefore?.id } }),
+    prisma.employeeProfile.count({ where: { organizationId: odooBefore?.id } }),
   ]);
 
   record("Bootstrap creates 4 departments", deptCount === 4, String(deptCount));
@@ -125,28 +125,28 @@ async function main() {
   record("Bootstrap creates Regular Salary rules", ruleCount === 7, String(ruleCount));
   record("New tenant has exactly 1 employee (founder)", profileCount === 1, String(profileCount));
   record(
-    "Oddo headcount unchanged after new tenant",
-    oddoAfter === (oddoBefore?._count.profiles ?? -1),
-    `before=${oddoBefore?._count.profiles} after=${oddoAfter}`,
+    "Odoo headcount unchanged after new tenant",
+    odooAfter === (odooBefore?._count.profiles ?? -1),
+    `before=${odooBefore?._count.profiles} after=${odooAfter}`,
   );
 
   const leaked = await prisma.department.findMany({
     where: { organizationId: organization.id, name: "Human Resources" },
   });
-  const oddoHr = oddoBefore
+  const odooHr = odooBefore
     ? await prisma.department.findMany({
-        where: { organizationId: oddoBefore.id, name: "Human Resources" },
+        where: { organizationId: odooBefore.id, name: "Human Resources" },
       })
     : [];
   record(
-    "New HR department is not the Oddo HR row",
-    leaked[0]?.id !== oddoHr[0]?.id,
-    `new=${leaked[0]?.id} oddo=${oddoHr[0]?.id}`,
+    "New HR department is not the Odoo HR row",
+    leaked[0]?.id !== odooHr[0]?.id,
+    `new=${leaked[0]?.id} odoo=${odooHr[0]?.id}`,
   );
 
   // Duplicate email path (same check as the action)
-  const duplicate = await prisma.user.findUnique({ where: { email: "admin@oddo.com" } });
-  record("Duplicate Oddo admin email is detected", Boolean(duplicate), duplicate?.email ?? "missing");
+  const duplicate = await prisma.user.findUnique({ where: { email: "admin@odoo.com" } });
+  record("Duplicate Odoo admin email is detected", Boolean(duplicate), duplicate?.email ?? "missing");
 
   // --- HTTP ---
   let httpOk = false;
@@ -215,14 +215,14 @@ async function main() {
       body: JSON.stringify({
         name: "Admin",
         organizationName: "Should Fail",
-        organizationEmail: "admin@oddo.com",
+        organizationEmail: "admin@odoo.com",
         password: "Secret123",
         confirmPassword: "Secret123",
       }),
     });
     const takenJson = (await taken.json()) as { ok?: boolean; error?: string };
     record(
-      "API rejects Oddo admin email",
+      "API rejects Odoo admin email",
       takenJson.ok === false && /already exists/i.test(takenJson.error ?? ""),
       JSON.stringify(takenJson),
     );
@@ -283,17 +283,17 @@ async function main() {
       const rows = peopleJson.data?.items ?? peopleJson.data?.rows ?? [];
       const emails = rows.map((row) => row.email);
       record(
-        "Employee list is tenant-scoped (no Oddo emails)",
+        "Employee list is tenant-scoped (no Odoo emails)",
         people.ok &&
           peopleJson.ok === true &&
-          !emails.includes("admin@oddo.com") &&
-          emails.every((value) => value === apiEmail || !value?.endsWith("@oddo.com")),
+          !emails.includes("admin@odoo.com") &&
+          emails.every((value) => value === apiEmail || !value?.endsWith("@odoo.com")),
         `count=${rows.length} emails=${emails.slice(0, 5).join(",")}`,
       );
     } else {
       record("Founder can sign in after register", false, "no session cookie");
       record("Session exposes organizationId for the new tenant", false, "skipped");
-      record("Employee list is tenant-scoped (no Oddo emails)", false, "skipped");
+      record("Employee list is tenant-scoped (no Odoo emails)", false, "skipped");
     }
 
     await destroyByEmail(apiEmail);

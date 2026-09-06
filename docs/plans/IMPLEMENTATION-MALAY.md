@@ -57,7 +57,7 @@ npx tsx --test lib/permissions.test.ts
 
 ### Task 0.2 — Prisma domain migration
 
-**Files:** `prisma/schema.prisma`, new migration, minimal `prisma/seed.ts` updates so `admin@oddo.com` still logs in
+**Files:** `prisma/schema.prisma`, new migration, minimal `prisma/seed.ts` updates so `admin@odoo.com` still logs in
 
 - Add all models from `IMPLEMENTATION.md` §4 (Department, WorkingSchedule, Contract, TimeOff*, Salary*, Payrun, Payslip, …).
 - `EmployeeProfile.department` String → `departmentId` with backfill.
@@ -236,4 +236,4 @@ npx tsx --test lib/time-off-balance.test.ts
 npx prisma validate
 ```
 
-Browser: login `admin@oddo.com` / `admin@oddo@1234` — employee kanban, contracts, attendance widget, allocation → request → approve.
+Browser: login `admin@odoo.com` / `admin@odoo@1234` — employee kanban, contracts, attendance widget, allocation → request → approve.

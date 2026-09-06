@@ -174,8 +174,8 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
                 <BarChart data={data.weeklyAttendance} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="aiAttendanceGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#E4E4E7" />
-                      <stop offset="100%" stopColor="#18181B" />
+                      <stop offset="0%" stopColor="var(--chart-bar-from)" />
+                      <stop offset="100%" stopColor="var(--chart-bar-to)" />
                     </linearGradient>
                   </defs>
                   <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--divider)" />

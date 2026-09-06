@@ -165,7 +165,7 @@ List/edit role, link employee, disable account. Do not let users change their ow
 
 **Files:** extend `prisma/seed.ts` (payroll structures, sample payruns, Aarav-style demo), `docs/demo-walkthrough.md`, `docs/demo-roadmap.md`
 
-Keep `admin@oddo.com` / `admin@oddo@1234`. Leave Recruitment / Performance / Analytics / Notifications as mock.
+Keep `admin@odoo.com` / `admin@odoo@1234`. Leave Recruitment / Performance / Analytics / Notifications as mock.
 
 **Commit:** `chore: seed full employee-to-payslip demo` + `docs: add hackathon demo script and future roadmap`
 

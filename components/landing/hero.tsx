@@ -12,17 +12,17 @@ import BuildingIcon from "@/components/icons/building";
 const metrics = [
   {
     icon: TotalEmployeeIcon,
-    value: "10k+",
+    value: "1k+",
     label: "Active Users",
   },
   {
     icon: PresentTodayIcon,
-    value: "99.9%",
+    value: "94.9%",
     label: "Accuracy",
   },
   {
     icon: BuildingIcon,
-    value: "500+",
+    value: "10+",
     label: "Organizations",
   },
 ];

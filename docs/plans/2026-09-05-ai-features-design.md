@@ -240,7 +240,7 @@ Organization scoping: every query filters by the current user’s `EmployeeProfi
 
 ## 8. Success criteria
 
-A reviewer can log in as `admin@oddo.com`, open **AI Analytics**, and:
+A reviewer can log in as `admin@odoo.com`, open **AI Analytics**, and:
 
 1. See live health / attendance / leave numbers that match People data (no LLM).
 2. Click **Refresh insights** and get 3+ cards that mention real departments or counts from seed data.

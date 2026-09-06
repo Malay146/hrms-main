@@ -38,8 +38,8 @@ Open [http://localhost:3000](http://localhost:3000).
 
 | Role | Email | Password |
 |------|-------|----------|
-| Admin | `admin@oddo.com` | `admin@oddo@1234` |
-| Demo employees | e.g. `william.joseph@oddo.com` | `Employee@1234` |
+| Admin | `admin@odoo.com` | `admin@odoo@1234` |
+| Demo employees | e.g. `william.joseph@odoo.com` | `Employee@1234` |
 
 Public sign-up is closed. Admins create users from **Employees → Add User**.
 

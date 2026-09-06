@@ -14,8 +14,8 @@ import { lineHours } from "../lib/people/schedule-hours";
 import { BULK_DEPARTMENTS, buildBulkEmployees } from "./seed-bulk-employees";
 import { seedRecruitment } from "./seed-recruitment";
 
-const ADMIN_EMAIL = "admin@oddo.com";
-const ADMIN_PASSWORD = "admin@oddo@1234";
+const ADMIN_EMAIL = "admin@odoo.com";
+const ADMIN_PASSWORD = "admin@odoo@1234";
 const DEMO_PASSWORD = "Employee@1234";
 
 function id() {
@@ -158,9 +158,9 @@ async function main() {
 
   const organization = await prisma.organization.create({
     data: {
-      name: "Oddo",
+      name: "Odoo",
       email: ADMIN_EMAIL,
-      slug: "ODDO",
+      slug: "ODOO",
     },
   });
 
@@ -260,7 +260,7 @@ async function main() {
     role: "admin",
     organizationId: organization.id,
     departmentId: departments["Human Resources"],
-    employeeId: "ODDO-2026-001",
+    employeeId: "ODOO-2026-001",
     jobTitle: "Administrator",
     passwordHash: adminHash,
     basic: 0,
@@ -270,9 +270,9 @@ async function main() {
   const people = [
     {
       name: "William Joseph",
-      email: "william.joseph@oddo.com",
+      email: "william.joseph@odoo.com",
       role: "hr_manager" as const,
-      employeeId: "ODDO-2026-002",
+      employeeId: "ODOO-2026-002",
       department: "Human Resources",
       jobTitle: "HR Specialist",
       phone: "+91 98765 43210",
@@ -280,36 +280,36 @@ async function main() {
     },
     {
       name: "Bruce Banner",
-      email: "bruce.banner@oddo.com",
+      email: "bruce.banner@odoo.com",
       role: "employee" as const,
-      employeeId: "ODDO-2026-003",
+      employeeId: "ODOO-2026-003",
       department: "Engineering",
       jobTitle: "Engineering Lead",
       basic: 12000,
     },
     {
       name: "Sarah Mills",
-      email: "sarah.mills@oddo.com",
+      email: "sarah.mills@odoo.com",
       role: "employee" as const,
-      employeeId: "ODDO-2026-004",
+      employeeId: "ODOO-2026-004",
       department: "Human Resources",
       jobTitle: "HR Generalist",
       basic: 5500,
     },
     {
       name: "John Cena",
-      email: "john.cena@oddo.com",
+      email: "john.cena@odoo.com",
       role: "employee" as const,
-      employeeId: "ODDO-2026-005",
+      employeeId: "ODOO-2026-005",
       department: "Engineering",
       jobTitle: "Frontend Engineer",
       basic: 7200,
     },
     {
       name: "Mark Lou",
-      email: "mark.lou@oddo.com",
+      email: "mark.lou@odoo.com",
       role: "employee" as const,
-      employeeId: "ODDO-2026-006",
+      employeeId: "ODOO-2026-006",
       department: "Sales",
       jobTitle: "Sales Executive",
       basic: 0,
@@ -318,9 +318,9 @@ async function main() {
     },
     {
       name: "Kimi Nowa",
-      email: "kimi.nowa@oddo.com",
+      email: "kimi.nowa@odoo.com",
       role: "hr_payroll_manager" as const,
-      employeeId: "ODDO-2026-007",
+      employeeId: "ODOO-2026-007",
       department: "Finance",
       jobTitle: "Payroll Manager",
       basic: 8000,
@@ -329,9 +329,9 @@ async function main() {
     },
     {
       name: "Aarav Mehta",
-      email: "aarav.mehta@oddo.com",
+      email: "aarav.mehta@odoo.com",
       role: "employee" as const,
-      employeeId: "ODDO-2026-008",
+      employeeId: "ODOO-2026-008",
       department: "Finance",
       jobTitle: "Payroll Specialist",
       phone: "+91 98765 43210",
@@ -341,9 +341,9 @@ async function main() {
     },
     {
       name: "Priya Shah",
-      email: "priya.shah@oddo.com",
+      email: "priya.shah@odoo.com",
       role: "hr_payroll_user" as const,
-      employeeId: "ODDO-2026-009",
+      employeeId: "ODOO-2026-009",
       department: "Finance",
       jobTitle: "Payroll Officer",
       basic: 7000,
@@ -546,7 +546,7 @@ async function main() {
   // Demo leave rows (dates use daysAgo: negative = future; start must be ≤ end).
   const leaveSeeds = [
     {
-      userId: userIds["john.cena@oddo.com"],
+      userId: userIds["john.cena@odoo.com"],
       code: "sick",
       start: daysAgo(-1),
       end: daysAgo(-2),
@@ -555,7 +555,7 @@ async function main() {
       hoursAgo: 2,
     },
     {
-      userId: userIds["sarah.mills@oddo.com"],
+      userId: userIds["sarah.mills@odoo.com"],
       code: "paid",
       start: daysAgo(-8),
       end: daysAgo(-10),
@@ -565,7 +565,7 @@ async function main() {
       hoursAgo: 28,
     },
     {
-      userId: userIds["mark.lou@oddo.com"],
+      userId: userIds["mark.lou@odoo.com"],
       code: "unpaid",
       start: daysAgo(5),
       end: daysAgo(5),
@@ -596,7 +596,7 @@ async function main() {
 
   const clashLeaves = [
     {
-      userId: userIds["bruce.banner@oddo.com"],
+      userId: userIds["bruce.banner@odoo.com"],
       code: "paid",
       start: daysAgo(1),
       end: daysAgo(-1),
@@ -606,7 +606,7 @@ async function main() {
       hoursAgo: 4,
     },
     {
-      userId: userIds["john.cena@oddo.com"],
+      userId: userIds["john.cena@odoo.com"],
       code: "paid",
       start: daysAgo(1),
       end: daysAgo(-1),
@@ -844,7 +844,7 @@ async function main() {
     where: {
       organizationId_employeeId: {
         organizationId: organization.id,
-        employeeId: "ODDO-2026-008",
+        employeeId: "ODOO-2026-008",
       },
     },
   });
@@ -852,7 +852,7 @@ async function main() {
     where: {
       organizationId_employeeId: {
         organizationId: organization.id,
-        employeeId: "ODDO-2026-006",
+        employeeId: "ODOO-2026-006",
       },
     },
   });
@@ -992,7 +992,7 @@ async function main() {
   console.log("Seed complete.");
   console.log(`Admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
   console.log(`Demo employees password: ${DEMO_PASSWORD}`);
-  console.log(`Example employee: william.joseph@oddo.com`);
+  console.log(`Example employee: william.joseph@odoo.com`);
   console.log(`Bulk employees: ${bulk.length} (+ ${people.length} named + admin)`);
   console.log(`On-leave today (seeded): ${leaveTodayUserIds.length}`);
   console.log(`Schedules: 3 · Contracts: ${contractProfiles.length}`);

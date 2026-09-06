@@ -267,7 +267,7 @@ Defined in Prisma `enum Role` and `lib/auth/permissions.ts`:
 | `app/api/auth/[...all]/route.ts` | HTTP auth endpoints              |
 
 
-Demo logins (from seed): see `README.md` (`admin@oddo.com`, `john.cena@oddo.com`, …).
+Demo logins (from seed): see `README.md` (`admin@odoo.com`, `john.cena@odoo.com`, …).
 
 ---
 

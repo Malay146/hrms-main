@@ -595,7 +595,21 @@ export function EmployeesClient({
               ))}
             </select>
             <div className="grid grid-cols-2 gap-3">
-              <input name="department" required placeholder="Department" className="h-10 px-3 border border-border rounded-lg text-sm" />
+              <select
+                name="department"
+                required
+                defaultValue=""
+                className="h-10 px-3 border border-border rounded-lg text-sm bg-surface"
+              >
+                <option value="" disabled>
+                  Select department
+                </option>
+                {initial.departments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
               <input name="jobTitle" required placeholder="Job title" className="h-10 px-3 border border-border rounded-lg text-sm" />
             </div>
             <input name="phone" placeholder="Phone (optional)" className="h-10 px-3 border border-border rounded-lg text-sm" />

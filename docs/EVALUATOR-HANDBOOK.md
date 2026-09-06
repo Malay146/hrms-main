@@ -2,7 +2,7 @@
 
 **Audience:** Oral exam / jury. Open this file first. Deeper tables live in the linked docs at the end.
 
-**Product names:** The UI wordmark is **HRMS**. The demo tenant is **Oddo** (`organization.slug = ODDO`). Internal docs often say **PeoplePay360**. Same app.
+**Product names:** The UI wordmark is **HRMS**. The demo tenant is **Odoo** (`organization.slug = ODOO`). Internal docs often say **PeoplePay360**. Same app.
 
 **Scale lock:** One organization, ~5,000 employees target, one PostgreSQL primary. **Not** multi-tenant SaaS. **Not** a separate Express/FastAPI server.
 
@@ -200,14 +200,14 @@ Staff password for demo employees: `Employee@1234`. Admin is separate.
 
 | Role            | Email                     | Password          | Portal                                                     |
 | --------------- | ------------------------- | ----------------- | ---------------------------------------------------------- |
-| Admin           | `admin@oddo.com`          | `admin@oddo@1234` | `/admin`                                                   |
-| HR Manager      | `william.joseph@oddo.com` | `Employee@1234`   | `/admin` (no payroll, has AI + performance)                |
-| Payroll manager | `kimi.nowa@oddo.com`      | `Employee@1234`   | `/admin` (can finalize payruns; **no** AI analytics)       |
-| Payroll officer | `priya.shah@oddo.com`     | `Employee@1234`   | `/admin` (edit/compute/send; **cannot** mark paid)         |
-| Employee (demo) | `aarav.mehta@oddo.com`    | `Employee@1234`   | `/employee` — wage ₹50,000 → net ₹75,000 on Regular Salary |
+| Admin           | `admin@odoo.com`          | `admin@odoo@1234` | `/admin`                                                   |
+| HR Manager      | `william.joseph@odoo.com` | `Employee@1234`   | `/admin` (no payroll, has AI + performance)                |
+| Payroll manager | `kimi.nowa@odoo.com`      | `Employee@1234`   | `/admin` (can finalize payruns; **no** AI analytics)       |
+| Payroll officer | `priya.shah@odoo.com`     | `Employee@1234`   | `/admin` (edit/compute/send; **cannot** mark paid)         |
+| Employee (demo) | `aarav.mehta@odoo.com`    | `Employee@1234`   | `/employee` — wage ₹50,000 → net ₹75,000 on Regular Salary |
 
 
-Other seeded people: `bruce.banner@oddo.com`, `sarah.mills@oddo.com`, `john.cena@oddo.com`, `mark.lou@oddo.com`.
+Other seeded people: `bruce.banner@odoo.com`, `sarah.mills@odoo.com`, `john.cena@odoo.com`, `mark.lou@odoo.com`.
 
 **Payroll talking point:** Aarav Mehta, Regular Salary structure:
 
@@ -297,7 +297,7 @@ Status: **Wired** = Prisma. **Partial** = DB with a gap. **Stub** = UI only / mo
 | `/admin/people/leave/types`       | Wired  | Paid/sick/unpaid-style types; `requiresAllocation` flag.                                                     |
 
 
-Employee business code: `ODDO-2026-008` from `lib/people/employee-id.ts` (`slug-year-seq`). Unique **per organization**, not globally.
+Employee business code: `ODOO-2026-008` from `lib/people/employee-id.ts` (`slug-year-seq`). Unique **per organization**, not globally.
 
 ### 6.3 Admin — Payroll (live path)
 
@@ -375,7 +375,7 @@ Keep this list for “where is the business logic?” — **not** inside React.
 | `lib/people/attendance-metrics.ts` | Late vs schedule+grace, worked hours, OT, missing checkout                       |
 | `lib/people/contract-period.ts`    | Single overlapping **running** contract; pick covering contract for a pay period |
 | `lib/people/schedule-hours.ts`     | Unique weekday lines; weekly expected hours                                      |
-| `lib/people/employee-id.ts`        | `ODDO-2026-NNN`, `CON/YYYY/NNNN`                                                 |
+| `lib/people/employee-id.ts`        | `ODOO-2026-NNN`, `CON/YYYY/NNNN`                                                 |
 | `lib/payroll/compute.ts`           | Ordered rules, formula sandbox (**no** `eval`)                                   |
 | `lib/payroll/warnings.ts`          | Priority: no contract > missing A/C > duplicate                                  |
 | `lib/ai/metrics.ts`                | Attendance %, late %, clash count, flight risk, health score                     |
@@ -474,12 +474,12 @@ Operations cover me/profile, dashboards, departments, employees, schedules, cont
 | ----------------------------- | ------------------ | ---------------------------------------------------- |
 | `user.id`                     | `user`             | Login. Attendance + leave historically hang on this. |
 | `employee_profile.id`         | `employee_profile` | HR PK. Contracts, allocations, payslips, reviews.    |
-| `employee_profile.employeeId` | same               | **Badge** `ODDO-2026-008`, not a FK.                 |
+| `employee_profile.employeeId` | same               | **Badge** `ODOO-2026-008`, not a FK.                 |
 
 
 After Task 4, `attendance` and `leave_request` also store `organizationId` + `employeeId` (**profile PK**, not the badge). Triggers require them to match the profile. Copilot SQL can filter by org without joining `user`.
 
-**Tenant:** one `organization` row (Oddo). App scopes queries by `organizationId`. **No Postgres RLS.**
+**Tenant:** one `organization` row (Odoo). App scopes queries by `organizationId`. **No Postgres RLS.**
 
 ### 10.1 Model groups
 
@@ -573,7 +573,7 @@ Use this section when they say “what happens if…”.
 | Two Monday lines on one schedule       | Unique `(scheduleId, weekday)`                                                      |
 | Delete Engineering while people remain | FK **Restrict**                                                                     |
 | Delete a manager who still has reports | Restrict until `managerId` cleared                                                  |
-| New employee                           | Badge `ODDO-YYYY-NNN`; temp password; `mustChangePassword`; email or toast fallback |
+| New employee                           | Badge `ODOO-YYYY-NNN`; temp password; `mustChangePassword`; email or toast fallback |
 
 
 
