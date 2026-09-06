@@ -20,6 +20,13 @@ import { allocateOrgSlug, nextEmployeeId } from "@/lib/people/employee-id";
 import { bootstrapNewOrganization } from "@/lib/org/bootstrap";
 import { kolkataParts } from "@/lib/shared/dates";
 import type { ActionResult, Role } from "@/lib/shared/types";
+import {
+  enforceRateLimits,
+  hashedRateKey,
+  ipRateKey,
+  RATE_LIMITS,
+} from "@/lib/shared/rate-limit";
+import { clientIp } from "@/lib/shared/request-ip";
 
 function appOrigin() {
   return (
@@ -33,10 +40,21 @@ export async function signInAction(input: {
   email: string;
   password: string;
 }): Promise<ActionResult<{ role: Role; redirectTo: string }>> {
+  const ip = await clientIp();
+  const ipLimited = await enforceRateLimits([
+    { key: ipRateKey("signin", ip), ...RATE_LIMITS.signInIp },
+  ]);
+  if (ipLimited) return { ok: false, error: ipLimited };
+
   const parsed = loginSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: firstZodError(parsed.error) };
   }
+
+  const emailLimited = await enforceRateLimits([
+    { key: hashedRateKey("signin:email", parsed.data.email), ...RATE_LIMITS.signInEmail },
+  ]);
+  if (emailLimited) return { ok: false, error: emailLimited };
 
   try {
     const result = await auth.api.signInEmail({
@@ -76,6 +94,11 @@ export async function signUpOrganizationAction(input: {
   password: string;
   confirmPassword: string;
 }): Promise<ActionResult<{ role: Role; redirectTo: string }>> {
+  const ipLimited = await enforceRateLimits([
+    { key: ipRateKey("signup", await clientIp()), ...RATE_LIMITS.signUpIp },
+  ]);
+  if (ipLimited) return { ok: false, error: ipLimited };
+
   const parsed = signUpSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: firstZodError(parsed.error) };
@@ -175,10 +198,20 @@ export async function signUpOrganizationAction(input: {
 export async function requestPasswordResetAction(input: {
   email: string;
 }): Promise<ActionResult<{ message: string }>> {
+  const ipLimited = await enforceRateLimits([
+    { key: ipRateKey("reset", await clientIp()), ...RATE_LIMITS.passwordResetIp },
+  ]);
+  if (ipLimited) return { ok: false, error: ipLimited };
+
   const parsed = forgotPasswordSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: firstZodError(parsed.error) };
   }
+
+  const emailLimited = await enforceRateLimits([
+    { key: hashedRateKey("reset:email", parsed.data.email), ...RATE_LIMITS.passwordResetEmail },
+  ]);
+  if (emailLimited) return { ok: false, error: emailLimited };
 
   const message =
     "If an account exists for that email, we sent a password reset link. Check your inbox.";
@@ -207,6 +240,11 @@ export async function resetPasswordAction(input: {
   newPassword: string;
   confirmPassword: string;
 }): Promise<ActionResult<{ redirectTo: string }>> {
+  const ipLimited = await enforceRateLimits([
+    { key: ipRateKey("reset-complete", await clientIp()), ...RATE_LIMITS.passwordResetCompleteIp },
+  ]);
+  if (ipLimited) return { ok: false, error: ipLimited };
+
   const parsed = resetPasswordSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: firstZodError(parsed.error) };

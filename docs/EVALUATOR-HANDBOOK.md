@@ -8,7 +8,7 @@
 
 **Timezone for all “today / late / calendar” logic:** `Asia/Kolkata` (`lib/shared/dates.ts`). Late cutoff if no schedule line: **09:15 IST**.
 
-**Honesty rule for answers:** If a feature is stubbed or planned only, say so. Claiming Postgres RLS, Redis, or a working admin Settings save will fail a follow-up.
+**Honesty rule for answers:** If a feature is stubbed or planned only, say so. Claiming Postgres RLS, Redis as a session/job store, or a working admin Settings save will fail a follow-up.
 
 ---
 
@@ -92,7 +92,7 @@ lib/actions/**    Next.js Server Actions  →  { ok: true, data } | { ok: false,
 PostgreSQL  (schema in prisma/schema.prisma, SQL in prisma/migrations/)
 ```
 
-**There is no separate backend process.** Mutations go through `"use server"` files. HTTP REST (`/api/v1`) is a thin catalog that calls the **same** actions.
+**There is no separate backend process.** Mutations go through `"use server"` files. HTTP REST (`/api/v1`) is a thin catalog that calls the **same** actions. Redis is optional and only shares rate-limit counters across Node processes.
 
 Better Auth HTTP handlers live at `app/api/auth/[...all]/route.ts`.
 
@@ -135,6 +135,7 @@ Generated Prisma client is `generated/prisma/` (do not hand-edit). Alias: `@/gen
 | Component kit       | **shadcn** (`base-nova`, RSC) + **@base-ui/react**         | `components/ui/`*                                                               |
 | Class names         | **clsx**, **tailwind-merge**, **class-variance-authority** | `cn()`                                                                          |
 | Analytics (hosting) | **@vercel/analytics**                                      | Root layout                                                                     |
+| Redis (optional)    | **`redis` 6** client                                       | Shared rate-limit counters only (`REDIS_URL`). Sessions and jobs stay in Postgres |
 | Tests               | **Node test runner** via **tsx**                           | `npm test` — unit tests, not Playwright e2e                                     |
 | Lint                | **ESLint 9** + `eslint-config-next`                        | `npm run lint`                                                                  |
 
@@ -170,6 +171,7 @@ Installed but **not used as a data layer**:
 | `SMTP_*`              | For mail | User-create emails + payslips                                                                 |
 | `CRON_SECRET`         | For cron | `/api/cron/jobs` and `/api/cron/payslips`                                                     |
 | `OPENAI_API_KEY`      | Optional | Insight cards, copilot phrasing, leave-brief LLM. **Metrics and SQL lookups work without it** |
+| `REDIS_URL`           | Optional | Shared rate-limit counters. Without it, limits are in-memory per Node process. **Not** used for sessions, jobs, or dashboard cache |
 | `PG_POOL_MAX`         | Optional | Override pool size (default 10 dev / 20 prod)                                                 |
 
 
@@ -674,7 +676,7 @@ Mutations call `revalidateTag` / `revalidatePath`.
 
 - TanStack Query is a provider only — lists are still RSC + `router.refresh`
 - Zustand unused
-- No Redis
+- Redis is optional and **only** for rate limits (`REDIS_URL`). Sessions, `BackgroundJob`, and KPI snapshots stay in Postgres
 - No virtualized 5k-row tables (by design: page on the server)
 - Eligible-employee pickers and some department member lists can still load large sets
 - Search is still ILIKE; trigram helps but is not a dedicated typeahead product
@@ -744,11 +746,13 @@ Plan: `docs/plans/2026-09-05-fault-tolerance.md`.
 | 8 Claim payslip before send              | Not done (overlap can double-send)                                               |
 | 9 Offline banner / copilot draft restore | Not done                                                                         |
 | 10 Idempotency keys                      | Not done                                                                         |
-| 11 Rate limits                           | Not done                                                                         |
+| 11 Rate limits                           | **Done** — login/signup/reset/copilot + `/api/v1` (except `/health`). Redis if `REDIS_URL`, else per-process memory. Fail-open if Redis errors |
 | 12 Operator checklist                    | Doc only                                                                         |
 
 
 If they ask “what if the database is down at login?”: the proxy still needs a session lookup; there is **no** fail-open cached “allow” path. Logout is the exception (no session round-trip).
+
+Rate limits: public auth and copilot are bounded even without Redis. Set `REDIS_URL` in production so two Node processes share the same counters. Redis outages fail open (request is allowed) so login cannot be taken down by the limiter.
 
 ---
 
@@ -780,7 +784,7 @@ npm test
 
 Node’s test runner via `tsx --test` (see `package.json` `test` script). Coverage is **pure domain + permissions + AI + mail/errors**, not browser e2e.
 
-Includes: leave-rules, permissions, payroll compute/warnings, attendance-metrics, contract-period, schedule-hours, time-off-balance, AI metrics/sanitize/snapshot/insights/copilot/query, mail, payslip-email, errors, logger, openapi, db invariants.
+Includes: leave-rules, permissions, payroll compute/warnings, attendance-metrics, contract-period, schedule-hours, time-off-balance, AI metrics/sanitize/snapshot/insights/copilot/query, mail, payslip-email, errors, logger, rate-limit, openapi, HTTP status mapping, db invariants.
 
 Copilot routing probe (separate): `npx tsx lib/ai/copilot-capability.probe.ts`.
 
@@ -803,13 +807,14 @@ Say these out loud if asked “is everything done?”
 | LLM-authored SQL                           | Explicitly forbidden                                                                |
 | Postgres RLS                               | App-level org filter + triggers                                                     |
 | Multi-tenant SaaS                          | One org                                                                             |
-| Redis / websockets                         | No                                                                                  |
+| Redis                                      | Optional rate-limit store only — **not** sessions, queues, or cache                 |
+| Websockets                                 | No                                                                                  |
 | TanStack list cache / Zustand              | Installed unused                                                                    |
 | Dual wage / dual role / `paidLeaveBalance` | Still present (Tasks 6–8)                                                           |
 | Legacy `payroll` table                     | Not dropped                                                                         |
 | Notification sounds                        | Flag only                                                                           |
 | Employee payslip print                     | Admin print only                                                                    |
-| Fault-tolerance 4–12                       | See §14                                                                             |
+| Fault-tolerance 4–10, 12                   | See §14 (rate limits are done)                                                      |
 | DB redesign 6–14                           | See §10.2                                                                           |
 | README “Coming Soon” list                  | **Stale** — Performance, Notifications, Recruitment are wired (recruitment partial) |
 

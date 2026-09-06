@@ -34,6 +34,7 @@ import { hasPermission } from "@/lib/auth/permissions";
 import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
 import { dateFromKey, inclusiveDayCount, kolkataTodayKey, toDateKey, weekDayKeys } from "@/lib/shared/dates";
 import { leaveTypeFromCode } from "@/lib/shared/mappers";
+import { enforceRateLimits, RATE_LIMITS, userRateKey } from "@/lib/shared/rate-limit";
 import { copilotConversationIdSchema, copilotQuestionSchema, firstZodError } from "@/lib/shared/validations";
 import type {
   ActionResult,
@@ -417,6 +418,11 @@ export async function askHrCopilot(
 ): Promise<ActionResult<AiCopilotResult>> {
   try {
     const user = await requirePermission("viewAiAnalytics");
+    const copilotLimited = await enforceRateLimits([
+      { key: userRateKey("copilot", user.id), ...RATE_LIMITS.copilotUser },
+    ]);
+    if (copilotLimited) return { ok: false, error: copilotLimited };
+
     const parsed = copilotQuestionSchema.safeParse({ question, conversationId });
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };

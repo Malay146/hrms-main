@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import { AuthError, ForbiddenError, getCurrentUser } from "@/lib/auth/session";
 import { isStaffRole } from "@/lib/auth/permissions";
 import type { ActionResult } from "@/lib/shared/types";
+import { statusForActionError } from "@/lib/api/v1/action-status";
+
+export { statusForActionError };
 
 export function requestIdFrom(request: Request) {
   return request.headers.get("x-request-id")?.trim() || randomUUID();
@@ -15,13 +18,6 @@ export function jsonResponse(body: unknown, status: number, requestId: string) {
       "Cache-Control": "no-store",
     },
   });
-}
-
-export function statusForActionError(error: string) {
-  if (/sign in|session expired/i.test(error)) return 401;
-  if (/do not have access|permission/i.test(error)) return 403;
-  if (/not found/i.test(error)) return 404;
-  return 400;
 }
 
 export function actionToResponse(

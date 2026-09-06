@@ -3,6 +3,8 @@ import { firstZodError } from "@/lib/shared/validations";
 import { findApiOperation } from "@/lib/api/v1/operations";
 import { actionToResponse, errorToResponse, jsonResponse, requestIdFrom } from "@/lib/api/v1/http";
 import { runWithRequestId } from "@/lib/shared/request-context";
+import { enforceRateLimits, ipRateKey, RATE_LIMITS, RATE_LIMIT_MESSAGE } from "@/lib/shared/rate-limit";
+import { ipFromHeaders } from "@/lib/shared/request-ip";
 
 function parseQuery(url: URL, schema?: z.ZodType) {
   if (!schema) return {};
@@ -31,6 +33,14 @@ async function dispatchInner(request: Request, slug: string[], requestId: string
 
   try {
     const { operation, params } = found;
+    if (pathname !== "/health") {
+      const limited = await enforceRateLimits([
+        { key: ipRateKey("api", ipFromHeaders(request.headers)), ...RATE_LIMITS.apiIp },
+      ]);
+      if (limited) {
+        return jsonResponse({ ok: false, error: RATE_LIMIT_MESSAGE }, 429, requestId);
+      }
+    }
     if (operation.params) {
       const parsedParams = operation.params.safeParse(params);
       if (!parsedParams.success) {
