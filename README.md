@@ -2,6 +2,8 @@
 
 Next.js HRMS with PostgreSQL + Prisma 7 + Better Auth.
 
+**Evaluator / jury notes:** [docs/EVALUATOR-HANDBOOK.md](docs/EVALUATOR-HANDBOOK.md) — features, edge cases, performance work, stack, and what is still stubbed.
+
 ## Prerequisites
 
 - Node 20+
