@@ -38,6 +38,21 @@ export const changePasswordSchema = z
     path: ["newPassword"],
   });
 
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Enter a valid email."),
+});
+
+export const resetPasswordSchema = z
+  .object({
+    token: z.string().min(1, "Reset link is invalid or expired."),
+    newPassword: passwordSchema,
+    confirmPassword: z.string().min(1, "Confirm your password."),
+  })
+  .refine((value) => value.newPassword === value.confirmPassword, {
+    message: "Passwords do not match.",
+    path: ["confirmPassword"],
+  });
+
 export const createEmployeeSchema = z.object({
   fullName: z.string().min(2, "Full name is required."),
   email: z.string().email("Enter a valid email."),

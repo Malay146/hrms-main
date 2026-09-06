@@ -21,10 +21,9 @@ import PresentTodayIcon from "@/components/icons/present-today";
 import LeaveTodayIcon from "@/components/icons/leave-today";
 import PendingApprovalIcon from "@/components/icons/pending-approval";
 import TotalPayrollIcon from "@/components/icons/total-payroll";
-import AiIcon from "@/components/icons/sidebar/ai";
 import { cn } from "@/utils/cn";
-import { generateAiInsights, refreshAiAnalyticsAction } from "@/lib/actions/ai";
-import type { AiAnalyticsData, AiInsightCard } from "@/lib/shared/types";
+import { refreshAiAnalyticsAction } from "@/lib/actions/ai";
+import type { AiAnalyticsData } from "@/lib/shared/types";
 import { BarChartTooltip, PieChartTooltip, chartCursor, chartTooltipWrapperStyle } from "@/components/charts/chart-tooltip";
 import { ListPagination, useClientPagination } from "@/components/ui/list-pagination";
 import { useRouter } from "next/navigation";
@@ -35,16 +34,9 @@ const HEALTH_BADGE = {
   at_risk: { variant: "destructive" as const, label: "At risk" },
 };
 
-const INSIGHT_BADGE = {
-  info: "success" as const,
-  watch: "warning" as const,
-  alert: "destructive" as const,
-};
-
 export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [insights, setInsights] = useState<AiInsightCard[]>(data.insights);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -57,7 +49,6 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
     data.payrollNet == null ? "—" : `₹${Math.round(data.payrollNet).toLocaleString("en-IN")}`;
 
   const deptPaging = useClientPagination(data.departmentAttendance, 8, data.periodLabel);
-  const insightPaging = useClientPagination(insights, 4, insights.length);
   const flightPaging = useClientPagination(data.flightRisk, 10, data.flightRisk.length);
 
   const cards = [
@@ -106,20 +97,11 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
   async function onRefresh() {
     setRefreshing(true);
     const snap = await refreshAiAnalyticsAction();
+    setRefreshing(false);
     if (!snap.ok) {
-      setRefreshing(false);
       toast(snap.error);
       return;
     }
-    if (data.aiEnabled) {
-      const result = await generateAiInsights();
-      if (result.ok) {
-        setInsights(result.data);
-      } else {
-        toast(result.error);
-      }
-    }
-    setRefreshing(false);
     toast("Analytics snapshot refreshed.");
     router.refresh();
   }
@@ -128,7 +110,7 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex flex-col text-left">
-          <h1 className="text-h1 font-medium">AI Analytics</h1>
+          <h1 className="text-h1 font-medium">Analytics</h1>
           <p className="text-body-lg text-zinc-500 font-medium">
             Workforce metrics and analysis for {data.periodLabel}.
           </p>
@@ -142,12 +124,6 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
           {refreshing ? "Refreshing…" : "Refresh analytics"}
         </button>
       </div>
-
-      {!data.aiEnabled ? (
-        <p className="w-fit text-sm font-medium text-zinc-500 border border-border rounded-xl px-4 py-3">
-          Connect an AI provider to generate written analysis. Metrics below are live without a model.
-        </p>
-      ) : null}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {cards.map((card) => {
@@ -301,56 +277,6 @@ export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
               total={deptPaging.total}
               pageItemCount={deptPaging.pageItems.length}
               onPageChange={deptPaging.setPage}
-            />
-          </>
-        )}
-      </div>
-
-      <div className="border border-border rounded-2xl p-6 bg-surface flex flex-col gap-4">
-        <h2 className="text-h3 font-semibold text-zinc-900">Insights</h2>
-        {insights.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
-            <div
-              className="size-16 rounded-2xl flex items-center justify-center text-white"
-              style={{
-                background: "linear-gradient(to top, #18181B, #71717A)",
-                boxShadow: "0 0 0 1px rgba(24,24,27,0.15)",
-              }}
-            >
-              <AiIcon className="size-8 text-white" />
-            </div>
-            <p className="text-sm text-zinc-500 font-medium max-w-sm">
-              {data.aiEnabled
-                ? "Refresh insights to generate a written analysis of these metrics."
-                : "Written analysis will appear here after an AI provider is connected."}
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-col gap-3">
-              {insightPaging.pageItems.map((insight) => (
-                <div key={insight.id} className="border border-border rounded-xl p-4 flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={INSIGHT_BADGE[insight.severity]}>{insight.severity}</Badge>
-                    <h3 className="text-sm font-semibold text-zinc-900">{insight.title}</h3>
-                  </div>
-                  <p className="text-sm text-zinc-600 font-medium">{insight.body}</p>
-                  {insight.href ? (
-                    <Link href={insight.href} className="text-sm font-semibold text-zinc-900 hover:underline">
-                      {insight.action}
-                    </Link>
-                  ) : (
-                    <p className="text-sm font-semibold text-zinc-900">{insight.action}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-            <ListPagination
-              page={insightPaging.page}
-              totalPages={insightPaging.totalPages}
-              total={insightPaging.total}
-              pageItemCount={insightPaging.pageItems.length}
-              onPageChange={insightPaging.setPage}
             />
           </>
         )}

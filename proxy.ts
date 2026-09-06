@@ -3,7 +3,14 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/lib/auth/server";
 import { canAccessAdminPath, firstAllowedAdminPath, homePath, isStaffRole } from "@/lib/auth/permissions";
 
-const PUBLIC_PATHS = new Set(["/", "/login", "/logout", "/sign-up"]);
+const PUBLIC_PATHS = new Set([
+  "/",
+  "/login",
+  "/logout",
+  "/sign-up",
+  "/forgot-password",
+  "/reset-password",
+]);
 
 function isPublic(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true;

@@ -106,6 +106,42 @@ export async function sendNotificationEmail(input: { to: string; title: string; 
   });
 }
 
+export async function sendPasswordResetEmail(input: {
+  to: string;
+  fullName: string;
+  resetUrl: string;
+}) {
+  await sendMail({
+    to: input.to,
+    subject: "Reset your HRMS password",
+    text: [
+      `Hi ${input.fullName},`,
+      "",
+      "We received a request to reset your HRMS password.",
+      "Open this link to choose a new password (expires in 1 hour):",
+      input.resetUrl,
+      "",
+      "If you did not request this, you can ignore this email.",
+    ].join("\n"),
+    html: [
+      `<p>Hi ${escapeHtml(input.fullName)},</p>`,
+      `<p>We received a request to reset your HRMS password.</p>`,
+      `<p><a href="${escapeHtml(input.resetUrl)}">Reset your password</a></p>`,
+      `<p style="color:#71717a;font-size:12px">This link expires in 1 hour. If you did not request this, ignore this email.</p>`,
+    ].join(""),
+  });
+
+  logger.info("mail.password_reset_sent", { to: input.to });
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 export function generateTemporaryPassword() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
   const bytes = crypto.getRandomValues(new Uint8Array(12));
