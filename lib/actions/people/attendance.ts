@@ -9,6 +9,7 @@ import { mapAttendance } from "@/lib/shared/mappers";
 import { deriveAttendanceMetrics } from "@/lib/people/attendance-metrics";
 import {
   dateFromKey,
+  formatDateKey,
   formatDisplayTime,
   formatHours,
   isLateCheckIn,
@@ -137,6 +138,15 @@ function defaultAttendanceWindow() {
   return { from: keys[0], to: keys[keys.length - 1] };
 }
 
+/** Last 90 days when viewing one employee’s history. */
+function defaultEmployeeHistoryWindow() {
+  const to = kolkataTodayKey();
+  const start = dateFromKey(to);
+  start.setUTCDate(start.getUTCDate() - 89);
+  const from = formatDateKey(start.getUTCFullYear(), start.getUTCMonth() + 1, start.getUTCDate());
+  return { from, to };
+}
+
 function attendanceStatusWhere(status?: string): Prisma.AttendanceWhereInput | undefined {
   if (!status || status === "All") return undefined;
   const key = status.toLowerCase();
@@ -162,7 +172,9 @@ export async function listAttendanceLogs(
     });
     if (!actorProfile) throw new Error("Employee profile is missing.");
     const organizationId = actorProfile.organizationId;
-    const window = defaultAttendanceWindow();
+    const window = filters?.employeeCode
+      ? defaultEmployeeHistoryWindow()
+      : defaultAttendanceWindow();
     const from = filters?.from || window.from;
     const to = filters?.to || window.to;
     const page = clampPage(filters?.page);

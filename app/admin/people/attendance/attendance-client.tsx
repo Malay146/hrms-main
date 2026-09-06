@@ -105,14 +105,21 @@ export function AttendanceClient({
   }
 
   const { logs, page, total, totalPages, stats, from, to } = initial;
+  const historyEmployeeName = filterEmployeeCode
+    ? logs.find((log) => log.employeeCode === filterEmployeeCode)?.name ?? filterEmployeeCode
+    : null;
 
   return (
     <div className="w-full min-h-full border border-border rounded-2xl p-6 bg-surface flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-h1 font-medium">Attendance</h1>
+          <h1 className="text-h1 font-medium">
+            {filterEmployeeCode ? "Attendance history" : "Attendance"}
+          </h1>
           <p className="text-body-lg text-zinc-500 font-medium">
-            Daily check-in log with worked hours and manual corrections.
+            {filterEmployeeCode
+              ? `Daily check-in history for ${historyEmployeeName}.`
+              : "Daily check-in log with worked hours and manual corrections."}
             {from && to ? (
               <span className="block text-sm mt-1">
                 Showing {from} → {to}
@@ -121,7 +128,7 @@ export function AttendanceClient({
           </p>
           {filterEmployeeCode ? (
             <p className="text-xs font-semibold text-zinc-500 mt-1">
-              Filtered to{" "}
+              Employee{" "}
               <Link
                 href={`/admin/people/employees/${filterEmployeeCode}`}
                 className="underline text-zinc-900"
@@ -130,10 +137,14 @@ export function AttendanceClient({
               </Link>
               {" · "}
               <Link href="/admin/people/attendance" className="underline text-zinc-600">
-                Clear
+                Back to all attendance
               </Link>
             </p>
-          ) : null}
+          ) : (
+            <p className="text-xs font-medium text-zinc-400 mt-1">
+              Click an employee name to open their attendance history.
+            </p>
+          )}
         </div>
         <button
           type="button"
@@ -216,18 +227,39 @@ export function AttendanceClient({
               logs.map((log) => (
                 <tr key={log.id} className="hover:bg-zinc-50/50">
                   <td className="py-3.5 px-6">
+                    {filterEmployeeCode ? (
+                      <div className="flex items-center gap-3">
+                        <PersonAvatar name={log.name} size={32} />
+                        <div>
+                          <p className="font-semibold text-zinc-900">{log.name}</p>
+                          <p className="text-xs text-zinc-400">{log.department}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <Link
+                        href={
+                          log.employeeCode
+                            ? `/admin/people/attendance?employeeId=${encodeURIComponent(log.employeeCode)}`
+                            : `/admin/people/attendance/${log.id}`
+                        }
+                        className="flex items-center gap-3"
+                      >
+                        <PersonAvatar name={log.name} size={32} />
+                        <div>
+                          <p className="font-semibold text-zinc-900 hover:underline">{log.name}</p>
+                          <p className="text-xs text-zinc-400">{log.department}</p>
+                        </div>
+                      </Link>
+                    )}
+                  </td>
+                  <td className="py-3.5 px-6">
                     <Link
                       href={`/admin/people/attendance/${log.id}`}
-                      className="flex items-center gap-3"
+                      className="font-medium text-zinc-900 hover:underline"
                     >
-                      <PersonAvatar name={log.name} size={32} />
-                      <div>
-                        <p className="font-semibold text-zinc-900">{log.name}</p>
-                        <p className="text-xs text-zinc-400">{log.department}</p>
-                      </div>
+                      {log.date}
                     </Link>
                   </td>
-                  <td className="py-3.5 px-6">{log.date}</td>
                   <td className="py-3.5 px-6">{log.checkIn}</td>
                   <td className="py-3.5 px-6">{log.checkOut}</td>
                   <td className="py-3.5 px-6 text-zinc-500">
