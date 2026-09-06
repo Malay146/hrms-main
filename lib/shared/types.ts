@@ -132,6 +132,8 @@ export type EmployeeDashboardData = {
   todayLabel: string;
   isClockedIn: boolean;
   checkInLabel: string;
+  /** ISO timestamp for live elapsed timer; null when not clocked in. */
+  checkInAt: string | null;
   workedHours: string;
   remainingLeave: number;
   upcomingLabel: string;

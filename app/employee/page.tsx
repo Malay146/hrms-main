@@ -7,6 +7,7 @@ const empty = {
   todayLabel: "",
   isClockedIn: false,
   checkInLabel: "",
+  checkInAt: null as string | null,
   workedHours: "0.0 hrs",
   remainingLeave: 0,
   upcomingLabel: "No upcoming leave",
