@@ -175,7 +175,9 @@ export default function Navbar() {
   return (
     <header className="absolute top-0 left-0 right-0 z-50 flex items-center justify-between px-6 h-[60px] bg-background/80 backdrop-blur-md border-b border-border shrink-0 select-none">
       <div className="flex items-center">
-        <CommandTrigger onClick={() => setCommandOpen(true)} />
+        {!commandOpen ? (
+          <CommandTrigger onClick={() => setCommandOpen(true)} />
+        ) : null}
         {commandOpen ? (
           <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
         ) : null}

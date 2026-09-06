@@ -38,7 +38,7 @@ const adminCommands: CommandEntry[] = [
   { group: "Payroll", label: "Rules", href: "/admin/hr/payroll/rules" },
   { group: "HR", label: "Recruitment", href: "/admin/hr/recruitment" },
   { group: "HR", label: "Performance", href: "/admin/hr/performance" },
-  { group: "Workspace", label: "AI Analytics", href: "/admin/analytics" },
+  { group: "Workspace", label: "Analytics", href: "/admin/analytics" },
   { group: "Account", label: "Notifications", href: "/admin/notifications" },
   { group: "Account", label: "Settings", href: "/admin/settings" },
 ];
