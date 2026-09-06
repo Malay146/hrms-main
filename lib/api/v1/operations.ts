@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { getAiAnalytics, askHrCopilot, listCopilotConversations, listCopilotHistory, deleteCopilotConversationAction, clearCopilotHistoryAction, generateAiInsights, summarizeLeaveForApprover } from "@/lib/actions/ai";
-import { changePasswordAction } from "@/lib/actions/auth";
+import { changePasswordAction, signUpOrganizationAction } from "@/lib/actions/auth";
 import { getAdminDashboard, getEmployeeDashboard } from "@/lib/actions/dashboard";
 import {
   listMyNotifications,
@@ -114,6 +114,7 @@ import {
   upsertContractSchema,
   upsertPayrollSchema,
   upsertScheduleSchema,
+  signUpSchema,
 } from "@/lib/shared/validations";
 import { defineOp, type ApiOperation } from "@/lib/api/v1/types";
 import { employeeIdParam, idParam } from "@/lib/api/v1/schema";
@@ -224,6 +225,17 @@ export const apiOperations: ApiOperation[] = [
     tags: ["Meta"],
     public: true,
     handler: async () => ({ ok: true as const, data: { service: "hrms-api", version: "1.0.0" } }),
+  }),
+  defineOp({
+    method: "post",
+    path: "/organizations",
+    operationId: "registerOrganization",
+    summary: "Register a new organization",
+    description: "Public self-serve tenant signup. Creates the company, founding admin, and default HR config, then signs the founder in.",
+    tags: ["Account"],
+    public: true,
+    body: signUpSchema,
+    handler: async ({ body }) => signUpOrganizationAction(body as Parameters<typeof signUpOrganizationAction>[0]),
   }),
   defineOp({
     method: "get",

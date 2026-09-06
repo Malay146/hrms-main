@@ -2,12 +2,16 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { hashPassword } from "better-auth/crypto";
 import { auth } from "@/lib/auth/server";
 import { logger } from "@/lib/shared/logger";
-import { firstZodError, loginSchema, changePasswordSchema } from "@/lib/shared/validations";
+import { firstZodError, loginSchema, changePasswordSchema, signUpSchema } from "@/lib/shared/validations";
 import { homePath } from "@/lib/auth/permissions";
 import { actionErrorMessage, requireUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { allocateOrgSlug, nextEmployeeId } from "@/lib/people/employee-id";
+import { bootstrapNewOrganization } from "@/lib/org/bootstrap";
+import { kolkataParts } from "@/lib/shared/dates";
 import type { ActionResult, Role } from "@/lib/shared/types";
 
 export async function signInAction(input: {
@@ -50,11 +54,107 @@ export async function signInAction(input: {
   }
 }
 
-export async function signUpOrganizationAction(): Promise<ActionResult<{ role: Role }>> {
-  return {
-    ok: false,
-    error: "Public sign-up is closed. Ask an administrator to create your account.",
-  };
+export async function signUpOrganizationAction(input: {
+  name: string;
+  organizationName: string;
+  organizationEmail: string;
+  password: string;
+  confirmPassword: string;
+}): Promise<ActionResult<{ role: Role; redirectTo: string }>> {
+  const parsed = signUpSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: firstZodError(parsed.error) };
+  }
+
+  const email = parsed.data.organizationEmail.trim().toLowerCase();
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
+    return { ok: false, error: "An account with this email already exists. Sign in instead." };
+  }
+
+  const existingSlugs = (await prisma.organization.findMany({ select: { slug: true } })).map(
+    (row) => row.slug,
+  );
+  const slug = allocateOrgSlug(parsed.data.organizationName, existingSlugs);
+  const year = kolkataParts().year;
+  const employeeId = nextEmployeeId(slug, year, []);
+  const passwordHash = await hashPassword(parsed.data.password);
+  const now = new Date();
+  const userId = crypto.randomUUID();
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.create({
+        data: {
+          name: parsed.data.organizationName.trim(),
+          email,
+          slug,
+        },
+      });
+      const { departmentId, scheduleId } = await bootstrapNewOrganization(tx, organization.id);
+      await tx.user.create({
+        data: {
+          id: userId,
+          name: parsed.data.name.trim(),
+          email,
+          emailVerified: true,
+          createdAt: now,
+          updatedAt: now,
+          role: "admin",
+          mustChangePassword: false,
+          accounts: {
+            create: {
+              id: crypto.randomUUID(),
+              accountId: userId,
+              providerId: "credential",
+              issuer: "local:credential",
+              password: passwordHash,
+              createdAt: now,
+              updatedAt: now,
+            },
+          },
+          profile: {
+            create: {
+              organizationId: organization.id,
+              employeeId,
+              fullName: parsed.data.name.trim(),
+              role: "admin",
+              departmentId,
+              jobTitle: "Administrator",
+              status: "active",
+              paidLeaveBalance: 20,
+              employeeType: "full_time",
+              scheduleId,
+            },
+          },
+        },
+      });
+    });
+  } catch (error) {
+    if (typeof error === "object" && error && "code" in error && error.code === "P2002") {
+      return { ok: false, error: "That email or organization slug is already in use." };
+    }
+    return { ok: false, error: actionErrorMessage(error, "Could not create the organization.") };
+  }
+
+  try {
+    await auth.api.signInEmail({
+      body: { email, password: parsed.data.password },
+      headers: await headers(),
+    });
+  } catch (error) {
+    logger.warn("auth.org_signup_signin_failed", {
+      email,
+      reason: error instanceof Error ? error.message : "unknown",
+    });
+    return {
+      ok: false,
+      error: "Organization created. Sign in with the same email and password.",
+    };
+  }
+
+  logger.info("auth.org_created", { userId, slug });
+  return { ok: true, data: { role: "admin", redirectTo: "/admin" } };
 }
 
 export async function changePasswordAction(input: {

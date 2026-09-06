@@ -3,6 +3,18 @@ export function orgSlugFromName(name: string) {
   return (letters.slice(0, 4) || "ORG").padEnd(3, "X");
 }
 
+/** Pick a unique organization.slug. Collisions append 2, 3, … (ACME → ACME2). */
+export function allocateOrgSlug(name: string, existingSlugs: string[]) {
+  const taken = new Set(existingSlugs.map((slug) => slug.toUpperCase()));
+  const base = orgSlugFromName(name);
+  if (!taken.has(base)) return base;
+  for (let n = 2; n < 10_000; n += 1) {
+    const candidate = `${base}${n}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  throw new Error("Could not allocate an organization slug.");
+}
+
 export function nextEmployeeId(slug: string, year: number, existingIds: string[]) {
   const prefix = `${slug}-${year}-`;
   const max = existingIds.reduce((highest, id) => {

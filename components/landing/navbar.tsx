@@ -22,8 +22,14 @@ export default function LandingNavbar() {
           </div>
         </Link>
 
-        {/* Right: Login only */}
-        <div className="flex items-center gap-3">
+        {/* Right: Register + Login */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link
+            href="/sign-up"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-zinc-950 bg-white hover:bg-zinc-50 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800 rounded-md border border-zinc-200 dark:border-zinc-700 transition-all active:scale-95 cursor-pointer"
+          >
+            Register organization
+          </Link>
           <Link
             href="/login"
             className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-zinc-950 hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 rounded-md shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer"

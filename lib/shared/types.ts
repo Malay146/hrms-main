@@ -19,6 +19,9 @@ export type SessionUser = {
   email: string;
   role: Role;
   mustChangePassword: boolean;
+  organizationId: string | null;
+  organizationName: string | null;
+  organizationSlug: string | null;
   employeeId: string | null;
   fullName: string;
   department: string | null;

@@ -63,7 +63,7 @@ Two portals:
 - `/admin` — staff (admin, HR manager, payroll user, payroll manager)
 - `/employee` — self-service (any signed-in user; employees are redirected here from `/admin`)
 
-Public marketing landing is `/`. Public sign-up is **closed**.
+Public marketing landing is `/`. Companies can **register an organization** at `/sign-up` (self-serve tenant). Employees are still invited by that org’s admin.
 
 ---
 
@@ -271,7 +271,7 @@ Status: **Wired** = Prisma. **Partial** = DB with a gap. **Stub** = UI only / mo
 | `/login`           | Wired          | `signInAction` → Better Auth `signInEmail`. Redirect by role / password flag.    |
 | `/change-password` | Wired          | Forced after admin-created accounts (`mustChangePassword`).                      |
 | `/logout`          | Wired          | `signOutAction`. Proxy skips session lookup so logout still works if DB is slow. |
-| `/sign-up`         | Closed         | Proxy redirects to `/login`. `disableSignUp: true`.                              |
+| `/sign-up`         | Wired          | Creates `organization` + founding **admin** + bootstrap (HR dept, schedule, leave types, Regular Salary). Signs in. Better Auth `disableSignUp` stays true — we create the user ourselves. |
 
 
 
@@ -599,7 +599,7 @@ Demo identity: wage 50,000 → NET 75,000 on Regular Salary.
 
 | If…                                   | Then…                                         |
 | ------------------------------------- | --------------------------------------------- |
-| Public sign-up                        | Disabled                                      |
+| Public Better Auth signup | Disabled (`disableSignUp`). **Organization registration** at `/sign-up` creates the tenant + first admin. |
 | New hire first login                  | `/change-password` until flag cleared         |
 | Employee types `/admin/analytics`     | Redirect `/employee`                          |
 | Payroll user types `/admin/analytics` | Redirect to first allowed admin page          |

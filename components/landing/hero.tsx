@@ -57,13 +57,19 @@ export default function HeroSection() {
               Automate employee attendance, manage department hierarchies, approve leave requests seamlessly, and empower teams with real-time self-service insights.
             </p>
 
-            {/* Login CTA */}
+            {/* Register + login CTAs */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 pt-4">
               <Link
-                href="/login"
+                href="/sign-up"
                 className="group relative inline-flex items-center justify-center gap-2.5 px-4 py-3 rounded-md bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 font-semibold text-md shadow-lg shadow-zinc-950/10 dark:shadow-white/5 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
               >
-                <span>Get Started</span>
+                <span>Register organization</span>
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex items-center justify-center gap-2.5 px-4 py-3 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-950 dark:text-white font-semibold text-md hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+              >
+                Sign in
               </Link>
             </div>
 

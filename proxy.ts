@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/lib/auth/server";
 import { canAccessAdminPath, firstAllowedAdminPath, homePath, isStaffRole } from "@/lib/auth/permissions";
 
-const PUBLIC_PATHS = new Set(["/", "/login", "/logout"]);
+const PUBLIC_PATHS = new Set(["/", "/login", "/logout", "/sign-up"]);
 
 function isPublic(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true;
@@ -13,10 +13,6 @@ function isPublic(pathname: string) {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  if (pathname === "/sign-up") {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
 
   // Sign-out is its own action; skip the session DB round-trip so /logout
   // is not gated on getSession before the page can revoke the cookie.
@@ -31,7 +27,7 @@ export async function proxy(request: NextRequest) {
   );
 
   if (isPublic(pathname) && pathname !== "/logout") {
-    if (pathname === "/login" && role) {
+    if ((pathname === "/login" || pathname === "/sign-up") && role) {
       if (mustChangePassword) {
         return NextResponse.redirect(new URL("/change-password", request.url));
       }

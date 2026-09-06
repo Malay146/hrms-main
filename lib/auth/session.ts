@@ -35,7 +35,10 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
 
   const profilePromise = prisma.employeeProfile.findUnique({
     where: { userId: session.user.id },
-    include: { department: { select: { name: true } } },
+    include: {
+      department: { select: { name: true } },
+      organization: { select: { id: true, name: true, slug: true } },
+    },
   });
   const dbUserPromise = prisma.user.findUnique({
     where: { id: session.user.id },
@@ -51,6 +54,9 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
     email: session.user.email,
     role,
     mustChangePassword: Boolean(dbUser?.mustChangePassword),
+    organizationId: profile?.organizationId ?? profile?.organization.id ?? null,
+    organizationName: profile?.organization.name ?? null,
+    organizationSlug: profile?.organization.slug ?? null,
     employeeId: profile?.employeeId ?? null,
     fullName: profile?.fullName ?? session.user.name,
     department: profile?.department?.name ?? null,
@@ -83,6 +89,14 @@ export async function requirePermission(permission: Permission) {
     throw new ForbiddenError();
   }
   return user;
+}
+
+export async function requireOrganization() {
+  const user = await requireUser();
+  if (!user.organizationId) {
+    throw new ForbiddenError("Your account is not linked to an organization.");
+  }
+  return user as SessionUser & { organizationId: string };
 }
 
 export async function requirePageRole(role: Role) {

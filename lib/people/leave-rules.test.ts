@@ -6,7 +6,7 @@ import {
   paidLeaveDays,
   validateLeaveDates,
 } from "./leave-rules";
-import { nextEmployeeId, orgSlugFromName } from "./employee-id";
+import { allocateOrgSlug, nextEmployeeId, orgSlugFromName } from "./employee-id";
 
 describe("leave rules", () => {
   it("detects overlapping date ranges", () => {
@@ -55,5 +55,10 @@ describe("employee ids", () => {
       nextEmployeeId("ACME", 2026, ["ACME-2026-001", "ACME-2026-007"]),
       "ACME-2026-008",
     );
+  });
+
+  it("allocates a unique org slug when the base is taken", () => {
+    assert.equal(allocateOrgSlug("Acme Inc.", ["ODDO"]), "ACME");
+    assert.equal(allocateOrgSlug("Acme Inc.", ["ACME", "ACME2"]), "ACME3");
   });
 });

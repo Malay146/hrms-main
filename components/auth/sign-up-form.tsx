@@ -16,52 +16,58 @@ export function SignUpForm() {
     event.preventDefault();
     setError("");
     setPending(true);
-    const result = await signUpOrganizationAction();
+    const form = new FormData(event.currentTarget);
+    const result = await signUpOrganizationAction({
+      name: String(form.get("name") ?? ""),
+      organizationName: String(form.get("organization-name") ?? ""),
+      organizationEmail: String(form.get("organization-email") ?? ""),
+      password: String(form.get("password") ?? ""),
+      confirmPassword: String(form.get("confirm-password") ?? ""),
+    });
     setPending(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
-    router.push("/admin");
+    router.push(result.data.redirectTo);
     router.refresh();
   }
 
   return (
     <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
       <AuthField
+        id="organization-name"
+        name="organization-name"
+        label="Organization name"
+        placeholder="Acme Inc."
+        autoComplete="organization"
+        required
+      />
+
+      <AuthField
         id="name"
         name="name"
-        label="Full name"
-        placeholder="John Doe"
+        label="Your name"
+        placeholder="Jane Doe"
         autoComplete="name"
         required
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <AuthField
-          id="organization-name"
-          name="organization-name"
-          label="Organization name"
-          placeholder="Acme Inc."
-          autoComplete="organization"
-          required
-        />
-        <AuthField
-          id="organization-email"
-          name="organization-email"
-          label="Organization email"
-          type="email"
-          placeholder="hello@acme.com"
-          autoComplete="email"
-          required
-        />
-      </div>
+      <AuthField
+        id="organization-email"
+        name="organization-email"
+        label="Work email"
+        type="email"
+        placeholder="jane@acme.com"
+        autoComplete="email"
+        required
+      />
 
       <PasswordField
         id="password"
         name="password"
         label="Password"
-        placeholder="Create a strong password"
+        placeholder="At least 8 characters, with a number"
         autoComplete="new-password"
         required
       />
@@ -80,7 +86,7 @@ export function SignUpForm() {
       ) : null}
 
       <AuthSubmitButton disabled={pending}>
-        {pending ? "Creating workspace..." : "Sign Up"}
+        {pending ? "Creating organization..." : "Create organization"}
       </AuthSubmitButton>
     </form>
   );

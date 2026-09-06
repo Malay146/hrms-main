@@ -270,7 +270,7 @@ export default function Sidebar() {
               <Logo className="w-4 h-4" />
             </div>
             <span className="text-h4 font-bold text-text-primary tracking-tight truncate">
-              HRMS
+              {user.organizationName || "HRMS"}
             </span>
           </div>
         )}
