@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { actionErrorMessage, requirePermission, requireUser, requireOrgPermission } from "@/lib/auth/session";
 import { mapAttendance } from "@/lib/shared/mappers";
 import { deriveAttendanceMetrics } from "@/lib/people/attendance-metrics";
 import {
@@ -284,9 +284,9 @@ export async function getAttendanceAction(
   id: string,
 ): Promise<ActionResult<AttendanceLogItem>> {
   try {
-    await requirePermission("managePeople");
-    const row = await prisma.attendance.findUnique({
-      where: { id },
+    const actor = await requireOrgPermission("managePeople");
+    const row = await prisma.attendance.findFirst({
+      where: { id, organizationId: actor.organizationId },
       include: attendanceInclude,
     });
     if (!row) return { ok: false, error: "Attendance record not found." };
@@ -339,11 +339,25 @@ export async function upsertAttendanceAction(input: {
   notes?: string | null;
 }): Promise<ActionResult<AttendanceLogItem>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
     const parsed = upsertAttendanceSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
     }
+    const [target, ownedRow] = await Promise.all([
+      prisma.employeeProfile.findFirst({
+        where: { userId: parsed.data.userId, organizationId: actor.organizationId },
+        select: { id: true },
+      }),
+      parsed.data.id
+        ? prisma.attendance.findFirst({
+            where: { id: parsed.data.id, organizationId: actor.organizationId },
+            select: { id: true },
+          })
+        : Promise.resolve({ id: "" }),
+    ]);
+    if (!target) return { ok: false, error: "Employee not found." };
+    if (!ownedRow) return { ok: false, error: "Attendance record not found." };
 
     const checkIn = parseOptionalDateTime(parsed.data.checkIn, parsed.data.date);
     const checkOut = parseOptionalDateTime(parsed.data.checkOut, parsed.data.date);
@@ -582,10 +596,11 @@ export async function listAttendanceEmployees(input?: {
   search?: string;
 }): Promise<ActionResult<{ userId: string; employeeId: string; name: string }[]>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
     const search = input?.search?.trim() ?? "";
     const rows = await prisma.employeeProfile.findMany({
       where: {
+        organizationId: actor.organizationId,
         status: { not: "inactive" },
         ...(search
           ? {

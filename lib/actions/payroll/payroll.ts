@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { actionErrorMessage, requireOrgPermission, requireUser } from "@/lib/auth/session";
 import { mapPayroll } from "@/lib/shared/mappers";
 import { currentPayrollMonth } from "@/lib/shared/dates";
 import { firstZodError, upsertPayrollSchema } from "@/lib/shared/validations";
@@ -11,9 +11,10 @@ import type { ActionResult, PayrollListItem } from "@/lib/shared/types";
 
 export async function listPayroll(): Promise<ActionResult<PayrollListItem[]>> {
   try {
-    await requirePermission("viewPayrollAll");
+    const actor = await requireOrgPermission("viewPayrollAll");
     const month = currentPayrollMonth();
     const profiles = await prisma.employeeProfile.findMany({
+      where: { organizationId: actor.organizationId },
       include: {
         department: { select: { name: true } },
         user: {
@@ -103,11 +104,16 @@ export async function upsertPayrollAction(input: {
   deductions: number;
 }): Promise<ActionResult<PayrollListItem>> {
   try {
-    const admin = await requirePermission("editPayroll");
+    const admin = await requireOrgPermission("editPayroll");
     const parsed = upsertPayrollSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
     }
+    const target = await prisma.employeeProfile.findFirst({
+      where: { userId: parsed.data.userId, organizationId: admin.organizationId },
+      select: { id: true },
+    });
+    if (!target) return { ok: false, error: "Employee not found." };
 
     const saved = await prisma.payroll.upsert({
       where: {

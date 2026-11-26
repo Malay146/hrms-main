@@ -4,7 +4,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
 import { SQL_QUERY_RULES, SQL_SCHEMA_CATALOG } from "./sql-catalog";
-import { guardSelectSql, SQL_MAX_ROWS } from "./sql-guard";
+import { guardSelectSql, isDeniedColumn, SQL_ALLOWED_TABLES, SQL_MAX_ROWS } from "./sql-guard";
+import { scopeSqlToOrganization } from "./sql-scope";
 
 const STATEMENT_TIMEOUT_MS = 5_000;
 
@@ -32,10 +33,37 @@ function jsonSafe(value: unknown): unknown {
   return value;
 }
 
+/** Columns the copilot may read per table: everything except denied ones (wages, bank, address…). */
+let readableColumnsCache: Promise<Record<string, string[]>> | null = null;
+function readableColumns() {
+  readableColumnsCache ??= prisma
+    .$queryRawUnsafe<{ table_name: string; column_name: string }[]>(
+      `SELECT table_name, column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = ANY($1::text[])
+       ORDER BY table_name, ordinal_position`,
+      [...SQL_ALLOWED_TABLES],
+    )
+    .then((rows) => {
+      const map: Record<string, string[]> = {};
+      for (const row of rows) {
+        if (isDeniedColumn(row.column_name)) continue;
+        (map[row.table_name] ??= []).push(row.column_name);
+      }
+      return map;
+    })
+    .catch((error) => {
+      readableColumnsCache = null;
+      throw error;
+    });
+  return readableColumnsCache;
+}
+
 async function runScopedQuery(sql: string, organizationId: string) {
+  const scoped = scopeSqlToOrganization(sql, await readableColumns());
   return prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = ${STATEMENT_TIMEOUT_MS}`);
-    return tx.$queryRawUnsafe<Record<string, unknown>[]>(sql, organizationId);
+    await tx.$executeRawUnsafe(`SET TRANSACTION READ ONLY`);
+    return tx.$queryRawUnsafe<Record<string, unknown>[]>(scoped, organizationId);
   });
 }
 

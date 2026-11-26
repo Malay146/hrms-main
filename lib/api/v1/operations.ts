@@ -254,7 +254,7 @@ export const apiOperations: ApiOperation[] = [
     summary: "Current session user",
     tags: ["Account"],
     handler: async () => {
-      const user = await requireUser();
+      const user = await requireUser({ allowPendingPasswordChange: true });
       return { ok: true, data: user };
     },
   }),

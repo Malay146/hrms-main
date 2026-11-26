@@ -3,7 +3,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { actionErrorMessage, requirePermission, requireOrgPermission } from "@/lib/auth/session";
 import {
   assertSingleRunning,
   type ContractWindow,
@@ -263,10 +263,10 @@ export async function getContractAction(
   id: string,
 ): Promise<ActionResult<ContractListItem>> {
   try {
-    await requirePermission("managePeople");
-    await expirePastContracts();
-    const row = await prisma.contract.findUnique({
-      where: { id },
+    const actor = await requireOrgPermission("managePeople");
+    await expirePastContracts(actor.organizationId);
+    const row = await prisma.contract.findFirst({
+      where: { id, employee: { organizationId: actor.organizationId } },
       include: contractInclude,
     });
     if (!row) return { ok: false, error: "Contract not found." };
@@ -388,19 +388,38 @@ export async function upsertContractAction(input: {
   notes?: string | null;
 }): Promise<ActionResult<ContractListItem>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
     const parsed = upsertContractSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
     }
 
-    const employee = await prisma.employeeProfile.findUnique({
-      where: { id: parsed.data.employeeProfileId },
+    const orgId = actor.organizationId;
+    const employee = await prisma.employeeProfile.findFirst({
+      where: { id: parsed.data.employeeProfileId, organizationId: orgId },
       select: { id: true, organizationId: true, employeeId: true },
     });
     if (!employee) {
       return { ok: false, error: "Employee not found." };
     }
+    const [ownedContract, dept, schedule, structure] = await Promise.all([
+      parsed.data.id
+        ? prisma.contract.findFirst({ where: { id: parsed.data.id, employee: { organizationId: orgId } }, select: { id: true } })
+        : Promise.resolve({ id: "" }),
+      parsed.data.departmentId
+        ? prisma.department.findFirst({ where: { id: parsed.data.departmentId, organizationId: orgId }, select: { id: true } })
+        : Promise.resolve({ id: "" }),
+      parsed.data.scheduleId
+        ? prisma.workingSchedule.findFirst({ where: { id: parsed.data.scheduleId, organizationId: orgId }, select: { id: true } })
+        : Promise.resolve({ id: "" }),
+      parsed.data.salaryStructureId
+        ? prisma.salaryStructure.findFirst({ where: { id: parsed.data.salaryStructureId, organizationId: orgId }, select: { id: true } })
+        : Promise.resolve({ id: "" }),
+    ]);
+    if (!ownedContract) return { ok: false, error: "Contract not found." };
+    if (!dept) return { ok: false, error: "Department not found." };
+    if (!schedule) return { ok: false, error: "Schedule not found." };
+    if (!structure) return { ok: false, error: "Salary structure not found." };
 
     await expirePastContracts(employee.organizationId);
 
@@ -481,6 +500,11 @@ export async function upsertContractAction(input: {
       });
     }
 
+    if (status === "running") {
+      // Payroll reads employee_profile.wage; keep it equal to the running contract.
+      await prisma.employeeProfile.update({ where: { id: employee.id }, data: { wage: parsed.data.wage } });
+    }
+
     revalidateContracts(employee.employeeId);
     return { ok: true, data: mapContract(saved) };
   } catch (error) {
@@ -490,9 +514,9 @@ export async function upsertContractAction(input: {
 
 export async function deleteContractAction(id: string): Promise<ActionResult<{ id: string }>> {
   try {
-    await requirePermission("managePeople");
-    const existing = await prisma.contract.findUnique({
-      where: { id },
+    const actor = await requireOrgPermission("managePeople");
+    const existing = await prisma.contract.findFirst({
+      where: { id, employee: { organizationId: actor.organizationId } },
       select: {
         id: true,
         employee: { select: { employeeId: true } },

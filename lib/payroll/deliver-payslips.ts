@@ -109,12 +109,14 @@ export async function emailPayslipNow(slip: PayslipEmailRow) {
   });
 }
 
-export async function issueMonthEndPayslips(month = payslipIssueMonth()) {
+/** Email unsent payslips for a month. organizationId scopes it to one company (the cron omits it). */
+export async function issueMonthEndPayslips(month = payslipIssueMonth(), organizationId?: string) {
   const { start, end } = payrollMonthRange(month);
   const slips = await prisma.payslip.findMany({
     where: {
       status: { in: ["validated", "paid"] },
       payrun: {
+        ...(organizationId ? { organizationId } : {}),
         status: { in: ["validated", "paid"] },
         periodEnd: { gte: dateFromKey(start), lte: dateFromKey(end) },
       },

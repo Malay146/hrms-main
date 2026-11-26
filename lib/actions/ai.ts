@@ -32,7 +32,7 @@ import { mapInsightCards } from "@/lib/ai/insights";
 import { addDaysToKey, leaveClashCount } from "@/lib/ai/metrics";
 import { toModelSnapshot } from "@/lib/ai/sanitize";
 import { hasPermission } from "@/lib/auth/permissions";
-import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { actionErrorMessage, requirePermission, requireOrgPermission } from "@/lib/auth/session";
 import { dateFromKey, inclusiveDayCount, kolkataTodayKey, toDateKey, weekDayKeys } from "@/lib/shared/dates";
 import { leaveTypeFromCode } from "@/lib/shared/mappers";
 import { enforceRateLimits, RATE_LIMITS, userRateKey } from "@/lib/shared/rate-limit";
@@ -712,9 +712,9 @@ export async function clearCopilotHistoryAction(): Promise<ActionResult<{ count:
 
 export async function summarizeLeaveForApprover(leaveId: string): Promise<ActionResult<AiLeaveBrief>> {
   try {
-    await requirePermission("approveLeave");
-    const leave = await prisma.leaveRequest.findUnique({
-      where: { id: leaveId },
+    const actor = await requireOrgPermission("approveLeave");
+    const leave = await prisma.leaveRequest.findFirst({
+      where: { id: leaveId, organizationId: actor.organizationId },
       include: {
         type: { select: { code: true } },
         user: {

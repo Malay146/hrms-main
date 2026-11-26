@@ -3,7 +3,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { actionErrorMessage, requirePermission, requireUser, requireOrgPermission } from "@/lib/auth/session";
 import { dateFromKey, payslipIssueMonth, toDateKey } from "@/lib/shared/dates";
 import { stubHasContract, stubWage } from "@/lib/payroll/period-wage";
 import { ensureRegularSalaryStructure } from "@/lib/actions/payroll/salary";
@@ -175,11 +175,12 @@ export async function listEligibleEmployees(input: {
   }>
 > {
   try {
-    await requirePermission("editPayroll");
+    const actor = await requireOrgPermission("editPayroll");
     const page = clampPage(input.page);
     const pageSize = clampPageSize(input.pageSize, 40, 60);
     const search = input.search?.trim() ?? "";
     const where = {
+      organizationId: actor.organizationId,
       status: "active" as const,
       ...(input.employeeType ? { employeeType: input.employeeType } : {}),
       ...(search
@@ -241,8 +242,9 @@ export async function listEligibleEmployees(input: {
 
 export async function listPayruns(): Promise<ActionResult<PayrunListItem[]>> {
   try {
-    await requirePermission("viewPayrollAll");
+    const actor = await requireOrgPermission("viewPayrollAll");
     const rows = await prisma.payrun.findMany({
+      where: { organizationId: actor.organizationId },
       select: {
         id: true,
         name: true,
@@ -287,9 +289,9 @@ export async function listPayruns(): Promise<ActionResult<PayrunListItem[]>> {
 
 export async function getPayrun(id: string): Promise<ActionResult<PayrunDetail>> {
   try {
-    await requirePermission("viewPayrollAll");
-    const row = await prisma.payrun.findUnique({
-      where: { id },
+    const actor = await requireOrgPermission("viewPayrollAll");
+    const row = await prisma.payrun.findFirst({
+      where: { id, organizationId: actor.organizationId },
       include: {
         structure: { select: { name: true } },
         payslips: {
@@ -347,6 +349,14 @@ export async function createPayrunAction(input: {
 
     const organizationId = await organizationIdFor(actor.id);
     const structureId = parsed.data.structureId || (await ensureRegularSalaryStructure(organizationId));
+    const [structure, ownEmployees] = await Promise.all([
+      prisma.salaryStructure.findFirst({ where: { id: structureId, organizationId }, select: { id: true } }),
+      prisma.employeeProfile.count({ where: { id: { in: parsed.data.employeeIds }, organizationId } }),
+    ]);
+    if (!structure) return { ok: false, error: "Salary structure not found." };
+    if (ownEmployees !== new Set(parsed.data.employeeIds).size) {
+      return { ok: false, error: "Some selected employees are not in your organization." };
+    }
 
     const created = await prisma.payrun.create({
       data: {
@@ -379,9 +389,9 @@ export async function computePayrunAction(
   payrunId: string,
 ): Promise<ActionResult<{ jobId: string; status: string }>> {
   try {
-    const actor = await requirePermission("editPayroll");
-    const payrun = await prisma.payrun.findUnique({
-      where: { id: payrunId },
+    const actor = await requireOrgPermission("editPayroll");
+    const payrun = await prisma.payrun.findFirst({
+      where: { id: payrunId, organizationId: actor.organizationId },
       select: { id: true, organizationId: true, status: true },
     });
     if (!payrun) return { ok: false, error: "Payrun not found." };
@@ -410,9 +420,9 @@ export async function computePayrunAction(
 
 export async function validatePayrunAction(payrunId: string): Promise<ActionResult> {
   try {
-    await requirePermission("finalizePayroll");
-    const payrun = await prisma.payrun.findUnique({
-      where: { id: payrunId },
+    const actor = await requireOrgPermission("finalizePayroll");
+    const payrun = await prisma.payrun.findFirst({
+      where: { id: payrunId, organizationId: actor.organizationId },
       include: { payslips: { select: { warning: true, status: true } } },
     });
     if (!payrun) return { ok: false, error: "Payrun not found." };
@@ -436,8 +446,8 @@ export async function validatePayrunAction(payrunId: string): Promise<ActionResu
 
 export async function markPayrunPaidAction(payrunId: string): Promise<ActionResult> {
   try {
-    await requirePermission("finalizePayroll");
-    const payrun = await prisma.payrun.findUnique({ where: { id: payrunId } });
+    const actor = await requireOrgPermission("finalizePayroll");
+    const payrun = await prisma.payrun.findFirst({ where: { id: payrunId, organizationId: actor.organizationId } });
     if (!payrun) return { ok: false, error: "Payrun not found." };
     if (payrun.status !== "validated") return { ok: false, error: "Validate the payrun before marking it paid." };
 
@@ -465,12 +475,14 @@ export async function listPayslips(input?: {
   }>
 > {
   try {
-    await requirePermission("viewPayrollAll");
+    const actor = await requireOrgPermission("viewPayrollAll");
     const page = clampPage(input?.page);
     const pageSize = clampPageSize(input?.pageSize);
+    const orgSlips = { payrun: { organizationId: actor.organizationId } };
     const [total, rows] = await Promise.all([
-      prisma.payslip.count(),
+      prisma.payslip.count({ where: orgSlips }),
       prisma.payslip.findMany({
+        where: orgSlips,
         select: {
           id: true,
           payrunId: true,
@@ -537,7 +549,10 @@ export async function getPayslip(id: string): Promise<ActionResult<PayslipDetail
     if (!row) return { ok: false, error: "Payslip not found." };
     const isOwner = row.employee.userId === user.id;
     if (!isOwner) {
-      await requirePermission("viewPayrollAll");
+      const actor = await requireOrgPermission("viewPayrollAll");
+      if (row.payrun.organizationId !== actor.organizationId) {
+        return { ok: false, error: "Payslip not found." };
+      }
     }
     const mapped = mapPayslip(row);
     return {
@@ -604,9 +619,9 @@ export async function sendPayslipsAction(
   payrunId: string,
 ): Promise<ActionResult<{ sent: number; failed: number; skipped: number }>> {
   try {
-    await requirePermission("editPayroll");
-    const payrun = await prisma.payrun.findUnique({
-      where: { id: payrunId },
+    const actor = await requireOrgPermission("editPayroll");
+    const payrun = await prisma.payrun.findFirst({
+      where: { id: payrunId, organizationId: actor.organizationId },
       include: {
         structure: { select: { name: true } },
         payslips: { include: payslipEmailInclude },
@@ -637,9 +652,9 @@ export async function sendPayslipEmailAction(
   payslipId: string,
 ): Promise<ActionResult<{ sent: boolean }>> {
   try {
-    await requirePermission("editPayroll");
-    const slip = await prisma.payslip.findUnique({
-      where: { id: payslipId },
+    const actor = await requireOrgPermission("editPayroll");
+    const slip = await prisma.payslip.findFirst({
+      where: { id: payslipId, payrun: { organizationId: actor.organizationId } },
       include: payslipEmailInclude,
     });
     if (!slip) return { ok: false, error: "Payslip not found." };
@@ -668,8 +683,8 @@ export async function issueMonthEndPayslipsAction(
   month?: string,
 ): Promise<ActionResult<{ month: string; sent: number; failed: number; skipped: number }>> {
   try {
-    await requirePermission("editPayroll");
-    const result = await issueMonthEndPayslips(month || payslipIssueMonth());
+    const actor = await requireOrgPermission("editPayroll");
+    const result = await issueMonthEndPayslips(month || payslipIssueMonth(), actor.organizationId);
     revalidatePayroll();
     return { ok: true, data: result };
   } catch (error) {

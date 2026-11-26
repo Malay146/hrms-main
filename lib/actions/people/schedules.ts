@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { actionErrorMessage, requirePermission, requireOrgPermission } from "@/lib/auth/session";
 import { daysPerWeek, lineHours, weeklyHours } from "@/lib/people/schedule-hours";
 import { firstZodError, upsertScheduleSchema } from "@/lib/shared/validations";
 import type { ActionResult } from "@/lib/shared/types";
@@ -66,8 +66,9 @@ function mapSchedule(row: {
 
 export async function listSchedules(): Promise<ActionResult<ScheduleListItem[]>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
     const rows = await prisma.workingSchedule.findMany({
+      where: { organizationId: actor.organizationId },
       include: { lines: true },
       orderBy: [{ active: "desc" }, { name: "asc" }],
     });
@@ -81,9 +82,9 @@ export async function getScheduleAction(
   id: string,
 ): Promise<ActionResult<ScheduleListItem>> {
   try {
-    await requirePermission("managePeople");
-    const row = await prisma.workingSchedule.findUnique({
-      where: { id },
+    const actor = await requireOrgPermission("managePeople");
+    const row = await prisma.workingSchedule.findFirst({
+      where: { id, organizationId: actor.organizationId },
       include: { lines: true },
     });
     if (!row) return { ok: false, error: "Schedule not found." };
@@ -114,6 +115,14 @@ export async function upsertScheduleAction(input: {
     });
     if (!profile) {
       return { ok: false, error: "Your employee profile is missing." };
+    }
+
+    if (parsed.data.id) {
+      const owned = await prisma.workingSchedule.findFirst({
+        where: { id: parsed.data.id, organizationId: profile.organizationId },
+        select: { id: true },
+      });
+      if (!owned) return { ok: false, error: "Schedule not found." };
     }
 
     const lines = parsed.data.lines.map((line) => ({
