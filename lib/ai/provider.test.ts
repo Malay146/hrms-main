@@ -29,13 +29,13 @@ describe("aiProviderConfig", () => {
     setEnv({
       OPENAI_API_KEY: "sk-openai",
       AI_BASE_URL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-      AI_MODEL: "gemini-2.5-flash",
+      AI_MODEL: "gemini-3.5-flash-lite",
       AI_API_KEY: "gemini-key",
     });
     const config = aiProviderConfig();
     assert.equal(config.provider, "compatible");
     assert.equal(config.apiKey, "gemini-key");
-    assert.equal(config.modelId, "gemini-2.5-flash");
+    assert.equal(config.modelId, "gemini-3.5-flash-lite");
   });
 
   it("never sends the OpenAI key to another provider", () => {

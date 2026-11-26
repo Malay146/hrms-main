@@ -788,6 +788,8 @@ async function main() {
         workedHours: 0,
       });
     }
+    // Days after today only carry approved leave; nobody has clocked in yet.
+    if (key > todayKey) continue;
     for (const [i, userId] of take(presentOnly).entries()) {
       const late = i % 4 === 0;
       const hourUtc = late ? 4 + (i % 2) : 2 + (i % 2);

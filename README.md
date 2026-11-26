@@ -52,7 +52,7 @@ The seed builds attendance and leave relative to **today**, so dashboards always
 | `BETTER_AUTH_URL`, `NEXT_PUBLIC_APP_URL` | yes | `http://localhost:3000` locally |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | for email | Gmail SMTP. `SMTP_PASS` must be a [Google App Password](https://myaccount.google.com/apppasswords) (2-Step Verification on) |
 | `MAIL_SKIP_DOMAINS` | no | Recipient domains that never get mail. Default `company.com` (the seeded demo accounts) |
-| `AI_BASE_URL`, `AI_MODEL`, `AI_API_KEY` | no | Any OpenAI-compatible provider. Free option: Google Gemini (`https://generativelanguage.googleapis.com/v1beta/openai/`, `gemini-2.5-flash`, key from [AI Studio](https://aistudio.google.com/apikey)). Gemini's free tier may use prompts to improve Google products |
+| `AI_BASE_URL`, `AI_MODEL`, `AI_API_KEY` | no | Any OpenAI-compatible provider. Free option: Google Gemini (`https://generativelanguage.googleapis.com/v1beta/openai/`, `gemini-3.5-flash-lite`, key from [AI Studio](https://aistudio.google.com/apikey)). Gemini's free tier may use prompts to improve Google products |
 | `OPENAI_API_KEY` | no | OpenAI (`gpt-4o-mini`), used when `AI_API_KEY` is empty. Metrics work with no AI key at all |
 | `REDIS_URL` | no | `redis://localhost:6379`. Without it, rate limits are per-process memory |
 | `CRON_SECRET` | no | Protects `/api/cron/*`. Generate with `openssl rand -hex 32` |
