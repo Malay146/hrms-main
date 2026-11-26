@@ -1,4 +1,4 @@
-import { createOpenAI } from "@ai-sdk/openai";
+import { aiModel, isAiConfigured } from "./provider";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
@@ -8,10 +8,7 @@ import { guardSelectSql, SQL_MAX_ROWS } from "./sql-guard";
 
 const STATEMENT_TIMEOUT_MS = 5_000;
 
-function model() {
-  const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return openai("gpt-4o-mini");
-}
+const model = aiModel;
 
 // Every key must be required — OpenAI structured output rejects optional keys.
 const querySchema = z.object({
@@ -71,7 +68,7 @@ export async function answerFromSql(input: {
   history: { role: "user" | "assistant"; body: string }[];
   today: string;
 }): Promise<CopilotSqlAnswer> {
-  if (!process.env.OPENAI_API_KEY) return null;
+  if (!isAiConfigured()) return null;
 
   let sql: string;
   try {

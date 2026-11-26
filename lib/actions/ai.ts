@@ -315,7 +315,7 @@ export async function assembleAiSnapshot(periodDays = PERIOD_DAYS, insights?: Ai
       today,
       canPeople,
       canPayroll,
-      aiEnabled: Boolean(process.env.OPENAI_API_KEY),
+      aiEnabled: isAiConfigured(),
       insights: insights ?? (await loadCachedInsights(orgId)),
       performance,
     }),
