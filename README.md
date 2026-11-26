@@ -4,6 +4,8 @@ Human resource and payroll management for one or more companies: employees, depa
 
 Built with Next.js 16, PostgreSQL, Prisma 7, and Better Auth.
 
+**Live demo:** https://hrms-main-mauve.vercel.app (demo logins below)
+
 **Evaluator / jury notes:** [docs/EVALUATOR-HANDBOOK.md](docs/EVALUATOR-HANDBOOK.md) covers features, edge cases, performance work, and the stack.
 
 ## Prerequisites
@@ -100,6 +102,23 @@ npm run cron:jobs
 
 - **Vercel:** `vercel.json` schedules both daily. Set `CRON_SECRET` in the project's environment.
 - **Local machine:** add a crontab entry while the app is running, e.g. `30 0 * * * cd /path/to/HRMS-main && npm run cron:payslips`.
+
+## Deployment (Vercel + Neon)
+
+Production runs on Vercel (region `sin1`, Singapore) with a Neon Postgres database in the same region, attached through the Vercel Neon integration (env prefix `DATABASE`, so the app reads `DATABASE_URL`). Every push to `main` deploys production; pull requests get preview deployments.
+
+- **URLs:** no `BETTER_AUTH_URL` is needed on Vercel. `lib/shared/app-url.ts` uses the production domain on production and the deployment URL on previews. Set `BETTER_AUTH_URL` only for a custom domain.
+- **Environment:** set the same variables as `.env` in the Vercel project, except the URLs. Use a fresh `BETTER_AUTH_SECRET` and `CRON_SECRET`, and `PG_POOL_MAX=5` for serverless.
+- **Schema changes:** run migrations against Neon's direct (unpooled) URL before or after merging:
+  ```bash
+  DATABASE_URL="<DATABASE_URL_UNPOOLED from Vercel>" npx prisma migrate deploy
+  ```
+- **Cron:** Vercel calls `/api/cron/*` daily (see `vercel.json`) with `CRON_SECRET`.
+- **Rate limits:** without `REDIS_URL` they are per serverless instance. Add an Upstash Redis URL for shared limits.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs lint, typecheck, tests, and the production build against a fresh Postgres on every pull request and push to `main`.
 
 ## Useful scripts
 
