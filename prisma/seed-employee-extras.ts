@@ -32,10 +32,13 @@ async function main() {
   });
   if (!structure) throw new Error("No salary structure");
 
-  const hr = await prisma.employeeProfile.findFirst({
+  const reviewers = await prisma.employeeProfile.findMany({
     where: { organizationId: org.id, role: { in: ["hr_manager", "admin"] } },
     select: { id: true },
+    orderBy: { employeeId: "asc" },
   });
+  // Nobody reviews themselves: fall back to the next HR/admin reviewer.
+  const reviewerFor = (employeeId: string) => reviewers.find((r) => r.id !== employeeId) ?? null;
 
   let cycle = await prisma.performanceCycle.findFirst({
     where: { organizationId: org.id, name: "Q3 2026" },
@@ -155,7 +158,7 @@ async function main() {
         data: {
           cycleId: cycle.id,
           employeeId: profile.id,
-          reviewerId: hr?.id ?? null,
+          reviewerId: reviewerFor(profile.id)?.id ?? null,
           status,
           overallRating: rating,
           summary: `${profile.fullName} delivered solid results this cycle with clear ownership.`,
@@ -202,7 +205,7 @@ async function main() {
           status === "acknowledged"
             ? q3.employeeComments || "Appreciate the feedback — will keep momentum."
             : q3.employeeComments,
-        reviewerId: q3.reviewerId ?? hr?.id ?? null,
+        reviewerId: q3.reviewerId && q3.reviewerId !== profile.id ? q3.reviewerId : reviewerFor(profile.id)?.id ?? null,
         submittedAt: q3.submittedAt ?? new Date(),
         acknowledgedAt: status === "acknowledged" ? q3.acknowledgedAt ?? new Date() : null,
       },
@@ -230,7 +233,7 @@ async function main() {
         data: {
           cycleId: q4.id,
           employeeId: profile.id,
-          reviewerId: hr?.id ?? null,
+          reviewerId: reviewerFor(profile.id)?.id ?? null,
           status: "draft",
           summary: "",
           goals: {
