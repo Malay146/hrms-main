@@ -101,6 +101,7 @@ import {
   moveCandidateStageAction,
   rejectCandidateAction,
   scheduleCandidateInterviewAction,
+  addCandidateAction,
 } from "@/lib/actions/recruitment";
 import { getCurrentUser, requireUser } from "@/lib/auth/session";
 import { PIPELINE_STAGES } from "@/lib/recruitment/stages";
@@ -108,6 +109,7 @@ import {
   applyLeaveSchema,
   changePasswordSchema,
   organizationSettingsSchema,
+  addCandidateSchema,
   copilotQuestionSchema,
   createDepartmentSchema,
   createEmployeeSchema,
@@ -1039,6 +1041,15 @@ export const apiOperations: ApiOperation[] = [
     tags: ["Recruitment"],
     body: jobBody,
     handler: async ({ body }) => createJobOpeningAction(body as never),
+  }),
+  defineOp({
+    method: "post",
+    path: "/recruitment/candidates",
+    operationId: "addCandidate",
+    summary: "Add an applicant to a job opening",
+    tags: ["Recruitment"],
+    body: addCandidateSchema,
+    handler: async ({ body }) => addCandidateAction(body as Parameters<typeof addCandidateAction>[0]),
   }),
   defineOp({
     method: "post",

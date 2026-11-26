@@ -321,7 +321,7 @@ Employee business code: `COMPANY-2026-008` from `lib/people/employee-id.ts` (`sl
 | Route                   | Status      | Functionality                                                                                                                       |
 | ----------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `/admin/hr/performance` | Wired       | Cycles (open/close), reviews (draft → submit), goals 0–100%, ratings.                                                               |
-| `/admin/hr/recruitment` | **Partial** | Create jobs, move stages, reject, schedule interview. **No “add applicant” action.** Board **auto-seeds demo candidates** if empty. |
+| `/admin/hr/recruitment` | Wired       | Create jobs, add applicants (duplicate email per job blocked, no future dates, closed jobs refused), move stages, reject, schedule interview. Board auto-seeds demo candidates if empty. |
 | `/admin/analytics`      | Wired       | Health score, attendance/late/leave, flight-risk table, optional insight cards. Admin + HR manager only.                            |
 | `/admin/notifications`  | Wired       | Inbox, mark read, delete, prefs, **announcements** (staff). Sounds flag stored, **no audio player**.                                |
 | `/admin/settings`       | Wired       | Organization name/email (admin edits, other staff read-only), password change, real signed-in sessions with remote sign-out.        |
@@ -816,7 +816,7 @@ Say these out loud if asked “is everything done?”
 | Employee payslip print                     | Admin print only                                                                    |
 | Fault-tolerance 4–10, 12                   | See §14 (rate limits are done)                                                      |
 | DB redesign 6–14                           | See §10.2                                                                           |
-| README feature list                        | Current — recruitment is partial (no manual “add applicant”)                         |
+| README feature list                        | Current                                                                              |
 
 
 ---

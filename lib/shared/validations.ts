@@ -23,6 +23,25 @@ export const signUpSchema = z
     path: ["confirmPassword"],
   });
 
+export const addCandidateSchema = z.object({
+  name: z.string().trim().min(2, "Candidate name is required.").max(120),
+  email: z
+    .string()
+    .trim()
+    .max(200)
+    .optional()
+    .transform((value) => value || undefined)
+    .pipe(z.string().email("Enter a valid email.").optional()),
+  jobOpeningId: z.string().min(1, "Choose the job they applied for."),
+  experienceYears: z.coerce.number().int().min(0, "Experience cannot be negative.").max(60),
+  source: z.string().trim().max(60).optional(),
+  rating: z.coerce.number().min(0).max(5).optional(),
+  appliedAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the application date.")
+    .optional(),
+});
+
 export const organizationSettingsSchema = z.object({
   name: z.string().trim().min(2, "Organization name is required.").max(120),
   email: z.string().trim().email("Enter a valid organization email."),

@@ -82,7 +82,7 @@ All of these read and write PostgreSQL:
 - **Leave:** time-off types, allocations, requests, approvals, balances
 - **Payroll:** salary structures and rules, payruns (compute, validate, mark paid), payslips with print view and email
 - **Performance:** review cycles, goals, self and manager reviews
-- **Recruitment:** job openings and a candidate pipeline (stage moves, interviews, reject). Adding applicants by hand is not built yet
+- **Recruitment:** job openings, adding applicants (with duplicate checks), and a candidate pipeline (drag between stages, interviews, reject)
 - **Notifications:** in-app plus optional email, per-user preferences, announcements
 - **AI Analytics** (admin and HR manager): live health metrics, AI insight cards, and an HR copilot that answers from the database and can take actions
 - **Settings:** organization name and email (admin only), password change, and signed-in sessions with remote sign-out
