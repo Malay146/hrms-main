@@ -35,12 +35,12 @@ export function sqlAttendanceSummaryQuery(organizationId: string, monthStart: Da
           WHERE a.date >= ${monthStart} AND a.date <= ${today}
             AND a.status::text IN ('present', 'half_day')
         )::int AS "monthPresent",
-        COUNT(*) FILTER (WHERE a.date = ${today} AND a.status::text = 'present')::int AS "todayPresent",
+        COUNT(*) FILTER (
+          WHERE a.date = ${today} AND a.status::text IN ('present', 'half_day')
+        )::int AS "todayPresent",
         COUNT(*) FILTER (WHERE a.date = ${today} AND a.status::text = 'absent')::int AS "todayAbsent",
         COUNT(*) FILTER (WHERE a.date = ${today} AND a.status::text = 'leave')::int AS "todayLeave"
       FROM attendance a
-      INNER JOIN employee_profile p ON p.id = a."employeeId"
       WHERE a."organizationId" = ${organizationId}
-        AND p.status::text <> 'inactive'
     `;
 }
