@@ -49,7 +49,15 @@ Auth, employees, departments, attendance, leave, payroll, dashboards, profile, p
 
 ## AI Analytics
 
-Admin and HR Manager can open **AI Analytics** (`/admin/analytics`). Live health, attendance, leave, and payroll metrics work without a model. Written insight cards need `OPENAI_API_KEY` in `.env`. The copilot still answers attendance/leave count questions from the database when no key is set.
+Admin and HR Manager can open **AI Analytics** (`/admin/analytics`). Live health, attendance, leave, and payroll metrics work without a model. Gemini powers written insight cards and copilot phrasing when `GEMINI_API_KEY` is set in `.env`; `GEMINI_MODEL` optionally selects a model (default: `gemini-3.5-flash-lite`). The copilot still answers attendance/leave count questions from the database when no key is set.
+
+The **Workforce AI** workspace (`/admin/analytics/workforce`) adds configurable role skill requirements, employee skill-gap summaries, validated attendance/leave/performance/skill-gap reports, and Employee 360 metrics. Employees and their direct managers can use `/employee/insights` within their access scope. Gemini recommendations and observations require `GEMINI_API_KEY`; query templates and calculated metrics remain server-controlled. Turnover reports are unavailable until termination dates are recorded.
+
+Apply the workforce feature schema before using these pages:
+
+```bash
+npm run db:migrate
+```
 
 Payroll-only roles and employees cannot open `/admin/analytics`.
 

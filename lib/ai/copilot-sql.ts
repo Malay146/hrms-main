@@ -1,16 +1,15 @@
-import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
 import { SQL_QUERY_RULES, SQL_SCHEMA_CATALOG } from "./sql-catalog";
 import { guardSelectSql, SQL_MAX_ROWS } from "./sql-guard";
+import { getGeminiModel, isGeminiConfigured } from "./provider";
 
 const STATEMENT_TIMEOUT_MS = 5_000;
 
 function model() {
-  const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return openai("gpt-4o-mini");
+  return getGeminiModel();
 }
 
 // Every key must be required — OpenAI structured output rejects optional keys.
@@ -71,7 +70,7 @@ export async function answerFromSql(input: {
   history: { role: "user" | "assistant"; body: string }[];
   today: string;
 }): Promise<CopilotSqlAnswer> {
-  if (!process.env.OPENAI_API_KEY) return null;
+  if (!isGeminiConfigured()) return null;
 
   let sql: string;
   try {

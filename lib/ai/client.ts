@@ -1,7 +1,7 @@
-import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { ALLOWED_INSIGHT_HREFS } from "./insights";
+import { getGeminiModel, isGeminiConfigured } from "./provider";
 import {
   ASSISTANT_TOOLS,
   LOOKUP_TOOLS,
@@ -40,16 +40,15 @@ const leaveBriefSchema = z.object({
 });
 
 export function isAiConfigured() {
-  return Boolean(process.env.OPENAI_API_KEY);
+  return isGeminiConfigured();
 }
 
 function model() {
-  const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return openai("gpt-4o-mini");
+  return getGeminiModel();
 }
 
 export async function generateInsightCards(snapshotJson: unknown) {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!isGeminiConfigured()) {
     throw new Error("AI provider is not configured.");
   }
   const { output } = await generateText({
@@ -74,7 +73,7 @@ export async function phraseAssistantChat(input: {
   history: { role: "user" | "assistant"; body: string }[];
 }) {
   const fallback = chatReply(input.firstName, input.question);
-  if (!process.env.OPENAI_API_KEY || isHelp(input.question) || isGreeting(input.question)) {
+  if (!isGeminiConfigured() || isHelp(input.question) || isGreeting(input.question)) {
     return fallback;
   }
   try {
@@ -174,7 +173,7 @@ export async function planCopilotTurn(input: {
   ) {
     return fallback;
   }
-  if (!process.env.OPENAI_API_KEY) return fallback;
+  if (!isGeminiConfigured()) return fallback;
 
   try {
     const { output } = await generateText({
@@ -277,7 +276,7 @@ Keep answer short.`,
 }
 
 export async function generateLeaveBrief(payload: unknown) {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!isGeminiConfigured()) {
     throw new Error("AI provider is not configured.");
   }
   const { output } = await generateText({

@@ -352,7 +352,8 @@ Copy `.env.example` → `.env`:
 | `BETTER_AUTH_URL`               | Yes      | Canonical app URL for auth                                               |
 | `NEXT_PUBLIC_APP_URL`           | Yes      | Public URL (login links, auth client)                                    |
 | `SMTP_HOST/PORT/USER/PASS/FROM` | For mail | New-user credentials + payslip emails                                    |
-| `OPENAI_API_KEY`                | Optional | AI insight narratives / copilot phrasing (metrics still work without it) |
+| `GEMINI_API_KEY`                | Optional | Gemini AI narratives / copilot phrasing (metrics still work without it) |
+| `GEMINI_MODEL`                  | Optional | Gemini model (default `gemini-3.5-flash-lite`)                             |
 | `REDIS_URL`                     | Optional | Shared rate limits. Omit locally; the app uses in-memory counters        |
 
 

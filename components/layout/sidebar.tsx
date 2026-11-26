@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/utils/cn";
@@ -123,6 +123,7 @@ const adminNavItems: SidebarItemType[] = [
     children: [
       { label: "Recruitment", href: "/admin/hr/recruitment" },
       { label: "Performance", href: "/admin/hr/performance" },
+      { label: "Workforce AI", href: "/admin/analytics/workforce" },
     ],
   },
   {
@@ -179,6 +180,11 @@ const employeeNavItems: SidebarItemType[] = [
     href: "/employee/performance",
   },
   {
+    label: "Career & Insights",
+    icon: AiIcon,
+    href: "/employee/insights",
+  },
+  {
     label: "divider",
     icon: () => null,
     isDivider: true,
@@ -194,6 +200,32 @@ const employeeNavItems: SidebarItemType[] = [
     href: "/employee/settings",
   },
 ];
+
+const themeChangeEvent = "app-theme-change";
+const darkModeQuery = "(prefers-color-scheme: dark)";
+
+function getDarkModeSnapshot() {
+  const saved = localStorage.getItem("theme");
+  if (saved) return saved === "dark";
+  return window.matchMedia(darkModeQuery).matches;
+}
+
+function getServerDarkModeSnapshot() {
+  return false;
+}
+
+function subscribeToDarkMode(onChange: () => void) {
+  const mediaQuery = window.matchMedia(darkModeQuery);
+  window.addEventListener("storage", onChange);
+  window.addEventListener(themeChangeEvent, onChange);
+  mediaQuery.addEventListener("change", onChange);
+
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(themeChangeEvent, onChange);
+    mediaQuery.removeEventListener("change", onChange);
+  };
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -215,24 +247,14 @@ export default function Sidebar() {
     : employeeNavItems;
 
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("theme");
-      if (saved) return saved === "dark";
-      return window.matchMedia("(prefers-color-scheme: dark)").matches;
-    }
-    return false;
-  });
+  const isDarkMode = useSyncExternalStore(
+    subscribeToDarkMode,
+    getDarkModeSnapshot,
+    getServerDarkModeSnapshot,
+  );
 
   useEffect(() => {
-    const root = window.document.documentElement;
-    if (isDarkMode) {
-      root.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      root.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
+    window.document.documentElement.classList.toggle("dark", isDarkMode);
   }, [isDarkMode]);
   const [expandedSections, setExpandedSections] = useState<
     Record<string, boolean>
@@ -417,7 +439,10 @@ export default function Sidebar() {
           </div>
           {!isCollapsed && (
             <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
+              onClick={() => {
+                localStorage.setItem("theme", isDarkMode ? "light" : "dark");
+                window.dispatchEvent(new Event(themeChangeEvent));
+              }}
               className={cn(
                 "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-focus-ring focus:ring-offset-1",
                 isDarkMode ? "bg-primary" : "bg-border-strong",

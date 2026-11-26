@@ -6,7 +6,7 @@ const globalForPrisma = globalThis as unknown as {
   prismaGeneration?: string;
 };
 
-const PRISMA_GENERATION = "scale-5k-jobs-metrics-v1";
+const PRISMA_GENERATION = "workforce-ai-features-v2";
 
 function createPrismaClient() {
   const connectionString = process.env.DATABASE_URL;

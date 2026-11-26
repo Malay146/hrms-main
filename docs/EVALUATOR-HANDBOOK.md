@@ -120,7 +120,7 @@ Generated Prisma client is `generated/prisma/` (do not hand-edit). Alias: `@/gen
 | Validation          | **Zod 4**                                                  | `lib/shared/validations.ts` + API bodies                                        |
 | Dates               | `Intl` + `lib/shared/dates.ts`                             | Kolkata calendar keys, not `Date` local TZ                                      |
 | Mail                | **Nodemailer 10**                                          | New-user credentials + payslips (`lib/shared/mail.ts`)                          |
-| AI SDK              | **Vercel AI SDK (**`ai`**)** + `@ai-sdk/openai`            | Optional `gpt-4o-mini` for insights, chat phrasing, tool *choice*               |
+| AI SDK              | **Vercel AI SDK (**`ai`**)** + `@ai-sdk/google`            | Optional Gemini Flash Lite for insights, chat phrasing, tool *choice*             |
 | Spreadsheets        | **xlsx 0.18**                                              | Employee import; **dynamic** `import()` so it is not on every page              |
 | Charts              | **Recharts 3**                                             | Admin home (lazy), analytics, performance, recruitment, employee dashboard      |
 | HTTP docs           | **swagger-ui-dist / swagger-ui-react**                     | `/swagger-ui`                                                                   |
@@ -170,7 +170,8 @@ Installed but **not used as a data layer**:
 | `NEXT_PUBLIC_APP_URL` | Yes      | Public URL / auth client                                                                      |
 | `SMTP_*`              | For mail | User-create emails + payslips                                                                 |
 | `CRON_SECRET`         | For cron | `/api/cron/jobs` and `/api/cron/payslips`                                                     |
-| `OPENAI_API_KEY`      | Optional | Insight cards, copilot phrasing, leave-brief LLM. **Metrics and SQL lookups work without it** |
+| `GEMINI_API_KEY`      | Optional | Gemini insight cards, copilot phrasing, leave-brief LLM. **Metrics and SQL lookups work without it** |
+| `GEMINI_MODEL`        | Optional | Gemini model name (default `gemini-3.5-flash-lite`)                                         |
 | `REDIS_URL`           | Optional | Shared rate-limit counters. Without it, limits are in-memory per Node process. **Not** used for sessions, jobs, or dashboard cache |
 | `PG_POOL_MAX`         | Optional | Override pool size (default 10 dev / 20 prod)                                                 |
 
@@ -405,11 +406,11 @@ Keep this list for “where is the business logic?” — **not** inside React.
   - **Flight risk 0–100:** attendance drop, sick/unpaid days, leftover paid leave + drop, tenure <90d or >540d
   - **Health 0–100:** attendance (40) + pending leave (25) + inactive % (20) + payrun warnings (15) → bands `healthy` (≥80) / `watch` (≥55) / `at_risk`
 
-Numbers work **without** `OPENAI_API_KEY`.
+Numbers work **without** `GEMINI_API_KEY`.
 
 ### 8.2 Insight cards (optional LLM)
 
-`generateAiInsights` → `toModelSnapshot` (no names/wages/bank) → `gpt-4o-mini` JSON → `mapInsightCards` allowlists hrefs (`/admin/people/leave`, attendance, employees, payroll, performance, analytics). Stored in `ai_insight`, ~6h TTL. Button fails closed if no API key.
+`generateAiInsights` → `toModelSnapshot` (no names/wages/bank) → Gemini structured output → `mapInsightCards` allowlists hrefs (`/admin/people/leave`, attendance, employees, payroll, performance, analytics). Stored in `ai_insight`, ~6h TTL. Button fails closed if no API key.
 
 ### 8.3 HR copilot (assistant)
 

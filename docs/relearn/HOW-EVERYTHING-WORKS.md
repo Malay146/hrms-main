@@ -379,7 +379,7 @@ Don’t mix local midnight `Date` objects carelessly — you’ll get off-by-one
 1. Metrics built into snapshots (`lib/ai/build-snapshot.ts`, jobs)
 2. GET analytics prefers `org_metrics_snapshot` (scale)
 3. Copilot widget: `components/ai/copilot-widget.tsx` → `lib/actions/ai.ts`
-4. Insights cards need `OPENAI_API_KEY`; numbers can still compute without it
+4. Insights cards need `GEMINI_API_KEY`; numbers can still compute without it
 
 
 
