@@ -4,6 +4,8 @@
  */
 import "dotenv/config";
 import { prisma } from "../lib/db";
+import { recomputeAttendanceHours } from "./recompute-attendance";
+import { refreshRecruitmentDates } from "../lib/demo/refresh";
 import {
   dateFromKey,
   eachDateKey,
@@ -464,6 +466,23 @@ async function clearFailedJobs(organizationId: string) {
   console.log(`Cleared failed jobs: ${result.count}`);
 }
 
+async function syncProfileWageFromContracts(organizationId: string) {
+  // Payrun eligibility and the payslip wage read employee_profile.wage, so it
+  // must match the running contract.
+  const running = await prisma.contract.findMany({
+    where: { status: "running", employee: { organizationId } },
+    select: { employeeId: true, wage: true, employee: { select: { wage: true } } },
+  });
+  let fixed = 0;
+  for (const row of running) {
+    if (row.employee.wage === null || Number(row.employee.wage) !== Number(row.wage)) {
+      await prisma.employeeProfile.update({ where: { id: row.employeeId }, data: { wage: row.wage } });
+      fixed += 1;
+    }
+  }
+  console.log(`Profile wages synced to running contracts: ${fixed}`);
+}
+
 async function main() {
   const org = await prisma.organization.findFirst({ orderBy: { createdAt: "asc" } });
   if (!org) throw new Error("No organization found");
@@ -475,6 +494,11 @@ async function main() {
   await alignAttendanceWithLeave(org.id);
   await seedPerformanceSample(org.id);
   await seedAdminNotifications(org.id);
+  await syncProfileWageFromContracts(org.id);
+  const recruitment = await refreshRecruitmentDates(org.id, kolkataTodayKey());
+  console.log(`Job deadlines moved forward: ${recruitment.jobDeadlinesMoved}; interviews rescheduled: ${recruitment.interviewsRescheduled}`);
+  const hours = await recomputeAttendanceHours(prisma, org.id);
+  console.log(`Attendance hours recomputed: ${hours.updated} of ${hours.checked} closed shifts`);
   await rebuildRollups(org.id);
   await clearFailedJobs(org.id);
   console.log("Repair complete.");

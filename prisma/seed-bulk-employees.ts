@@ -207,12 +207,12 @@ export function buildBulkEmployees(count = 300, options?: BuildBulkOptions): Bul
     const name = `${first} ${last}`;
     const email = `${slugify(first)}.${slugify(last)}.${String(idx + 1).padStart(3, "0")}@company.com`;
 
-    // Status mix: ~72% active, ~14% on leave, ~14% inactive
-    const statusRoll = idx % 7;
+    // Status mix: ~85% active, ~5% on leave today, ~10% inactive
+    const statusRoll = idx % 20;
     const status: BulkEmployeeSeed["status"] =
-      statusRoll === 0 || statusRoll === 1
+      statusRoll === 0
         ? "on_leave"
-        : statusRoll === 2
+        : statusRoll === 1 || statusRoll === 2
           ? "inactive"
           : "active";
 

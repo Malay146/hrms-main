@@ -52,8 +52,12 @@ export async function recomputeAttendanceDailyRollup(organizationId: string, dat
     },
   });
 
-  revalidateTag("attendance", "max");
-  revalidateTag("payroll", "max");
+  try {
+    revalidateTag("attendance", "max");
+    revalidateTag("payroll", "max");
+  } catch {
+    // Outside a Next request (seed / demo scripts) there is no cache to revalidate.
+  }
   return {
     date: dateKey,
     presentCount,
