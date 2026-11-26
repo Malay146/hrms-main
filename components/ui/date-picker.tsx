@@ -56,6 +56,8 @@ type DatePickerProps = {
   onChange: (value: string) => void;
   placeholder?: string;
   min?: string;
+  /** Latest selectable date (YYYY-MM-DD). */
+  max?: string;
   className?: string;
 };
 
@@ -64,6 +66,7 @@ export function DatePicker({
   onChange,
   placeholder = "Pick a date",
   min,
+  max,
   className,
 }: DatePickerProps) {
   const today = kolkataTodayKey();
@@ -117,7 +120,7 @@ export function DatePicker({
           </div>
           <div className="grid grid-cols-7 gap-1">
             {cells.map((cell) => {
-              const disabled = Boolean(min && cell.key < min);
+              const disabled = Boolean((min && cell.key < min) || (max && cell.key > max));
               const selected = value === cell.key;
               const isToday = cell.key === today;
               return (

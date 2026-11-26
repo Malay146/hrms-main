@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Activity as ActivityIcon,
   FilterX,
+  UserPlus,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
@@ -24,6 +25,7 @@ import { toast } from "sonner";
 import { PieChartTooltip, chartTooltipWrapperStyle } from "@/components/charts/chart-tooltip";
 import { ListPagination } from "@/components/ui/list-pagination";
 import {
+  addCandidateAction,
   createJobOpeningAction,
   moveCandidateStageAction,
   rejectCandidateAction,
@@ -37,6 +39,7 @@ import {
   type PipelineStageLabel,
 } from "@/lib/recruitment/stages";
 import { kolkataTodayKey } from "@/lib/shared/dates";
+import { CANDIDATE_SOURCES } from "@/lib/recruitment/codes";
 
 type Applicant = RecruitmentCandidate;
 type JobOpening = RecruitmentJob;
@@ -107,6 +110,17 @@ export default function RecruitmentClient({
     null,
   );
   const [isAddJobOpen, setIsAddJobOpen] = useState(false);
+  const [isAddApplicantOpen, setIsAddApplicantOpen] = useState(false);
+  const emptyApplicant = () => ({
+    name: "",
+    email: "",
+    jobOpeningId: "",
+    experienceYears: "",
+    source: "LinkedIn",
+    rating: "",
+    appliedAt: kolkataTodayKey(),
+  });
+  const [draftApplicant, setDraftApplicant] = useState(emptyApplicant);
   const [viewJob, setViewJob] = useState<JobOpening | null>(null);
   const [viewApplicant, setViewApplicant] = useState<Applicant | null>(null);
   const [scheduleTarget, setScheduleTarget] = useState<Applicant | null>(null);
@@ -233,6 +247,61 @@ export default function RecruitmentClient({
       toast.success("Job opening created", {
         description: `${result.data.title} is now live.`,
       });
+    });
+  };
+
+  const activeJobs = jobs.filter((job) => job.status === "Active");
+
+  const openAddApplicant = (jobOpeningId?: string) => {
+    setDraftApplicant({
+      ...emptyApplicant(),
+      jobOpeningId: jobOpeningId ?? activeJobs[0]?.id ?? "",
+    });
+    setIsAddApplicantOpen(true);
+  };
+
+  const handleAddApplicant = () => {
+    if (!draftApplicant.name.trim() || !draftApplicant.jobOpeningId) {
+      toast.error("Missing fields", {
+        description: "Name and job opening are required.",
+      });
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await addCandidateAction({
+        name: draftApplicant.name.trim(),
+        email: draftApplicant.email.trim() || undefined,
+        jobOpeningId: draftApplicant.jobOpeningId,
+        experienceYears: draftApplicant.experienceYears.trim() || "0",
+        source: draftApplicant.source || undefined,
+        rating: draftApplicant.rating.trim() || undefined,
+        appliedAt: draftApplicant.appliedAt || undefined,
+      });
+      if (!result.ok) {
+        toast.error("Could not add applicant", { description: result.error });
+        return;
+      }
+      applyCandidateUpdate(result.data);
+      setJobs((prev) =>
+        prev.map((job) =>
+          job.id === result.data.jobOpeningId
+            ? { ...job, applicants: job.applicants + 1 }
+            : job,
+        ),
+      );
+      setBoard((prev) => ({
+        ...prev,
+        stats: {
+          ...prev.stats,
+          totalApplicants: prev.stats.totalApplicants + 1,
+        },
+      }));
+      setIsAddApplicantOpen(false);
+      toast.success("Applicant added", {
+        description: `${result.data.name} (${result.data.code}) is in Applied for ${result.data.position}.`,
+      });
+      router.refresh();
     });
   };
 
@@ -421,15 +490,26 @@ export default function RecruitmentClient({
             Manage job openings, candidates, and the hiring process.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsAddJobOpen(true)}
-          className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out disabled:opacity-60"
-          disabled={pending}
-        >
-          <Plus className="size-4" />
-          New Job Opening
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openAddApplicant()}
+            className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border bg-surface hover:bg-surface-hover text-sm font-semibold text-zinc-700 shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out disabled:opacity-60"
+            disabled={pending}
+          >
+            <UserPlus className="size-4" />
+            Add Applicant
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsAddJobOpen(true)}
+            className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out disabled:opacity-60"
+            disabled={pending}
+          >
+            <Plus className="size-4" />
+            New Job Opening
+          </button>
+        </div>
       </div>
 
       {/* Statistics Row */}
@@ -1141,6 +1221,151 @@ export default function RecruitmentClient({
             Publish Opening
           </button>
         </div>
+      </Modal>
+
+      <Modal
+        open={isAddApplicantOpen}
+        onClose={() => setIsAddApplicantOpen(false)}
+        title="Add Applicant"
+        description="Record a candidate for an open position. They start in Applied."
+      >
+        {activeJobs.length === 0 ? (
+          <div className="flex flex-col gap-3 text-left">
+            <p className="text-sm text-zinc-500">
+              There are no active job openings. Create one first, then add applicants to it.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAddApplicantOpen(false);
+                setIsAddJobOpen(true);
+              }}
+              className="cursor-pointer px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white"
+            >
+              New Job Opening
+            </button>
+          </div>
+        ) : (
+          <form
+            className="flex flex-col gap-4 text-left"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAddApplicant();
+            }}
+          >
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              Full name
+              <input
+                value={draftApplicant.name}
+                onChange={(e) =>
+                  setDraftApplicant((current) => ({ ...current, name: e.target.value }))
+                }
+                className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-900 bg-surface focus:outline-none focus:border-border-strong"
+                placeholder="Priya Sharma"
+                required
+                minLength={2}
+                autoFocus
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              Email (optional)
+              <input
+                type="email"
+                value={draftApplicant.email}
+                onChange={(e) =>
+                  setDraftApplicant((current) => ({ ...current, email: e.target.value }))
+                }
+                className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-900 bg-surface focus:outline-none focus:border-border-strong"
+                placeholder="priya@example.com"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+              Applied for
+              <select
+                value={draftApplicant.jobOpeningId}
+                onChange={(e) =>
+                  setDraftApplicant((current) => ({ ...current, jobOpeningId: e.target.value }))
+                }
+                className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-900 bg-surface focus:outline-none focus:border-border-strong cursor-pointer"
+                required
+              >
+                {activeJobs.map((job) => (
+                  <option key={job.id} value={job.id}>
+                    {job.title} · {job.department} ({job.code})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+                Experience (years)
+                <input
+                  type="number"
+                  min={0}
+                  max={60}
+                  step={1}
+                  value={draftApplicant.experienceYears}
+                  onChange={(e) =>
+                    setDraftApplicant((current) => ({ ...current, experienceYears: e.target.value }))
+                  }
+                  className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-900 bg-surface focus:outline-none focus:border-border-strong"
+                  placeholder="0"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+                Source
+                <select
+                  value={draftApplicant.source}
+                  onChange={(e) =>
+                    setDraftApplicant((current) => ({ ...current, source: e.target.value }))
+                  }
+                  className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-900 bg-surface focus:outline-none focus:border-border-strong cursor-pointer"
+                >
+                  {CANDIDATE_SOURCES.map((source) => (
+                    <option key={source} value={source}>
+                      {source}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+                Initial rating (0–5, optional)
+                <input
+                  type="number"
+                  min={0}
+                  max={5}
+                  step={0.1}
+                  value={draftApplicant.rating}
+                  onChange={(e) =>
+                    setDraftApplicant((current) => ({ ...current, rating: e.target.value }))
+                  }
+                  className="h-10 px-3 border border-border rounded-lg text-sm text-zinc-900 bg-surface focus:outline-none focus:border-border-strong"
+                  placeholder="—"
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-xs font-semibold text-zinc-500">
+                Applied on
+                <DatePicker
+                  value={draftApplicant.appliedAt}
+                  onChange={(appliedAt) =>
+                    setDraftApplicant((current) => ({ ...current, appliedAt }))
+                  }
+                  placeholder="Pick a date"
+                  max={kolkataTodayKey()}
+                />
+              </label>
+            </div>
+            <button
+              type="submit"
+              disabled={pending}
+              className="cursor-pointer mt-1 px-3.5 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-sm font-semibold text-white shadow-2xs active:scale-[0.98] transition-[transform,background-color] duration-150 ease-out disabled:opacity-60"
+            >
+              {pending ? "Adding…" : "Add Applicant"}
+            </button>
+          </form>
+        )}
       </Modal>
 
       <Modal

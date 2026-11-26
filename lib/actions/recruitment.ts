@@ -3,7 +3,9 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/db";
 import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
-import { dateFromKey, formatDisplayDate, toDateKey } from "@/lib/shared/dates";
+import { dateFromKey, formatDisplayDate, kolkataTodayKey, toDateKey } from "@/lib/shared/dates";
+import { addCandidateSchema, firstZodError } from "@/lib/shared/validations";
+import { nextSequentialCode } from "@/lib/recruitment/codes";
 import { clampPage, clampPageSize, pageSkip, totalPagesFor } from "@/lib/shared/pagination";
 import type { ActionResult } from "@/lib/shared/types";
 import type { CandidateStage } from "@/generated/prisma/client";
@@ -520,8 +522,11 @@ export async function createJobOpeningAction(input: {
       return { ok: false, error: "Title, department, and deadline are required." };
     }
 
-    const count = await prisma.jobOpening.count({ where: { organizationId } });
-    const code = `JOB${String(count + 1).padStart(3, "0")}`;
+    const existingCodes = await prisma.jobOpening.findMany({
+      where: { organizationId },
+      select: { code: true },
+    });
+    const code = nextSequentialCode("JOB", existingCodes.map((row) => row.code));
     const created = await prisma.jobOpening.create({
       data: {
         organizationId,
@@ -653,5 +658,95 @@ export async function scheduleCandidateInterviewAction(input: {
       ok: false,
       error: actionErrorMessage(error, "Could not schedule interview."),
     };
+  }
+}
+
+export async function addCandidateAction(input: {
+  name: string;
+  email?: string;
+  jobOpeningId: string;
+  experienceYears: number | string;
+  source?: string;
+  rating?: number | string;
+  appliedAt?: string;
+}): Promise<ActionResult<RecruitmentCandidate>> {
+  const parsed = addCandidateSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: firstZodError(parsed.error) };
+  }
+  try {
+    const user = await requirePermission("adminExtras");
+    const organizationId = await orgIdForUser(user.id);
+    if (!organizationId) return { ok: false, error: "Organization not found." };
+
+    const job = await prisma.jobOpening.findFirst({
+      where: { id: parsed.data.jobOpeningId, organizationId },
+      select: { id: true, title: true, status: true },
+    });
+    if (!job) return { ok: false, error: "That job opening no longer exists." };
+    if (job.status !== "active") {
+      return { ok: false, error: "That job opening is closed to new applicants." };
+    }
+
+    const today = kolkataTodayKey();
+    const appliedAt = parsed.data.appliedAt ?? today;
+    if (appliedAt > today) {
+      return { ok: false, error: "Application date cannot be in the future." };
+    }
+
+    const email = parsed.data.email?.toLowerCase();
+    if (email) {
+      const duplicate = await prisma.candidate.findFirst({
+        where: {
+          organizationId,
+          jobOpeningId: job.id,
+          email: { equals: email, mode: "insensitive" },
+          stage: { not: "rejected" },
+        },
+        select: { code: true },
+      });
+      if (duplicate) {
+        return {
+          ok: false,
+          error: `This email already has an active application for ${job.title} (${duplicate.code}).`,
+        };
+      }
+    }
+
+    // Retry once if a concurrent insert takes the same code.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const codes = await prisma.candidate.findMany({
+        where: { organizationId },
+        select: { code: true },
+      });
+      const code = nextSequentialCode("CAN", codes.map((row) => row.code));
+      try {
+        const created = await prisma.candidate.create({
+          data: {
+            organizationId,
+            jobOpeningId: job.id,
+            code,
+            name: parsed.data.name,
+            email: email ?? null,
+            position: job.title,
+            experienceYears: parsed.data.experienceYears,
+            stage: "applied",
+            rating: parsed.data.rating ?? 0,
+            source: parsed.data.source || null,
+            appliedAt: dateFromKey(appliedAt),
+          },
+        });
+        revalidatePath("/admin/hr/recruitment");
+        revalidateTag("recruitment", "max");
+        return { ok: true, data: mapCandidate(created) };
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === "P2002" && attempt === 0) continue;
+        throw error;
+      }
+    }
+    return { ok: false, error: "Could not allocate a candidate code. Try again." };
+  } catch (error) {
+    return { ok: false, error: actionErrorMessage(error, "Could not add applicant.") };
   }
 }
