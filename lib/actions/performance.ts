@@ -428,6 +428,9 @@ export async function createPerformanceReviewAction(input: {
       select: { id: true },
     });
     if (!employee) return { ok: false, error: "Employee not found." };
+    if (employee.id === reviewerId) {
+      return { ok: false, error: "You cannot review yourself. Ask another manager to create your review." };
+    }
 
     const created = await prisma.performanceReview.create({
       data: {

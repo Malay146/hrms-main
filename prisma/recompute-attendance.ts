@@ -54,14 +54,23 @@ export async function recomputeAttendanceHours(prisma: PrismaClient, organizatio
     }
   }
 
-  for (let i = 0; i < updates.length; i += 200) {
-    await prisma.$transaction(
-      updates.slice(i, i + 200).map((u) =>
-        prisma.attendance.update({
-          where: { id: u.id },
-          data: { workedHours: u.workedHours, overtimeHours: u.overtimeHours, status: u.status },
-        }),
-      ),
+  // One UPDATE ... FROM (VALUES ...) per batch: fast over a remote connection,
+  // where hundreds of single-row updates in one transaction time out.
+  for (let i = 0; i < updates.length; i += 500) {
+    const batch = updates.slice(i, i + 500);
+    const values = batch
+      .map((_, j) => {
+        const n = j * 4;
+        return `($${n + 1}, $${n + 2}::numeric, $${n + 3}::numeric, $${n + 4}::"AttendanceStatus")`;
+      })
+      .join(", ");
+    const params = batch.flatMap((u) => [u.id, u.workedHours, u.overtimeHours, u.status]);
+    await prisma.$executeRawUnsafe(
+      `UPDATE attendance AS a
+          SET "workedHours" = v.worked, "overtimeHours" = v.overtime, status = v.status, "updatedAt" = now()
+         FROM (VALUES ${values}) AS v(id, worked, overtime, status)
+        WHERE a.id = v.id`,
+      ...params,
     );
   }
   return { checked: rows.length, updated: updates.length };

@@ -483,6 +483,31 @@ async function syncProfileWageFromContracts(organizationId: string) {
   console.log(`Profile wages synced to running contracts: ${fixed}`);
 }
 
+async function fixSelfReviews(organizationId: string) {
+  const admin = await prisma.employeeProfile.findFirst({
+    where: { organizationId, role: "admin" },
+    orderBy: { employeeId: "asc" },
+    select: { id: true },
+  });
+  const self = await prisma.performanceReview.findMany({
+    where: { cycle: { organizationId } },
+    select: { id: true, employeeId: true, reviewerId: true },
+  });
+  let fixed = 0;
+  for (const review of self.filter((r) => r.reviewerId && r.reviewerId === r.employeeId)) {
+    const reviewer =
+      admin && admin.id !== review.employeeId
+        ? admin
+        : await prisma.employeeProfile.findFirst({
+            where: { organizationId, role: { in: ["admin", "hr_manager"] }, id: { not: review.employeeId } },
+            select: { id: true },
+          });
+    await prisma.performanceReview.update({ where: { id: review.id }, data: { reviewerId: reviewer?.id ?? null } });
+    fixed += 1;
+  }
+  console.log(`Self-reviews reassigned: ${fixed}`);
+}
+
 async function main() {
   const org = await prisma.organization.findFirst({ orderBy: { createdAt: "asc" } });
   if (!org) throw new Error("No organization found");
@@ -495,6 +520,7 @@ async function main() {
   await seedPerformanceSample(org.id);
   await seedAdminNotifications(org.id);
   await syncProfileWageFromContracts(org.id);
+  await fixSelfReviews(org.id);
   const recruitment = await refreshRecruitmentDates(org.id, kolkataTodayKey());
   console.log(`Job deadlines moved forward: ${recruitment.jobDeadlinesMoved}; interviews rescheduled: ${recruitment.interviewsRescheduled}`);
   const hours = await recomputeAttendanceHours(prisma, org.id);
