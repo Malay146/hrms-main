@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { actionErrorMessage, requirePermission, requireUser, requireOrgPermission } from "@/lib/auth/session";
 import { leaveTypeFromCode, mapLeave } from "@/lib/shared/mappers";
 import {
   dateFromKey,
@@ -313,7 +313,7 @@ export async function applyLeaveAction(input: {
       const allocation = await prisma.timeOffAllocation.findUnique({
         where: { id: allocationId },
       });
-      if (!allocation || allocation.typeId !== type.id) {
+      if (!allocation || allocation.typeId !== type.id || allocation.employeeId !== profileId) {
         return { ok: false, error: "Allocation does not match the selected leave type." };
       }
       const block = canSubmitRequest({
@@ -373,7 +373,12 @@ export async function applyLeaveForEmployeeAction(input: {
   remarks: string;
 }): Promise<ActionResult<LeaveListItem>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
+    const target = await prisma.employeeProfile.findFirst({
+      where: { userId: input.userId, organizationId: actor.organizationId },
+      select: { id: true },
+    });
+    if (!target) return { ok: false, error: "Employee not found." };
     const parsed = applyLeaveSchema.safeParse({
       type: input.type,
       startDate: input.startDate,
@@ -465,14 +470,14 @@ export async function decideLeaveAction(input: {
   adminComment: string;
 }): Promise<ActionResult> {
   try {
-    const admin = await requirePermission("approveLeave");
+    const admin = await requireOrgPermission("approveLeave");
     const parsed = decideLeaveSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
     }
 
-    const leave = await prisma.leaveRequest.findUnique({
-      where: { id: parsed.data.leaveId },
+    const leave = await prisma.leaveRequest.findFirst({
+      where: { id: parsed.data.leaveId, organizationId: admin.organizationId },
       include: {
         type: { select: { code: true, requiresAllocation: true } },
       },

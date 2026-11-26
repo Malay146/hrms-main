@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "../lib/db";
+import { recomputeAttendanceHours } from "./recompute-attendance";
 import {
   currentPayrollMonth,
   dateFromKey,
@@ -839,6 +840,8 @@ async function main() {
     });
   }
   console.log(`Seeded attendance rows: ${attendanceRows.length}`);
+  const recomputed = await recomputeAttendanceHours(prisma, organization.id);
+  console.log(`Attendance hours computed with clock-out rules: ${recomputed.updated}`);
 
   const structure = structureEarly;
 

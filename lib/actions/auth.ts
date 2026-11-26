@@ -277,7 +277,7 @@ export async function changePasswordAction(input: {
   }
 
   try {
-    const user = await requireUser();
+    const user = await requireUser({ allowPendingPasswordChange: true });
     await auth.api.changePassword({
       body: {
         currentPassword: parsed.data.currentPassword,

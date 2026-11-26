@@ -3,7 +3,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { actionErrorMessage, requireOrgPermission } from "@/lib/auth/session";
 import { remaining } from "@/lib/people/time-off-balance";
 import { firstZodError } from "@/lib/shared/validations";
 import {
@@ -90,13 +90,15 @@ export async function listAllocations(filters?: {
   employeeCode?: string | null;
 }): Promise<ActionResult<AllocationListResult>> {
   try {
-    await requirePermission("approveLeave");
+    const actor = await requireOrgPermission("approveLeave");
     const page = clampPage(filters?.page);
     const pageSize = clampPageSize(filters?.pageSize);
     const search = filters?.search?.trim() ?? "";
     const statusRaw = filters?.status?.trim().toLowerCase() ?? "";
 
-    const andFilters: Prisma.TimeOffAllocationWhereInput[] = [];
+    const andFilters: Prisma.TimeOffAllocationWhereInput[] = [
+      { employee: { organizationId: actor.organizationId } },
+    ];
     if (filters?.employeeCode) {
       andFilters.push({ employee: { employeeId: filters.employeeCode } });
     }
@@ -157,9 +159,20 @@ export async function upsertAllocationAction(input: {
   description?: string | null;
 }): Promise<ActionResult<AllocationListItem>> {
   try {
-    await requirePermission("approveLeave");
+    const actor = await requireOrgPermission("approveLeave");
     const parsed = upsertAllocationSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: firstZodError(parsed.error) };
+    const orgId = actor.organizationId;
+    const [employee, type, existing] = await Promise.all([
+      prisma.employeeProfile.findFirst({ where: { id: parsed.data.employeeProfileId, organizationId: orgId }, select: { id: true } }),
+      prisma.timeOffType.findFirst({ where: { id: parsed.data.typeId, organizationId: orgId }, select: { id: true } }),
+      parsed.data.id
+        ? prisma.timeOffAllocation.findFirst({ where: { id: parsed.data.id, employee: { organizationId: orgId } }, select: { id: true } })
+        : Promise.resolve({ id: "" }),
+    ]);
+    if (!employee) return { ok: false, error: "Employee not found." };
+    if (!type) return { ok: false, error: "Time off type not found." };
+    if (!existing) return { ok: false, error: "Allocation not found." };
 
     const row = parsed.data.id
       ? await prisma.timeOffAllocation.update({
@@ -197,7 +210,12 @@ export async function decideAllocationAction(input: {
   decision: "approved" | "refused";
 }): Promise<ActionResult<AllocationListItem>> {
   try {
-    await requirePermission("approveLeave");
+    const actor = await requireOrgPermission("approveLeave");
+    const owned = await prisma.timeOffAllocation.findFirst({
+      where: { id: input.id, employee: { organizationId: actor.organizationId } },
+      select: { id: true },
+    });
+    if (!owned) return { ok: false, error: "Allocation not found." };
     const row = await prisma.timeOffAllocation.update({
       where: { id: input.id },
       data: { status: input.decision },

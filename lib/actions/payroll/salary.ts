@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, ForbiddenError, requirePermission, requireUser } from "@/lib/auth/session";
+import { actionErrorMessage, ForbiddenError, requirePermission, requireUser, requireOrgPermission } from "@/lib/auth/session";
 import { firstZodError } from "@/lib/shared/validations";
 import { hasPermission } from "@/lib/auth/permissions";
 import { REGULAR_SALARY_RULES } from "@/lib/payroll/regular-salary";
@@ -75,8 +75,9 @@ async function organizationIdFor(userId: string) {
 
 export async function listSalaryStructures(): Promise<ActionResult<SalaryStructureListItem[]>> {
   try {
-    await requirePermission("viewSalaryConfig");
+    const actor = await requireOrgPermission("viewSalaryConfig");
     const rows = await prisma.salaryStructure.findMany({
+      where: { organizationId: actor.organizationId },
       include: {
         _count: { select: { rules: true, payruns: true } },
       },
@@ -99,9 +100,9 @@ export async function listSalaryStructures(): Promise<ActionResult<SalaryStructu
 
 export async function getSalaryStructure(id: string): Promise<ActionResult<SalaryStructureListItem & { rules: SalaryRuleListItem[] }>> {
   try {
-    await requirePermission("viewSalaryConfig");
-    const row = await prisma.salaryStructure.findUnique({
-      where: { id },
+    const actor = await requireOrgPermission("viewSalaryConfig");
+    const row = await prisma.salaryStructure.findFirst({
+      where: { id, organizationId: actor.organizationId },
       include: {
         rules: { orderBy: { sequence: "asc" } },
         _count: { select: { rules: true, payruns: true } },
@@ -136,6 +137,10 @@ export async function saveSalaryStructureAction(input: {
     const user = await requireUser();
     const organizationId = await organizationIdFor(user.id);
 
+    if (input.id) {
+      const owned = await prisma.salaryStructure.findFirst({ where: { id: input.id, organizationId }, select: { id: true } });
+      if (!owned) return { ok: false, error: "Salary structure not found." };
+    }
     const saved = input.id
       ? await prisma.salaryStructure.update({
           where: { id: input.id },
@@ -158,9 +163,9 @@ export async function saveSalaryStructureAction(input: {
 
 export async function deleteSalaryStructureAction(id: string): Promise<ActionResult<{ id: string }>> {
   try {
-    await requirePermission("manageSalaryConfig");
-    const existing = await prisma.salaryStructure.findUnique({
-      where: { id },
+    const actor = await requireOrgPermission("manageSalaryConfig");
+    const existing = await prisma.salaryStructure.findFirst({
+      where: { id, organizationId: actor.organizationId },
       include: { _count: { select: { payruns: true } } },
     });
     if (!existing) {
@@ -190,9 +195,12 @@ export async function deleteSalaryStructureAction(id: string): Promise<ActionRes
 
 export async function listSalaryRules(structureId?: string): Promise<ActionResult<SalaryRuleListItem[]>> {
   try {
-    await requirePermission("viewSalaryConfig");
+    const actor = await requireOrgPermission("viewSalaryConfig");
     const rows = await prisma.salaryRule.findMany({
-      where: structureId ? { structureId } : undefined,
+      where: {
+        structure: { organizationId: actor.organizationId },
+        ...(structureId ? { structureId } : {}),
+      },
       include: { structure: { select: { name: true } } },
       orderBy: [{ structureId: "asc" }, { sequence: "asc" }],
     });
@@ -219,9 +227,23 @@ export async function saveSalaryRuleAction(input: {
   formula?: string;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    await requirePermission("manageSalaryConfig");
+    const actor = await requireOrgPermission("manageSalaryConfig");
     const parsed = ruleSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: firstZodError(parsed.error) };
+    const [structure, ownedRule] = await Promise.all([
+      prisma.salaryStructure.findFirst({
+        where: { id: parsed.data.structureId, organizationId: actor.organizationId },
+        select: { id: true },
+      }),
+      input.id
+        ? prisma.salaryRule.findFirst({
+            where: { id: input.id, structure: { organizationId: actor.organizationId } },
+            select: { id: true },
+          })
+        : Promise.resolve({ id: "" }),
+    ]);
+    if (!structure) return { ok: false, error: "Salary structure not found." };
+    if (!ownedRule) return { ok: false, error: "Salary rule not found." };
 
     const data = {
       structureId: parsed.data.structureId,
@@ -249,9 +271,9 @@ export async function saveSalaryRuleAction(input: {
 
 export async function deleteSalaryRuleAction(id: string): Promise<ActionResult<{ id: string }>> {
   try {
-    await requirePermission("manageSalaryConfig");
-    const existing = await prisma.salaryRule.findUnique({
-      where: { id },
+    const actor = await requireOrgPermission("manageSalaryConfig");
+    const existing = await prisma.salaryRule.findFirst({
+      where: { id, structure: { organizationId: actor.organizationId } },
       select: { id: true },
     });
     if (!existing) {

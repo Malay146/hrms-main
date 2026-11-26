@@ -2,7 +2,19 @@
  * Deterministic recruitment board seed — jobs + candidates aligned to org departments.
  */
 import type { CandidateStage, JobOpeningStatus, PrismaClient } from "../generated/prisma/client";
-import { dateFromKey } from "../lib/shared/dates";
+import { dateFromKey, kolkataTodayKey } from "../lib/shared/dates";
+
+/**
+ * The board was authored on this day. Every date is shifted by the days since,
+ * so open jobs stay open and interviews stay upcoming whenever the seed runs.
+ */
+const AUTHORED_ON = "2026-09-06";
+const DAY_MS = 86_400_000;
+const shiftDays = Math.round(
+  (dateFromKey(kolkataTodayKey()).getTime() - dateFromKey(AUTHORED_ON).getTime()) / DAY_MS,
+);
+const shiftedDate = (key: string) => new Date(dateFromKey(key).getTime() + shiftDays * DAY_MS);
+const shiftedInstant = (iso: string) => new Date(new Date(iso).getTime() + shiftDays * DAY_MS);
 
 type JobSeed = {
   code: string;
@@ -490,7 +502,7 @@ export async function seedRecruitment(prisma: PrismaClient, organizationId: stri
         title: job.title,
         department: job.department,
         description: job.description,
-        deadline: dateFromKey(job.deadline),
+        deadline: shiftedDate(job.deadline),
         status: job.status,
       },
     });
@@ -512,11 +524,11 @@ export async function seedRecruitment(prisma: PrismaClient, organizationId: stri
         stage: row.stage,
         rating: row.rating,
         source: row.source,
-        appliedAt: dateFromKey(row.appliedAt),
+        appliedAt: shiftedDate(row.appliedAt),
         jobOpeningId: byTitle[row.position] ?? null,
         interviewType: row.interviewType ?? null,
         interviewer: row.interviewer ?? null,
-        interviewAt: row.interviewAt ? new Date(row.interviewAt) : null,
+        interviewAt: row.interviewAt ? shiftedInstant(row.interviewAt) : null,
         createdAt: now,
         updatedAt: now,
       },

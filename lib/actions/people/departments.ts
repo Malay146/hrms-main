@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { actionErrorMessage, requirePermission, requireOrgPermission } from "@/lib/auth/session";
 import {
   clampPage,
   clampPageSize,
@@ -93,8 +93,9 @@ function mapDepartment(input: {
 
 export async function listDepartments(): Promise<ActionResult<DepartmentListItem[]>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
     const departments = await prisma.department.findMany({
+      where: { organizationId: actor.organizationId },
       include: {
         _count: { select: { profiles: true } },
         profiles: {
@@ -172,11 +173,12 @@ export async function listDepartmentMembers(input: {
   search?: string;
 }): Promise<ActionResult<PagedResult<DepartmentMember>>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
     const page = clampPage(input.page);
     const pageSize = clampPageSize(input.pageSize);
     const search = input.search?.trim() ?? "";
     const where = {
+      organizationId: actor.organizationId,
       departmentId: input.departmentId,
       ...(search
         ? {
@@ -313,11 +315,16 @@ export async function renameDepartmentAction(input: {
   name: string;
 }): Promise<ActionResult<DepartmentListItem>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
     const parsed = renameDepartmentSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
     }
+    const owned = await prisma.department.findFirst({
+      where: { id: parsed.data.id, organizationId: actor.organizationId },
+      select: { id: true },
+    });
+    if (!owned) return { ok: false, error: "Department not found." };
 
     await prisma.department.update({
       where: { id: parsed.data.id },
@@ -339,14 +346,14 @@ export async function deleteDepartmentAction(input: {
   id: string;
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
     const parsed = deleteDepartmentSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
     }
 
-    const department = await prisma.department.findUnique({
-      where: { id: parsed.data.id },
+    const department = await prisma.department.findFirst({
+      where: { id: parsed.data.id, organizationId: actor.organizationId },
       include: {
         _count: { select: { profiles: true, contracts: true } },
       },
@@ -392,14 +399,14 @@ export async function moveEmployeeDepartmentAction(input: {
   }>
 > {
   try {
-    await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
     const parsed = moveEmployeeDepartmentSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
     }
 
     const profile = await prisma.employeeProfile.findFirst({
-      where: { employeeId: parsed.data.employeeId },
+      where: { employeeId: parsed.data.employeeId, organizationId: actor.organizationId },
       include: { user: { select: { email: true } } },
     });
     if (!profile) {

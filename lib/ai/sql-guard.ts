@@ -43,6 +43,11 @@ const DENIED_COLUMNS = [
   "address",
 ];
 
+/** True for columns that must never leave the database through the copilot. */
+export function isDeniedColumn(column: string) {
+  return (DENIED_COLUMNS as readonly string[]).includes(column.toLowerCase());
+}
+
 const FORBIDDEN_KEYWORDS =
   /\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|copy|vacuum|reindex|refresh|merge|call|execute|prepare|deallocate|begin|commit|rollback|savepoint|listen|notify|lock|into|set|reset|discard|cluster|comment|import|security|do)\b/i;
 

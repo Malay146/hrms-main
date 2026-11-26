@@ -145,6 +145,12 @@ async function ensureDemoData(organizationId: string) {
   if (count > 0) return;
 
   const now = new Date();
+  // Authored around 2026-07-20; shift so a new company's sample board is current.
+  const DAY_MS = 86_400_000;
+  const shift =
+    Math.round((dateFromKey(kolkataTodayKey()).getTime() - dateFromKey("2026-07-20").getTime()) / DAY_MS) * DAY_MS;
+  const day = (key: string) => new Date(dateFromKey(key).getTime() + shift);
+  const instant = (iso: string) => new Date(new Date(iso).getTime() + shift);
   const jobs = await Promise.all([
     prisma.jobOpening.create({
       data: {
@@ -154,7 +160,7 @@ async function ensureDemoData(organizationId: string) {
         department: "Engineering",
         description:
           "Build responsive dashboard interfaces and internal HR tools using React and TypeScript.",
-        deadline: dateFromKey("2026-08-15"),
+        deadline: day("2026-08-15"),
         status: "active",
       },
     }),
@@ -166,7 +172,7 @@ async function ensureDemoData(organizationId: string) {
         department: "Engineering",
         description:
           "Design scalable APIs, database schemas, and payroll processing services.",
-        deadline: dateFromKey("2026-08-20"),
+        deadline: day("2026-08-20"),
         status: "active",
       },
     }),
@@ -178,7 +184,7 @@ async function ensureDemoData(organizationId: string) {
         department: "Product",
         description:
           "Own the hiring roadmap, candidate experience, and cross-team delivery.",
-        deadline: dateFromKey("2026-08-10"),
+        deadline: day("2026-08-10"),
         status: "active",
       },
     }),
@@ -217,7 +223,7 @@ async function ensureDemoData(organizationId: string) {
       appliedAt: "2026-07-15",
       interviewType: "UX Review",
       interviewer: "Sarah Mills",
-      interviewAt: new Date("2026-09-06T09:00:00.000Z"),
+      interviewAt: instant("2026-09-06T09:00:00.000Z"),
     },
     {
       code: "CAN004",
@@ -230,7 +236,7 @@ async function ensureDemoData(organizationId: string) {
       appliedAt: "2026-07-12",
       interviewType: "Backend System Design",
       interviewer: "Bruce Banner",
-      interviewAt: new Date("2026-09-05T04:30:00.000Z"),
+      interviewAt: instant("2026-09-05T04:30:00.000Z"),
     },
     {
       code: "CAN005",
@@ -243,7 +249,7 @@ async function ensureDemoData(organizationId: string) {
       appliedAt: "2026-07-10",
       interviewType: "QA Automation Test",
       interviewer: "John Cena",
-      interviewAt: new Date("2026-09-05T10:30:00.000Z"),
+      interviewAt: instant("2026-09-05T10:30:00.000Z"),
     },
     {
       code: "CAN006",
@@ -278,7 +284,7 @@ async function ensureDemoData(organizationId: string) {
         rating: row.rating,
         experienceYears: row.experienceYears,
         source: row.source,
-        appliedAt: dateFromKey(row.appliedAt),
+        appliedAt: day(row.appliedAt),
         jobOpeningId: byTitle[row.position] ?? null,
         interviewType: row.interviewType ?? null,
         interviewer: row.interviewer ?? null,
@@ -681,7 +687,7 @@ export async function addCandidateAction(input: {
 
     const job = await prisma.jobOpening.findFirst({
       where: { id: parsed.data.jobOpeningId, organizationId },
-      select: { id: true, title: true, status: true },
+      select: { id: true, title: true, status: true, deadline: true },
     });
     if (!job) return { ok: false, error: "That job opening no longer exists." };
     if (job.status !== "active") {
@@ -689,6 +695,12 @@ export async function addCandidateAction(input: {
     }
 
     const today = kolkataTodayKey();
+    if (toDateKey(job.deadline) < today) {
+      return {
+        ok: false,
+        error: `Applications for ${job.title} closed on ${formatDisplayDate(job.deadline)}. Extend the deadline first.`,
+      };
+    }
     const appliedAt = parsed.data.appliedAt ?? today;
     if (appliedAt > today) {
       return { ok: false, error: "Application date cannot be in the future." };

@@ -67,10 +67,19 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   };
 });
 
-export async function requireUser() {
+/**
+ * The signed-in user. Accounts still on an admin-issued temporary password are
+ * refused (pages redirect them to /change-password; this closes the same gap
+ * for server actions and /api/v1). Only the password change itself and the
+ * "who am I" lookup pass allowPendingPasswordChange.
+ */
+export async function requireUser(options: { allowPendingPasswordChange?: boolean } = {}) {
   const user = await getCurrentUser();
   if (!user) {
     throw new AuthError();
+  }
+  if (user.mustChangePassword && !options.allowPendingPasswordChange) {
+    throw new ForbiddenError("Change your temporary password before continuing.");
   }
   return user;
 }
@@ -89,6 +98,15 @@ export async function requirePermission(permission: Permission) {
     throw new ForbiddenError();
   }
   return user;
+}
+
+/** requirePermission + the caller's organization: use this for every org-owned read or write. */
+export async function requireOrgPermission(permission: Permission) {
+  const user = await requirePermission(permission);
+  if (!user.organizationId) {
+    throw new ForbiddenError("Your account is not linked to an organization.");
+  }
+  return user as SessionUser & { organizationId: string };
 }
 
 export async function requireOrganization() {

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission } from "@/lib/auth/session";
+import { actionErrorMessage, requirePermission, requireOrgPermission } from "@/lib/auth/session";
 import { firstZodError } from "@/lib/shared/validations";
 import { z } from "zod";
 import type { ActionResult } from "@/lib/shared/types";
@@ -35,8 +35,11 @@ const upsertTypeSchema = z.object({
 
 export async function listTimeOffTypes(): Promise<ActionResult<TimeOffTypeItem[]>> {
   try {
-    await requirePermission("approveLeave");
-    const rows = await prisma.timeOffType.findMany({ orderBy: { name: "asc" } });
+    const actor = await requireOrgPermission("approveLeave");
+    const rows = await prisma.timeOffType.findMany({
+      where: { organizationId: actor.organizationId },
+      orderBy: { name: "asc" },
+    });
     return {
       ok: true,
       data: rows.map((row) => ({

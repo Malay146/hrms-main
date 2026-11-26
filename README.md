@@ -55,6 +55,7 @@ The seed builds attendance and leave relative to **today**, so dashboards always
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | for email | Gmail SMTP. `SMTP_PASS` must be a [Google App Password](https://myaccount.google.com/apppasswords) (2-Step Verification on) |
 | `MAIL_SKIP_DOMAINS` | no | Recipient domains that never get mail. Default `company.com` (the seeded demo accounts) |
 | `AI_BASE_URL`, `AI_MODEL`, `AI_API_KEY` | no | Any OpenAI-compatible provider. Free option: Google Gemini (`https://generativelanguage.googleapis.com/v1beta/openai/`, `gemini-3.5-flash-lite`, key from [AI Studio](https://aistudio.google.com/apikey)). Gemini's free tier may use prompts to improve Google products |
+| `DEMO_MODE` | no | `true` enables the daily demo upkeep cron (`/api/cron/demo`) for the seeded `COMPANY` organization |
 | `OPENAI_API_KEY` | no | OpenAI (`gpt-4o-mini`), used when `AI_API_KEY` is empty. Metrics work with no AI key at all |
 | `REDIS_URL` | no | `redis://localhost:6379`. Without it, rate limits are per-process memory |
 | `CRON_SECRET` | no | Protects `/api/cron/*`. Generate with `openssl rand -hex 32` |
@@ -74,6 +75,34 @@ Never commit `.env`.
 New companies register at `/sign-up`; the founder becomes that company's admin. Inside a company, admins add people from **Employees → Add User**.
 
 Demo accounts use `@company.com`, which is a real third-party domain, so the app never emails them (see `MAIL_SKIP_DOMAINS`). When an email is skipped, the new user's temporary password is shown on screen instead.
+
+## Running a demo
+
+Before a demo, run:
+
+```bash
+npm run db:demo-ready
+```
+
+It fills attendance up to today, keeps about 5% of staff on leave, and frees the demo logins to clock in live. It also leaves work waiting for you, and it is safe to run any time. On Vercel, set `DEMO_MODE=true` and `/api/cron/demo` does the same every morning (about 10:00 IST), so the live demo never goes stale.
+
+What each login has to show:
+
+| Login | Show |
+|---|---|
+| `john.cena@company.com` | Clock in / clock out (worked hours, half day under 5h), apply for leave, view payslips |
+| `admin@company.com` | Dashboard, approve or reject pending leave, approve next year's leave allocations, run the current month's payrun (Compute → Validate), mark the validated payrun paid, recruitment pipeline (add applicant, move stages), AI Analytics and copilot, Settings |
+| `william.joseph@company.com` | HR manager: people, leave approvals, performance reviews, AI (payroll is hidden) |
+| `kimi.nowa@company.com` | Payroll manager: payruns, payslips, salary rules |
+
+A suggested flow:
+1. John clocks in.
+2. John applies for leave.
+3. The admin sees John on the dashboard and approves the leave.
+4. The admin runs the month's payroll.
+5. John opens his payslip.
+
+Demo staff use `@company.com`, so the app never emails them. Payslip and credential emails show an on-screen notice instead. To demo email, add an employee with your own address.
 
 ## Features
 

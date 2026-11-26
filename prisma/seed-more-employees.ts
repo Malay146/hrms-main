@@ -8,6 +8,7 @@
 import "dotenv/config";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "../lib/db";
+import { recomputeAttendanceHours } from "./recompute-attendance";
 import {
   currentPayrollMonth,
   dateFromKey,
@@ -600,6 +601,8 @@ async function main() {
     console.log(`  ${row.department}: ${row.employees}`);
   }
   console.log(`Password for new employees: ${DEMO_PASSWORD}`);
+  const recomputed = await recomputeAttendanceHours(prisma);
+  console.log(`Attendance hours computed with clock-out rules: ${recomputed.updated}`);
 }
 
 main()

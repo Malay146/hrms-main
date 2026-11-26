@@ -7,7 +7,7 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { nextEmployeeId } from "@/lib/people/employee-id";
 import { logger } from "@/lib/shared/logger";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { actionErrorMessage, requirePermission, requireUser, requireOrgPermission } from "@/lib/auth/session";
 import { mapEmployee } from "@/lib/shared/mappers";
 import { kolkataParts, kolkataTodayKey, currentPayrollMonth, dateFromKey, toDateKey } from "@/lib/shared/dates";
 import { createEmployeeSchema, firstZodError, updateEmployeeSchema } from "@/lib/shared/validations";
@@ -323,9 +323,9 @@ export async function listEmployees(
 
 export async function getEmployeeByCode(employeeId: string): Promise<ActionResult<EmployeeListItem>> {
   try {
-    await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
     const profile = await prisma.employeeProfile.findFirst({
-      where: { employeeId },
+      where: { employeeId, organizationId: actor.organizationId },
       include: {
         user: { select: { email: true } },
         department: { select: { name: true } },
@@ -353,10 +353,10 @@ export async function getEmployeeHub(
   employeeCode: string,
 ): Promise<ActionResult<EmployeeHubData>> {
   try {
-    await requirePermission("managePeople");
+    const hubActor = await requireOrgPermission("managePeople");
     const today = kolkataTodayKey();
     const profile = await prisma.employeeProfile.findFirst({
-      where: { employeeId: employeeCode },
+      where: { employeeId: employeeCode, organizationId: hubActor.organizationId },
       include: {
         user: { select: { email: true } },
         department: { select: { id: true, name: true } },
@@ -478,14 +478,14 @@ export async function updateEmployeeAction(input: {
   joinDate?: string | null;
 }): Promise<ActionResult<UpdateEmployeeResult>> {
   try {
-    const actor = await requirePermission("managePeople");
+    const actor = await requireOrgPermission("managePeople");
     const parsed = updateEmployeeSchema.safeParse(input);
     if (!parsed.success) {
       return { ok: false, error: firstZodError(parsed.error) };
     }
 
     const existing = await prisma.employeeProfile.findFirst({
-      where: { employeeId: parsed.data.employeeId },
+      where: { employeeId: parsed.data.employeeId, organizationId: actor.organizationId },
       select: {
         id: true,
         organizationId: true,
