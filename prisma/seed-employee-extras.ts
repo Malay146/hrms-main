@@ -9,11 +9,11 @@ import { computePayslip } from "../lib/payroll/compute";
 import { REGULAR_SALARY_RULES } from "../lib/payroll/regular-salary";
 
 const DEMO_EMAILS = [
-  "john.cena@odoo.com",
-  "bruce.banner@odoo.com",
-  "sarah.mills@odoo.com",
-  "william.joseph@odoo.com",
-  "mark.lou@odoo.com",
+  "john.cena@company.com",
+  "bruce.banner@company.com",
+  "sarah.mills@company.com",
+  "william.joseph@company.com",
+  "mark.lou@company.com",
 ];
 
 const MONTHS = [

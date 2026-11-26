@@ -1,6 +1,6 @@
 ---
 name: HRMS Stack Gap Plan
-overview: Gap analysis of the existing Next.js HRMS UI against the Odoo Hackathon 2026 HRMS spec, plus a production-shaped but 1-day-implementable backend stack (Next.js 16 + PostgreSQL + Prisma 7 + Better Auth) that wires only the required modules and leaves extras as mock.
+overview: Gap analysis of the existing Next.js HRMS UI against the Company Hackathon 2026 HRMS spec, plus a production-shaped but 1-day-implementable backend stack (Next.js 16 + PostgreSQL + Prisma 7 + Better Auth) that wires only the required modules and leaves extras as mock.
 todos:
   - id: gap-lock
     content: Treat extra modules (recruitment, AI, performance, notifications) as mock; add missing employee payroll page
@@ -22,7 +22,7 @@ isProject: false
 
 # HRMS Feature Gap and 1-Day Tech Stack Plan
 
-> Using the writing-plans skill for the implementation plan. Spec source: the Odoo Hackathon 2026 HRMS problem statement as independently documented by multiple teams (auth, dual dashboards, attendance, leave workflow, payroll, responsive UI). **The PDF is not in this repo or your Downloads folder.** If your PDF differs, attach it before implementation.
+> Using the writing-plans skill for the implementation plan. Spec source: the Company Hackathon 2026 HRMS problem statement as independently documented by multiple teams (auth, dual dashboards, attendance, leave workflow, payroll, responsive UI). **The PDF is not in this repo or your Downloads folder.** If your PDF differs, attach it before implementation.
 
 **Current reality:** this repo is a polished **frontend-only mock**. There is no `app/api`, no `middleware.ts`/`proxy.ts`, no database, and no session. Login/sign-up forms do not submit. Role is inferred from the URL (`/admin` vs `/employee`) in [components/layout/sidebar.tsx](components/layout/sidebar.tsx), so anyone can open the admin portal.
 

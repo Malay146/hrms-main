@@ -1,4 +1,4 @@
-import { createOpenAI } from "@ai-sdk/openai";
+import { aiModel, isAiConfigured } from "./provider";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { ALLOWED_INSIGHT_HREFS } from "./insights";
@@ -26,8 +26,9 @@ const insightSchema = z.object({
         title: z.string().max(80),
         body: z.string().max(600),
         action: z.string().max(160),
-        href: z.string().optional(),
-        metricKey: z.string().optional(),
+        // OpenAI strict structured outputs: every key must be required; use null for "none".
+        href: z.string().nullable(),
+        metricKey: z.string().nullable(),
       }),
     )
     .min(3)
@@ -39,17 +40,12 @@ const leaveBriefSchema = z.object({
   suggestion: z.enum(["approve", "review", "reject"]),
 });
 
-export function isAiConfigured() {
-  return Boolean(process.env.OPENAI_API_KEY);
-}
+export { isAiConfigured };
 
-function model() {
-  const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  return openai("gpt-4o-mini");
-}
+const model = aiModel;
 
 export async function generateInsightCards(snapshotJson: unknown) {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!isAiConfigured()) {
     throw new Error("AI provider is not configured.");
   }
   const { output } = await generateText({
@@ -74,7 +70,7 @@ export async function phraseAssistantChat(input: {
   history: { role: "user" | "assistant"; body: string }[];
 }) {
   const fallback = chatReply(input.firstName, input.question);
-  if (!process.env.OPENAI_API_KEY || isHelp(input.question) || isGreeting(input.question)) {
+  if (!isAiConfigured() || isHelp(input.question) || isGreeting(input.question)) {
     return fallback;
   }
   try {
@@ -120,16 +116,18 @@ Never say you cannot provide employee or department counts, and never tell them 
 
 const copilotPlanSchema = z.object({
   kind: z.enum(["lookup", "act", "clarify", "refuse", "chat", "answer"]),
-  tool: z.union([z.enum(ASSISTANT_TOOLS), z.enum(LOOKUP_TOOLS)]).optional(),
-  args: z.record(z.string(), z.string().nullable()).optional(),
-  answer: z.string().max(600).optional().default(""),
+  // OpenAI strict structured outputs reject optional keys and open-ended maps,
+  // so "no value" is null and args are key/value pairs.
+  tool: z.union([z.enum(ASSISTANT_TOOLS), z.enum(LOOKUP_TOOLS)]).nullable(),
+  args: z.array(z.object({ key: z.string(), value: z.string().nullable() })).nullable(),
+  answer: z.string().max(600),
 });
 
-function compactArgs(args?: Record<string, string | null>) {
+function compactArgs(args: { key: string; value: string | null }[] | null) {
   const next: Record<string, string> = {};
   if (!args) return next;
-  for (const [key, value] of Object.entries(args)) {
-    if (value && value.trim()) next[key] = value.trim();
+  for (const { key, value } of args) {
+    if (key.trim() && value && value.trim()) next[key.trim()] = value.trim();
   }
   return next;
 }
@@ -174,7 +172,7 @@ export async function planCopilotTurn(input: {
   ) {
     return fallback;
   }
-  if (!process.env.OPENAI_API_KEY) return fallback;
+  if (!isAiConfigured()) return fallback;
 
   try {
     const { output } = await generateText({
@@ -224,6 +222,7 @@ Rules:
 - Do not answer with a capability list when they asked you to do something.
 - If an action is requested but fields are missing, kind=clarify and ask for the missing fields. For departments, name is never missing if they named it.
 - For live workforce questions (departments, headcount, who is on leave, attendance, pending leave, payroll totals, reviews, team health), use kind=lookup and the matching tool. Never invent counts. Never say you lack access to counts the lookup tools can answer.
+Output format: tool is null unless kind is act or lookup. args is a list of {key, value} pairs using the field names above (e.g. [{"key":"name","value":"Cyber Security"}]), or null. answer is "" when you have nothing to say.
 Keep answer short.`,
       prompt: JSON.stringify({
         question: input.question,
@@ -260,14 +259,11 @@ Keep answer short.`,
       }
     }
     if (output.kind === "act" && output.tool && isAssistantToolName(output.tool)) {
-      const args = compactArgs(output.args);
-      if (Object.keys(args).length === 0 && fallback.kind === "act") return fallback;
-      return { kind: "act", tool: output.tool, args };
+      return { kind: "act", tool: output.tool, args: compactArgs(output.args) };
     }
     if (output.kind === "lookup" && output.tool && isAssistantLookupTool(output.tool)) {
       return { kind: "lookup", tool: output.tool, args: compactArgs(output.args) };
     }
-    if (fallback.kind === "act" || fallback.kind === "lookup") return fallback;
     const forced = intentLookup();
     if (forced) return forced;
     return { kind: "chat" };
@@ -277,7 +273,7 @@ Keep answer short.`,
 }
 
 export async function generateLeaveBrief(payload: unknown) {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!isAiConfigured()) {
     throw new Error("AI provider is not configured.");
   }
   const { output } = await generateText({

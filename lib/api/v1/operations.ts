@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { getAiAnalytics, askHrCopilot, listCopilotConversations, listCopilotHistory, deleteCopilotConversationAction, clearCopilotHistoryAction, generateAiInsights, summarizeLeaveForApprover } from "@/lib/actions/ai";
 import { changePasswordAction, signUpOrganizationAction } from "@/lib/actions/auth";
+import {
+  getOrganizationSettings,
+  listMySessions,
+  revokeOtherSessionsAction,
+  revokeSessionAction,
+  updateOrganizationAction,
+} from "@/lib/actions/settings";
 import { getAdminDashboard, getEmployeeDashboard } from "@/lib/actions/dashboard";
 import {
   listMyNotifications,
@@ -100,6 +107,7 @@ import { PIPELINE_STAGES } from "@/lib/recruitment/stages";
 import {
   applyLeaveSchema,
   changePasswordSchema,
+  organizationSettingsSchema,
   copilotQuestionSchema,
   createDepartmentSchema,
   createEmployeeSchema,
@@ -273,6 +281,48 @@ export const apiOperations: ApiOperation[] = [
     tags: ["Account"],
     body: changePasswordSchema,
     handler: async ({ body }) => changePasswordAction(body as never),
+  }),
+  defineOp({
+    method: "get",
+    path: "/me/sessions",
+    operationId: "listMySessions",
+    summary: "My signed-in sessions",
+    tags: ["Account"],
+    handler: async () => listMySessions(),
+  }),
+  defineOp({
+    method: "delete",
+    path: "/me/sessions",
+    operationId: "revokeOtherSessions",
+    summary: "Sign out all my other sessions",
+    tags: ["Account"],
+    handler: async () => revokeOtherSessionsAction(),
+  }),
+  defineOp({
+    method: "delete",
+    path: "/me/sessions/{id}",
+    operationId: "revokeSession",
+    summary: "Sign out one of my other sessions",
+    tags: ["Account"],
+    params: idParam,
+    handler: async ({ params }) => revokeSessionAction(params.id),
+  }),
+  defineOp({
+    method: "get",
+    path: "/settings/organization",
+    operationId: "getOrganizationSettings",
+    summary: "Organization profile",
+    tags: ["Settings"],
+    handler: async () => getOrganizationSettings(),
+  }),
+  defineOp({
+    method: "patch",
+    path: "/settings/organization",
+    operationId: "updateOrganizationSettings",
+    summary: "Update organization name and email (admin)",
+    tags: ["Settings"],
+    body: organizationSettingsSchema,
+    handler: async ({ body }) => updateOrganizationAction(body as { name: string; email: string }),
   }),
   defineOp({
     method: "get",

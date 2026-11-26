@@ -23,6 +23,11 @@ export const signUpSchema = z
     path: ["confirmPassword"],
   });
 
+export const organizationSettingsSchema = z.object({
+  name: z.string().trim().min(2, "Organization name is required.").max(120),
+  email: z.string().trim().email("Enter a valid organization email."),
+});
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, "Current password is required."),

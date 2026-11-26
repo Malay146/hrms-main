@@ -50,8 +50,8 @@ describe("rate limit (memory store)", () => {
   });
 
   it("hashes email subjects without keeping the raw address in the key", () => {
-    const key = hashedRateKey("signin:email", "Admin@Odoo.com");
-    assert.equal(key, hashedRateKey("signin:email", "admin@odoo.com"));
-    assert.doesNotMatch(key, /odoo\.com/i);
+    const key = hashedRateKey("signin:email", "Admin@Company.com");
+    assert.equal(key, hashedRateKey("signin:email", "admin@company.com"));
+    assert.doesNotMatch(key, /company\.com/i);
   });
 });

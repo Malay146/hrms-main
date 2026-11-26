@@ -205,7 +205,7 @@ export function buildBulkEmployees(count = 300, options?: BuildBulkOptions): Bul
     const titles = BULK_TITLES[department];
     const jobTitle = pick(titles, idx * 2);
     const name = `${first} ${last}`;
-    const email = `${slugify(first)}.${slugify(last)}.${String(idx + 1).padStart(3, "0")}@odoo.com`;
+    const email = `${slugify(first)}.${slugify(last)}.${String(idx + 1).padStart(3, "0")}@company.com`;
 
     // Status mix: ~72% active, ~14% on leave, ~14% inactive
     const statusRoll = idx % 7;
@@ -239,8 +239,8 @@ export function buildBulkEmployees(count = 300, options?: BuildBulkOptions): Bul
       email,
       employeeId:
         wave === 2
-          ? `ODOO-2026-W2-${String(i + 1).padStart(3, "0")}`
-          : `ODOO-2026-${String(idx + 100).padStart(3, "0")}`,
+          ? `COMPANY-2026-W2-${String(i + 1).padStart(3, "0")}`
+          : `COMPANY-2026-${String(idx + 100).padStart(3, "0")}`,
       department,
       jobTitle,
       phone: `+91 9${String(100000000 + ((idx * 7919) % 89999999)).slice(0, 9)}`,

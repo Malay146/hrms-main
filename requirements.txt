@@ -10,13 +10,13 @@
 # ---------------------------------------------------------------------------
 node >= 20            # tested on 24.18.0
 npm >= 10             # tested on 11.16.0
-postgresql >= 16      # local install (Homebrew postgresql@16), port 5433 — not Docker
+postgresql >= 16      # local install on default port 5432 (tested on 18.6) — not Docker
 redis                 # optional: shared rate-limit store (REDIS_URL); in-memory fallback otherwise
 
 # ---------------------------------------------------------------------------
 # Setup
 # ---------------------------------------------------------------------------
-# 1. brew install postgresql@16, set port = 5433, brew services start postgresql@16
+# 1. Install PostgreSQL 16+ and start it on port 5432
 # 2. Create the database "PeoplePay360" and a role matching DATABASE_URL
 # 3. cp .env.example .env   and fill in real values (see "Environment variables")
 # 4. npm install            (also runs `prisma generate`)

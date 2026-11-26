@@ -27,6 +27,15 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Server Action calls (POST with a Next-Action header) cannot follow a
+  // redirect: the client gets HTML instead of an action payload and throws
+  // "An unexpected response was received from the server". Every action
+  // enforces auth itself (requireUser / requirePermission) and returns a
+  // "sign in" error, so let them through untouched.
+  if (request.method === "POST" && request.headers.has("next-action")) {
+    return NextResponse.next();
+  }
+
   const session = await auth.api.getSession({ headers: request.headers });
   const role = session?.user?.role as string | undefined;
   const mustChangePassword = Boolean(
