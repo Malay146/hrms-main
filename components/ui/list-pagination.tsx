@@ -1,22 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useOnChange } from "@/components/hooks/use-on-change";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 /** Pass `resetKey` (search/filters) so page resets without depending on array identity. */
 export function useClientPagination<T>(items: T[], pageSize = 20, resetKey?: string | number) {
-  const [page, setPage] = useState(1);
+  const [requestedPage, setPage] = useState(1);
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(requestedPage, totalPages);
 
-  useEffect(() => {
-    setPage(1);
-  }, [resetKey, pageSize, total]);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+  useOnChange(`${resetKey}|${pageSize}|${total}`, () => setPage(1));
 
   const pageItems = useMemo(() => {
     const start = (page - 1) * pageSize;

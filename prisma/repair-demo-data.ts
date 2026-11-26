@@ -23,8 +23,8 @@ async function fixInvertedLeaveDates() {
   let fixed = 0;
   let durations = 0;
   for (const row of leaves) {
-    let start = toDateKey(row.startDate);
-    let end = toDateKey(row.endDate);
+    const start = toDateKey(row.startDate);
+    const end = toDateKey(row.endDate);
     if (end < start) {
       await prisma.leaveRequest.update({
         where: { id: row.id },

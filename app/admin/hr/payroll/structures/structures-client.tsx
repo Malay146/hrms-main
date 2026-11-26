@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useOnChange } from "@/components/hooks/use-on-change";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -28,10 +29,10 @@ export function StructuresClient({
   const [name, setName] = useState(selected?.name ?? "");
   const [active, setActive] = useState(selected?.active ?? true);
 
-  useEffect(() => {
+  useOnChange(selected?.id, () => {
     setName(selected?.name ?? "");
     setActive(selected?.active ?? true);
-  }, [selected?.id]);
+  });
 
   function save(id?: string) {
     startTransition(async () => {

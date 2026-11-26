@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useHydrated } from "@/components/hooks/use-hydrated";
+import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -36,12 +37,8 @@ const HEALTH_BADGE = {
 
 export default function AnalyticsClient({ data }: { data: AiAnalyticsData }) {
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
   const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const healthBadge = HEALTH_BADGE[data.health.band];
   const maxAttendance = Math.max(1, ...data.weeklyAttendance.map((row) => row.attendance));

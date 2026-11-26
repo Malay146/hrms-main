@@ -1,5 +1,7 @@
 "use client";
 
+import { useHydrated } from "@/components/hooks/use-hydrated";
+import { useOnChange } from "@/components/hooks/use-on-change";
 import React, { useState, useEffect, useRef, useTransition } from "react";
 import {
   Plus,
@@ -55,7 +57,7 @@ export default function RecruitmentClient({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
   const [board, setBoard] = useState(initialBoard);
   const [pipeline, setPipeline] = useState(initialBoard.pipeline);
   const [jobs, setJobs] = useState(initialBoard.jobs);
@@ -67,18 +69,18 @@ export default function RecruitmentClient({
   const [selectedStage, setSelectedStage] = useState(query.stage || "All");
   const [selectedExp, setSelectedExp] = useState("All");
 
-  useEffect(() => {
-    setBoard(initialBoard);
-    setPipeline(initialBoard.pipeline);
-    setJobs(initialBoard.jobs);
-    setApplicants(initialBoard.candidates);
-  }, [initialBoard]);
+  useOnChange(initialBoard, (next) => {
+    setBoard(next);
+    setPipeline(next.pipeline);
+    setJobs(next.jobs);
+    setApplicants(next.candidates);
+  });
 
-  useEffect(() => {
+  useOnChange(`${query.q}|${query.position}|${query.stage}`, () => {
     setSearch(query.q);
     setSelectedPosition(query.position || "All");
     setSelectedStage(query.stage || "All");
-  }, [query.q, query.position, query.stage]);
+  });
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -144,7 +146,6 @@ export default function RecruitmentClient({
   const kanbanMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setMounted(true);
     function handleClickOutside(event: MouseEvent) {
       if (
         dropdownRef.current &&

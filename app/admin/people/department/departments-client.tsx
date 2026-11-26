@@ -71,12 +71,8 @@ export function DepartmentsClient({
   }
 
   useEffect(() => {
-    if (!selected) {
-      setMemberSearch("");
-      setMemberPage(1);
-      setSheetMembers([]);
-      return;
-    }
+    // openDepartment() resets search, page, and members each time the sheet opens.
+    if (!selected) return;
     const handle = window.setTimeout(() => {
       void loadMembers(selected.id, 1, memberSearch);
     }, 250);

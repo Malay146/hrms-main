@@ -1,5 +1,6 @@
 "use client";
 
+import { useOnChange } from "@/components/hooks/use-on-change";
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -43,10 +44,10 @@ export function AttendanceClient({
   >([]);
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
+  useOnChange(`${query.q}|${query.status}`, () => {
     setSearch(query.q);
     setStatus(query.status || "All");
-  }, [query.q, query.status]);
+  });
 
   useEffect(() => {
     const handle = window.setTimeout(() => {

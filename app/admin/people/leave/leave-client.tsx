@@ -1,5 +1,6 @@
 "use client";
 
+import { useOnChange } from "@/components/hooks/use-on-change";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Search } from "lucide-react";
@@ -28,10 +29,10 @@ export function LeaveClient({
   const [brief, setBrief] = useState<AiLeaveBrief | null>(null);
   const [briefLoadingId, setBriefLoadingId] = useState<string | null>(null);
 
-  useEffect(() => {
+  useOnChange(`${query.q}|${query.status}`, () => {
     setSearch(query.q);
     setStatus(query.status || "All");
-  }, [query.q, query.status]);
+  });
 
   useEffect(() => {
     const handle = window.setTimeout(() => {

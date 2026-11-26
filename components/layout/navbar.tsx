@@ -84,13 +84,13 @@ export default function Navbar() {
   const profileRef = useRef<HTMLDivElement>(null);
   const previousUnread = useRef<number | null>(null);
 
-  async function refreshNotifications() {
-    const result = await listMyNotifications({ pageSize: 20 });
-    if (result.ok) {
+  function refreshNotifications() {
+    return listMyNotifications({ pageSize: 20 }).then((result) => {
+      if (!result.ok) return;
       setNotifications(result.data.items.slice(0, 12));
       setUnreadTotal(result.data.unreadCount);
       setSoundsEnabled(result.data.preferences.sounds);
-    }
+    });
   }
 
   useEffect(() => {
