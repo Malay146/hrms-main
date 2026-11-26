@@ -7,7 +7,7 @@ import {
 
 describe("forgotPasswordSchema", () => {
   it("accepts a valid email", () => {
-    const parsed = forgotPasswordSchema.safeParse({ email: "admin@odoo.com" });
+    const parsed = forgotPasswordSchema.safeParse({ email: "admin@company.com" });
     assert.equal(parsed.success, true);
   });
 

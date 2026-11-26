@@ -15,7 +15,9 @@
     "db:seed-more": "tsx prisma/seed-more-employees.ts",
     "db:repair": "tsx prisma/repair-demo-data.ts",
     "db:seed-employee-extras": "tsx prisma/seed-employee-extras.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "cron:payslips": "node scripts/run-cron.mjs payslips",
+    "cron:jobs": "node scripts/run-cron.mjs jobs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.59",

@@ -1,6 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useSyncExternalStore } from "react";
+
+const themeListeners = new Set<() => void>();
+function subscribeTheme(listener: () => void) {
+  themeListeners.add(listener);
+  return () => themeListeners.delete(listener);
+}
+function readTheme() {
+  return document.documentElement.classList.contains("dark");
+}
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/utils/cn";
@@ -215,25 +224,15 @@ export default function Sidebar() {
     : employeeNavItems;
 
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("theme");
-      if (saved) return saved === "dark";
-      return window.matchMedia("(prefers-color-scheme: dark)").matches;
-    }
-    return false;
-  });
-
-  useEffect(() => {
-    const root = window.document.documentElement;
-    if (isDarkMode) {
-      root.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      root.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [isDarkMode]);
+  // Theme lives on <html class="dark"> (set pre-paint by the root layout script).
+  // useSyncExternalStore renders the server snapshot (light) during hydration,
+  // then switches to the real value, so server and client HTML always match.
+  const isDarkMode = useSyncExternalStore(subscribeTheme, readTheme, () => false);
+  const setIsDarkMode = (dark: boolean) => {
+    document.documentElement.classList.toggle("dark", dark);
+    localStorage.setItem("theme", dark ? "dark" : "light");
+    themeListeners.forEach((listener) => listener());
+  };
   const [expandedSections, setExpandedSections] = useState<
     Record<string, boolean>
   >({

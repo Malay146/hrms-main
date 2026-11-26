@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { actionErrorMessage, requirePermission, requireUser } from "@/lib/auth/session";
+import { actionErrorMessage, ForbiddenError, requirePermission, requireUser } from "@/lib/auth/session";
 import { firstZodError } from "@/lib/shared/validations";
 import { hasPermission } from "@/lib/auth/permissions";
 import { REGULAR_SALARY_RULES } from "@/lib/payroll/regular-salary";
@@ -265,7 +265,16 @@ export async function deleteSalaryRuleAction(id: string): Promise<ActionResult<{
   }
 }
 
+/** Server action: callable from the client, so it re-checks the caller's org. */
 export async function ensureRegularSalaryStructure(organizationId: string) {
+  const actor = await requirePermission("editPayroll");
+  const actorProfile = await prisma.employeeProfile.findUnique({
+    where: { userId: actor.id },
+    select: { organizationId: true },
+  });
+  if (actorProfile?.organizationId !== organizationId) {
+    throw new ForbiddenError();
+  }
   const existing = await prisma.salaryStructure.findFirst({
     where: { organizationId, name: "Regular Salary" },
   });

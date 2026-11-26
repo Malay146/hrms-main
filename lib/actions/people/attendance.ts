@@ -578,24 +578,6 @@ export async function clockOutAction(): Promise<
   }
 }
 
-export async function weeklyAttendanceCounts() {
-  const keys = weekDayKeys();
-  const rows = await prisma.attendance.groupBy({
-    by: ["date"],
-    where: {
-      date: { gte: dateFromKey(keys[0]), lte: dateFromKey(keys[keys.length - 1]) },
-      status: { in: ["present", "half_day"] },
-    },
-    _count: { _all: true },
-  });
-  const byDate = new Map(rows.map((row) => [row.date.toISOString().slice(0, 10), row._count._all]));
-  const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  return keys.map((key, index) => ({
-    day: labels[index],
-    attendance: byDate.get(key) ?? 0,
-  }));
-}
-
 export async function listAttendanceEmployees(input?: {
   search?: string;
 }): Promise<ActionResult<{ userId: string; employeeId: string; name: string }[]>> {

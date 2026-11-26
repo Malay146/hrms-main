@@ -161,6 +161,7 @@ export function buildOpenApiDocument() {
       { name: "Recruitment" },
       { name: "Notifications" },
       { name: "AI" },
+      { name: "Settings", description: "Organization profile" },
       { name: "Cron", description: "Machine-to-machine jobs" },
     ],
     paths,

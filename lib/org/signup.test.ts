@@ -48,7 +48,7 @@ describe("organization slug allocation", () => {
   });
 
   it("appends a number when the base slug is taken", () => {
-    assert.equal(allocateOrgSlug("Odoo", ["ODOO"]), "ODOO2");
+    assert.equal(allocateOrgSlug("Company", ["COMP"]), "COMP2");
   });
 });
 

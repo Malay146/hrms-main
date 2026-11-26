@@ -2,13 +2,13 @@
 
 **Audience:** Oral exam / jury. Open this file first. Deeper tables live in the linked docs at the end.
 
-**Product names:** The UI wordmark is **HRMS**. The demo tenant is **Odoo** (`organization.slug = ODOO`). Internal docs often say **PeoplePay360**. Same app.
+**Product names:** The UI wordmark is **HRMS**. The demo tenant is **Company** (`organization.slug = COMPANY`). Internal docs often say **PeoplePay360**. Same app.
 
 **Scale lock:** One organization, ~5,000 employees target, one PostgreSQL primary. **Not** multi-tenant SaaS. **Not** a separate Express/FastAPI server.
 
 **Timezone for all “today / late / calendar” logic:** `Asia/Kolkata` (`lib/shared/dates.ts`). Late cutoff if no schedule line: **09:15 IST**.
 
-**Honesty rule for answers:** If a feature is stubbed or planned only, say so. Claiming Postgres RLS, Redis as a session/job store, or a working admin Settings save will fail a follow-up.
+**Honesty rule for answers:** If a feature is stubbed or planned only, say so. Claiming Postgres RLS or Redis as a session/job store will fail a follow-up.
 
 ---
 
@@ -114,7 +114,7 @@ Generated Prisma client is `generated/prisma/` (do not hand-edit). Alias: `@/gen
 | App framework       | **Next.js 16.2.10** App Router                             | RSC pages, Server Actions, `proxy.ts` (Next 16 replacement for `middleware.ts`) |
 | UI library          | **React 19.2.4**                                           | Client components for tables, forms, copilot                                    |
 | Language            | **TypeScript 5**                                           | Strict types across `app/` and `lib/`                                           |
-| Database            | **PostgreSQL 16+**                                         | Source of truth; local demo often port **5433**, DB name `PeoplePay360`         |
+| Database            | **PostgreSQL 16+**                                         | Source of truth; local demo on port **5432**, DB name `PeoplePay360`         |
 | ORM                 | **Prisma 7.10** + `@prisma/adapter-pg` + `pg`              | Prisma 7 driver adapter (not the old query engine URL-only client)              |
 | Auth                | **Better Auth 1.7**                                        | Email/password, httpOnly cookies, Prisma adapter, `disableSignUp: true`         |
 | Validation          | **Zod 4**                                                  | `lib/shared/validations.ts` + API bodies                                        |
@@ -200,14 +200,14 @@ Staff password for demo employees: `Employee@1234`. Admin is separate.
 
 | Role            | Email                     | Password          | Portal                                                     |
 | --------------- | ------------------------- | ----------------- | ---------------------------------------------------------- |
-| Admin           | `admin@odoo.com`          | `admin@odoo@1234` | `/admin`                                                   |
-| HR Manager      | `william.joseph@odoo.com` | `Employee@1234`   | `/admin` (no payroll, has AI + performance)                |
-| Payroll manager | `kimi.nowa@odoo.com`      | `Employee@1234`   | `/admin` (can finalize payruns; **no** AI analytics)       |
-| Payroll officer | `priya.shah@odoo.com`     | `Employee@1234`   | `/admin` (edit/compute/send; **cannot** mark paid)         |
-| Employee (demo) | `aarav.mehta@odoo.com`    | `Employee@1234`   | `/employee` — wage ₹50,000 → net ₹75,000 on Regular Salary |
+| Admin           | `admin@company.com`          | `admin@company@1234` | `/admin`                                                   |
+| HR Manager      | `william.joseph@company.com` | `Employee@1234`   | `/admin` (no payroll, has AI + performance)                |
+| Payroll manager | `kimi.nowa@company.com`      | `Employee@1234`   | `/admin` (can finalize payruns; **no** AI analytics)       |
+| Payroll officer | `priya.shah@company.com`     | `Employee@1234`   | `/admin` (edit/compute/send; **cannot** mark paid)         |
+| Employee (demo) | `aarav.mehta@company.com`    | `Employee@1234`   | `/employee` — wage ₹50,000 → net ₹75,000 on Regular Salary |
 
 
-Other seeded people: `bruce.banner@odoo.com`, `sarah.mills@odoo.com`, `john.cena@odoo.com`, `mark.lou@odoo.com`.
+Other seeded people: `bruce.banner@company.com`, `sarah.mills@company.com`, `john.cena@company.com`, `mark.lou@company.com`.
 
 **Payroll talking point:** Aarav Mehta, Regular Salary structure:
 
@@ -297,7 +297,7 @@ Status: **Wired** = Prisma. **Partial** = DB with a gap. **Stub** = UI only / mo
 | `/admin/people/leave/types`       | Wired  | Paid/sick/unpaid-style types; `requiresAllocation` flag.                                                     |
 
 
-Employee business code: `ODOO-2026-008` from `lib/people/employee-id.ts` (`slug-year-seq`). Unique **per organization**, not globally.
+Employee business code: `COMPANY-2026-008` from `lib/people/employee-id.ts` (`slug-year-seq`). Unique **per organization**, not globally.
 
 ### 6.3 Admin — Payroll (live path)
 
@@ -324,7 +324,7 @@ Employee business code: `ODOO-2026-008` from `lib/people/employee-id.ts` (`slug-
 | `/admin/hr/recruitment` | **Partial** | Create jobs, move stages, reject, schedule interview. **No “add applicant” action.** Board **auto-seeds demo candidates** if empty. |
 | `/admin/analytics`      | Wired       | Health score, attendance/late/leave, flight-risk table, optional insight cards. Admin + HR manager only.                            |
 | `/admin/notifications`  | Wired       | Inbox, mark read, delete, prefs, **announcements** (staff). Sounds flag stored, **no audio player**.                                |
-| `/admin/settings`       | **Stub**    | Org/security/billing tabs, mock sessions/invoices, toast “saved” — **does not write Postgres**.                                     |
+| `/admin/settings`       | Wired       | Organization name/email (admin edits, other staff read-only), password change, real signed-in sessions with remote sign-out.        |
 | `/admin/developers`     | **Removed** | Use `/swagger-ui`.                                                                                                                  |
 | `/admin/users`          | **Removed** | Use Add User on Employees.                                                                                                          |
 
@@ -375,7 +375,7 @@ Keep this list for “where is the business logic?” — **not** inside React.
 | `lib/people/attendance-metrics.ts` | Late vs schedule+grace, worked hours, OT, missing checkout                       |
 | `lib/people/contract-period.ts`    | Single overlapping **running** contract; pick covering contract for a pay period |
 | `lib/people/schedule-hours.ts`     | Unique weekday lines; weekly expected hours                                      |
-| `lib/people/employee-id.ts`        | `ODOO-2026-NNN`, `CON/YYYY/NNNN`                                                 |
+| `lib/people/employee-id.ts`        | `COMPANY-2026-NNN`, `CON/YYYY/NNNN`                                                 |
 | `lib/payroll/compute.ts`           | Ordered rules, formula sandbox (**no** `eval`)                                   |
 | `lib/payroll/warnings.ts`          | Priority: no contract > missing A/C > duplicate                                  |
 | `lib/ai/metrics.ts`                | Attendance %, late %, clash count, flight risk, health score                     |
@@ -474,12 +474,12 @@ Operations cover me/profile, dashboards, departments, employees, schedules, cont
 | ----------------------------- | ------------------ | ---------------------------------------------------- |
 | `user.id`                     | `user`             | Login. Attendance + leave historically hang on this. |
 | `employee_profile.id`         | `employee_profile` | HR PK. Contracts, allocations, payslips, reviews.    |
-| `employee_profile.employeeId` | same               | **Badge** `ODOO-2026-008`, not a FK.                 |
+| `employee_profile.employeeId` | same               | **Badge** `COMPANY-2026-008`, not a FK.                 |
 
 
 After Task 4, `attendance` and `leave_request` also store `organizationId` + `employeeId` (**profile PK**, not the badge). Triggers require them to match the profile. Copilot SQL can filter by org without joining `user`.
 
-**Tenant:** one `organization` row (Odoo). App scopes queries by `organizationId`. **No Postgres RLS.**
+**Tenant:** one `organization` row (Company). App scopes queries by `organizationId`. **No Postgres RLS.**
 
 ### 10.1 Model groups
 
@@ -573,7 +573,7 @@ Use this section when they say “what happens if…”.
 | Two Monday lines on one schedule       | Unique `(scheduleId, weekday)`                                                      |
 | Delete Engineering while people remain | FK **Restrict**                                                                     |
 | Delete a manager who still has reports | Restrict until `managerId` cleared                                                  |
-| New employee                           | Badge `ODOO-YYYY-NNN`; temp password; `mustChangePassword`; email or toast fallback |
+| New employee                           | Badge `COMPANY-YYYY-NNN`; temp password; `mustChangePassword`; email or toast fallback |
 
 
 
@@ -799,7 +799,7 @@ Say these out loud if asked “is everything done?”
 
 | Item                                       | Reality                                                                             |
 | ------------------------------------------ | ----------------------------------------------------------------------------------- |
-| Admin Settings                             | Mock chrome, no DB                                                                  |
+| Admin Settings                             | Wired: org profile, password, sessions. No billing (none exists)                    |
 | Public registration                        | Closed                                                                              |
 | `/admin/users`                             | Removed; Add User on Employees                                                      |
 | Recruitment applicant intake               | No create-candidate UI; demo auto-seed                                              |
@@ -816,7 +816,7 @@ Say these out loud if asked “is everything done?”
 | Employee payslip print                     | Admin print only                                                                    |
 | Fault-tolerance 4–10, 12                   | See §14 (rate limits are done)                                                      |
 | DB redesign 6–14                           | See §10.2                                                                           |
-| README “Coming Soon” list                  | **Stale** — Performance, Notifications, Recruitment are wired (recruitment partial) |
+| README feature list                        | Current — recruitment is partial (no manual “add applicant”)                         |
 
 
 ---

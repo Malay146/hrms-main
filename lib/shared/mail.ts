@@ -35,7 +35,6 @@ function transporter() {
     port,
     secure: port === 465,
     requireTLS: port === 587,
-    family: 4,
     auth: { user, pass },
     tls: { minVersion: "TLSv1.2" },
   });
@@ -49,7 +48,26 @@ function smtpFrom() {
   return from;
 }
 
+/**
+ * Demo/seed accounts use placeholder domains (company.com is a real, third-party
+ * domain). Never relay mail there. Override with MAIL_SKIP_DOMAINS="a.com,b.com"
+ * or set it to "" to allow every domain.
+ */
+export function skippedMailDomain(to: string, setting = process.env.MAIL_SKIP_DOMAINS) {
+  const domains = (setting ?? "company.com")
+    .split(",")
+    .map((domain) => domain.trim().toLowerCase())
+    .filter(Boolean);
+  const domain = to.trim().toLowerCase().split("@").pop() ?? "";
+  return domains.includes(domain) ? domain : null;
+}
+
 async function sendMail(options: { to: string; subject: string; text: string; html?: string }) {
+  const skipped = skippedMailDomain(options.to);
+  if (skipped) {
+    logger.info("mail.skipped_demo_domain", { domain: skipped, subject: options.subject });
+    throw new Error(`Email not sent: ${skipped} is a demo address domain (MAIL_SKIP_DOMAINS).`);
+  }
   try {
     await transporter().sendMail({
       from: smtpFrom(),
