@@ -335,13 +335,16 @@ body {
   background-color: #FAFAFA !important;
   color: #141416 !important;
 }
-.dark .bg-zinc-900 * {
+/* Custom filled icons turn dark on light buttons. Lucide icons are outline
+   (fill="none") and follow currentColor, so they are excluded: forcing a fill
+   on them turns shapes like the envelope into solid blocks. */
+.dark .bg-zinc-900 *:not(.lucide, .lucide *) {
   fill: #141416 !important;
 }
 .dark .hover\:bg-zinc-800:hover {
   background-color: #E4E4E7 !important;
 }
-.dark .hover\:bg-zinc-800:hover * {
+.dark .hover\:bg-zinc-800:hover *:not(.lucide, .lucide *) {
   fill: #141416 !important;
 }
 .dark .hover\:bg-zinc-50:hover {

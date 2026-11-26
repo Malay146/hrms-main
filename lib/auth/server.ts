@@ -4,8 +4,10 @@ import { nextCookies } from "better-auth/next-js";
 import { prisma } from "@/lib/db";
 import { logger } from "@/lib/shared/logger";
 import { sendPasswordResetEmail } from "@/lib/shared/mail";
+import { appUrl, trustedAppOrigins } from "@/lib/shared/app-url";
 
 export const auth = betterAuth({
+  baseURL: appUrl(),
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
@@ -66,6 +68,6 @@ export const auth = betterAuth({
       maxAge: 5 * 60,
     },
   },
-  trustedOrigins: [process.env.BETTER_AUTH_URL ?? "http://localhost:3000"],
+  trustedOrigins: trustedAppOrigins(),
   plugins: [nextCookies()],
 });
