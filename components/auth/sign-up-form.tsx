@@ -82,7 +82,7 @@ export function SignUpForm() {
       />
 
       {error ? (
-        <p className="text-xs font-semibold text-red-600">{error}</p>
+        <p className="text-xs font-semibold text-red-600 dark:text-red-400">{error}</p>
       ) : null}
 
       <AuthSubmitButton disabled={pending}>

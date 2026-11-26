@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import Logo from "@/components/icons/logo";
 import { ArrowRight } from "lucide-react";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 export default function LandingNavbar() {
   return (
@@ -24,15 +25,16 @@ export default function LandingNavbar() {
 
         {/* Right: Register + Login */}
         <div className="flex items-center gap-2 sm:gap-3">
+          <ThemeToggle />
           <Link
             href="/sign-up"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-zinc-950 bg-white hover:underline hover:bg-zinc-50 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800 rounded-md transition-all active:scale-95 cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-zinc-950 bg-white hover:underline hover:bg-zinc-50 rounded-md transition-all active:scale-95 cursor-pointer"
           >
             Register organization
           </Link>
           <Link
             href="/login"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-zinc-950 hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200 rounded-md shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-zinc-950 hover:bg-zinc-800 rounded-md shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer"
           >
             Login
             <ArrowRight className="w-4 h-4" />

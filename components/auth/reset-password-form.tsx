@@ -21,7 +21,7 @@ export function ResetPasswordForm({
   if (!token) {
     return (
       <div className="flex flex-col gap-4 text-left">
-        <p className="text-sm font-medium text-red-600">
+        <p className="text-sm font-medium text-red-600 dark:text-red-400">
           {invalidReason || "This reset link is invalid or has expired."}
         </p>
         <Link
@@ -72,7 +72,7 @@ export function ResetPasswordForm({
         autoComplete="new-password"
         required
       />
-      {error ? <p className="text-xs font-semibold text-red-600">{error}</p> : null}
+      {error ? <p className="text-xs font-semibold text-red-600 dark:text-red-400">{error}</p> : null}
       <AuthSubmitButton disabled={pending}>
         {pending ? "Saving..." : "Reset password"}
       </AuthSubmitButton>
