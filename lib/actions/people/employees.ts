@@ -1,5 +1,6 @@
 "use server";
 
+import { appUrl } from "@/lib/shared/app-url";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "@/lib/db";
@@ -727,7 +728,7 @@ export async function createEmployeeAction(input: {
       });
     });
 
-    const loginUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+    const loginUrl = appUrl();
     let emailSent = true;
     let emailError: string | undefined;
     try {

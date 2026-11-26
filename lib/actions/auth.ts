@@ -1,5 +1,6 @@
 "use server";
 
+import { appUrl } from "@/lib/shared/app-url";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { hashPassword } from "better-auth/crypto";
@@ -29,11 +30,7 @@ import {
 import { clientIp } from "@/lib/shared/request-ip";
 
 function appOrigin() {
-  return (
-    process.env.BETTER_AUTH_URL?.replace(/\/$/, "") ||
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    "http://localhost:3000"
-  );
+  return appUrl();
 }
 
 export async function signInAction(input: {
