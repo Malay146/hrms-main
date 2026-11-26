@@ -21,16 +21,18 @@ export function AttendanceWidget() {
   const [checkedIn, setCheckedIn] = useState(false);
   const [checkedOut, setCheckedOut] = useState(false);
   const [checkInAt, setCheckInAt] = useState<Date | null>(null);
-  const [elapsed, setElapsed] = useState("0h 00m");
+  const [now, setNow] = useState(() => Date.now());
   const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
+  const elapsed = checkInAt ? formatElapsed(Math.max(0, now - checkInAt.getTime())) : "0h 00m";
 
-  async function refresh() {
-    const row = await getTodayAttendance();
-    setCheckedIn(Boolean(row?.checkIn));
-    setCheckedOut(Boolean(row?.checkOut));
-    setCheckInAt(row?.checkIn ? new Date(row.checkIn) : null);
+  function refresh() {
+    return getTodayAttendance().then((row) => {
+      setCheckedIn(Boolean(row?.checkIn));
+      setCheckedOut(Boolean(row?.checkOut));
+      setCheckInAt(row?.checkIn ? new Date(row.checkIn) : null);
+    });
   }
 
   useEffect(() => {
@@ -46,9 +48,7 @@ export function AttendanceWidget() {
 
   useEffect(() => {
     if (!checkInAt || checkedOut) return;
-    const tick = () => setElapsed(formatElapsed(Date.now() - checkInAt.getTime()));
-    tick();
-    const id = window.setInterval(tick, 1000);
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [checkInAt, checkedOut]);
 

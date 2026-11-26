@@ -41,8 +41,8 @@ export function ForgotPasswordForm() {
         required
       />
 
-      {error ? <p className="text-xs font-semibold text-red-600">{error}</p> : null}
-      {message ? <p className="text-xs font-semibold text-emerald-700">{message}</p> : null}
+      {error ? <p className="text-xs font-semibold text-red-600 dark:text-red-400">{error}</p> : null}
+      {message ? <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">{message}</p> : null}
 
       <AuthSubmitButton disabled={pending}>
         {pending ? "Sending..." : "Send reset link"}

@@ -4,7 +4,6 @@ import React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "motion/react";
-import { ArrowRight } from "lucide-react";
 import TotalEmployeeIcon from "@/components/icons/total-employee";
 import PresentTodayIcon from "@/components/icons/present-today";
 import BuildingIcon from "@/components/icons/building";
@@ -61,7 +60,7 @@ export default function HeroSection() {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 pt-4">
               <Link
                 href="/sign-up"
-                className="group relative inline-flex items-center justify-center gap-2.5 px-4 py-3 rounded-md bg-zinc-950 text-white dark:bg-white dark:text-zinc-950 font-semibold text-md shadow-lg shadow-zinc-950/10 dark:shadow-white/5 hover:bg-zinc-800 dark:hover:bg-zinc-100 transition-all duration-200 active:scale-[0.98] cursor-pointer"
+                className="group relative inline-flex items-center justify-center gap-2.5 px-4 py-3 rounded-md bg-zinc-950 text-white font-semibold text-md shadow-lg shadow-zinc-950/10 dark:shadow-white/5 hover:bg-zinc-800 transition-all duration-200 active:scale-[0.98] cursor-pointer"
               >
                 <span>Get Started</span>
               </Link>
@@ -110,7 +109,7 @@ export default function HeroSection() {
               <div className="relative w-full h-full transition-transform duration-700 ease-out group-hover:[transform:rotateY(-8deg)_rotateX(6deg)_rotateZ(1deg)] [transform-style:preserve-3d] [transform:rotateY(-18deg)_rotateX(12deg)_rotateZ(2deg)]">
 
                 {/* STAIR 1: Back/Top Image - HR Admin Portal (hr.png) */}
-                <div className="absolute top-0 left-0 w-[82%] sm:w-[85%] rounded-lg overflow-hidden border border-zinc-200/90 dark:border-zinc-700/80 bg-white dark:bg-zinc-900 shadow-xl transition-all duration-500 ease-out group-hover:translate-x-[-20px] group-hover:translate-y-[-20px] group-hover:[transform:translateZ(-20px)] [transform:translateZ(0px)] z-10 opacity-90 hover:opacity-100">
+                <div className="absolute top-0 left-0 w-[82%] sm:w-[85%] rounded-lg overflow-hidden border border-zinc-200/90 dark:border-zinc-700/80 bg-white shadow-xl transition-all duration-500 ease-out group-hover:translate-x-[-20px] group-hover:translate-y-[-20px] group-hover:[transform:translateZ(-20px)] [transform:translateZ(0px)] z-10 opacity-90 hover:opacity-100">
                   <div className="bg-zinc-100 dark:bg-zinc-800 px-3.5 py-2.5 border-b border-zinc-200 dark:border-zinc-700 flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-red-400" />
                     <div className="w-3 h-3 rounded-full bg-yellow-400" />
@@ -130,7 +129,7 @@ export default function HeroSection() {
                 </div>
 
                 {/* STAIR 2: Middle Image - Employee Portal (employee.png) */}
-                <div className="absolute top-[70px] sm:top-[90px] lg:top-[110px] left-[55px] sm:left-[75px] lg:left-[95px] w-[82%] sm:w-[85%] rounded-lg overflow-hidden border border-zinc-200/90 dark:border-zinc-700/80 bg-white dark:bg-zinc-900 shadow-2xl transition-all duration-500 ease-out group-hover:translate-x-[0px] group-hover:translate-y-[0px] [transform:translateZ(50px)] z-20">
+                <div className="absolute top-[70px] sm:top-[90px] lg:top-[110px] left-[55px] sm:left-[75px] lg:left-[95px] w-[82%] sm:w-[85%] rounded-lg overflow-hidden border border-zinc-200/90 dark:border-zinc-700/80 bg-white shadow-2xl transition-all duration-500 ease-out group-hover:translate-x-[0px] group-hover:translate-y-[0px] [transform:translateZ(50px)] z-20">
                   <div className="bg-zinc-100 dark:bg-zinc-800 px-3.5 py-2.5 border-b border-zinc-200 dark:border-zinc-700 flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-red-400" />
                     <div className="w-3 h-3 rounded-full bg-yellow-400" />
@@ -150,8 +149,8 @@ export default function HeroSection() {
                 </div>
 
                 {/* STAIR 3: Front/Bottom Primary Image - Main Dashboard (dashboard.png) */}
-                <div className="absolute top-[140px] sm:top-[180px] lg:top-[220px] left-[110px] sm:left-[150px] lg:left-[190px] w-[82%] sm:w-[85%] rounded-lg overflow-hidden border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 shadow-[0_30px_70px_-15px_rgba(0,0,0,0.35)] transition-all duration-500 ease-out group-hover:translate-x-[20px] group-hover:translate-y-[20px] [transform:translateZ(100px)] z-30">
-                  <div className="bg-zinc-950 text-white px-3.5 py-2.5 flex items-center justify-between border-b border-zinc-800">
+                <div className="absolute top-[140px] sm:top-[180px] lg:top-[220px] left-[110px] sm:left-[150px] lg:left-[190px] w-[82%] sm:w-[85%] rounded-lg overflow-hidden border border-zinc-300 dark:border-zinc-600 bg-white shadow-[0_30px_70px_-15px_rgba(0,0,0,0.35)] transition-all duration-500 ease-out group-hover:translate-x-[20px] group-hover:translate-y-[20px] [transform:translateZ(100px)] z-30">
+                  <div className="bg-[#09090b] text-white px-3.5 py-2.5 flex items-center justify-between border-b border-zinc-800">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full bg-red-500" />
                       <div className="w-3 h-3 rounded-full bg-amber-500" />

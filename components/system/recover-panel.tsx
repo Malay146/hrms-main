@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 type RecoverPanelProps = {
   reset?: () => void;
   title?: string;
@@ -31,9 +33,9 @@ export function RecoverPanel({
             Try again
           </button>
         ) : null}
-        <a href="/" className={homeClassName}>
+        <Link href="/" className={homeClassName}>
           Home
-        </a>
+        </Link>
       </div>
     </div>
   );

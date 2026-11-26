@@ -1,5 +1,6 @@
 "use client";
 
+import { useHydrated } from "@/components/hooks/use-hydrated";
 import { ChevronRight, Info } from "lucide-react";
 import React from "react";
 import Link from "next/link";
@@ -56,10 +57,7 @@ export default function Dashboard({
   payroll?: PayrollDashboardData;
   filters?: { periodStart: string; periodEnd: string; department: string; employeeType: string };
 }) {
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useHydrated();
 
   const teamPct = (count: number) =>
     stats.totalEmployees === 0 ? "0% of team" : `${Math.round((count / stats.totalEmployees) * 100)}% of team`;

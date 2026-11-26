@@ -131,6 +131,7 @@ export function EmployeesClient({
       pushQuery({ q: deferredSearch, page: 1 });
     }, 250);
     return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce search only; pushQuery is recreated each render
   }, [deferredSearch, query.q]);
 
   function pushQuery(
@@ -173,13 +174,7 @@ export function EmployeesClient({
     pushQuery({ sort: column, dir: "asc", page: 1, view: "list" });
   }
 
-  function SortHeader({
-    label,
-    column,
-  }: {
-    label: string;
-    column: EmployeeSortKey;
-  }) {
+  function sortHeader(label: string, column: EmployeeSortKey) {
     const active = query.sort === column;
     const Icon = !active ? ArrowUpDown : query.dir === "asc" ? ArrowUp : ArrowDown;
     return (
@@ -476,19 +471,19 @@ export function EmployeesClient({
             <thead>
               <tr className="bg-zinc-50/80 border-b border-border text-xs font-semibold tracking-wider">
                 <th className="py-3.5 px-6">
-                  <SortHeader label="Employee" column="name" />
+                  {sortHeader("Employee", "name")}
                 </th>
                 <th className="py-3.5 px-6">
-                  <SortHeader label="Department" column="department" />
+                  {sortHeader("Department", "department")}
                 </th>
                 <th className="py-3.5 px-6">
-                  <SortHeader label="Designation" column="designation" />
+                  {sortHeader("Designation", "designation")}
                 </th>
                 <th className="py-3.5 px-6">
-                  <SortHeader label="Joined" column="joined" />
+                  {sortHeader("Joined", "joined")}
                 </th>
                 <th className="py-3.5 px-6">
-                  <SortHeader label="Status" column="status" />
+                  {sortHeader("Status", "status")}
                 </th>
               </tr>
             </thead>

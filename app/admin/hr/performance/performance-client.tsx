@@ -1,5 +1,6 @@
 "use client";
 
+import { useOnChange } from "@/components/hooks/use-on-change";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Plus, Search, Trash2 } from "lucide-react";
@@ -56,16 +57,16 @@ export function PerformanceClient({
   const [employeePickerSearch, setEmployeePickerSearch] = useState("");
   const [pickerEmployees, setPickerEmployees] = useState(initial.employees);
 
-  useEffect(() => {
-    setBoard(initial);
-    setPickerEmployees(initial.employees);
-  }, [initial]);
+  useOnChange(initial, (next) => {
+    setBoard(next);
+    setPickerEmployees(next.employees);
+  });
 
-  useEffect(() => {
+  useOnChange(`${query.q}|${query.status}|${query.cycleId}`, () => {
     setSearch(query.q);
     setStatus(query.status || "All");
     setCycleFilter(query.cycleId || "All");
-  }, [query.q, query.status, query.cycleId]);
+  });
 
   useEffect(() => {
     const handle = window.setTimeout(() => {

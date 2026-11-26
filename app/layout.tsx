@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   },
 };
 
-const THEME_SCRIPT = `(function(){try{var p=location.pathname;if(p.indexOf("/admin")!==0&&p.indexOf("/employee")!==0)return;var t=localStorage.getItem("theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}})()`;
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("theme");if(t==="dark"||(!t&&matchMedia("(prefers-color-scheme: dark)").matches))document.documentElement.classList.add("dark")}catch(e){}})()`;
 
 export default function RootLayout({
   children,

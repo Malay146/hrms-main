@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useOnChange } from "@/components/hooks/use-on-change";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -69,10 +70,10 @@ export function RulesClient({
     selected?.structureId || structureId || structures[0]?.id || "",
   );
 
-  useEffect(() => {
+  useOnChange(`${selected?.id}|${selected?.structureId}|${structureId}|${structures[0]?.id}`, () => {
     setForm(selected ? formFromRule(selected) : emptyRule);
     setCurrentStructureId(selected?.structureId || structureId || structures[0]?.id || "");
-  }, [selected?.id, selected?.structureId, structureId, structures[0]?.id]);
+  });
 
   function openRule(rule: SalaryRuleListItem) {
     router.push(`/admin/hr/payroll/rules?structureId=${rule.structureId}&id=${rule.id}`);
@@ -269,7 +270,7 @@ export function RulesClient({
           <input className="h-10 px-3 border border-border rounded-lg text-sm" disabled={!canEdit} value={form.formula} onChange={(e) => setForm({ ...form, formula: e.target.value })} />
         </label>
         <p className="md:col-span-2 text-xs text-zinc-500 font-medium">
-          Computation note: Fixed uses the amount. Percentage uses wage, basic, gross, or another rule code. Formula may use wage, workedDays, scheduledDays, unpaidLeaveDays, categories.*, and byCode['CODE'].
+          Computation note: Fixed uses the amount. Percentage uses wage, basic, gross, or another rule code. Formula may use wage, workedDays, scheduledDays, unpaidLeaveDays, categories.*, and byCode[&apos;CODE&apos;].
         </p>
         {canEdit ? (
           <div className="md:col-span-2 flex items-center justify-between gap-3">

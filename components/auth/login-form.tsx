@@ -34,7 +34,7 @@ export function LoginForm({ passwordResetSuccess = false }: { passwordResetSucce
   return (
     <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
       {passwordResetSuccess ? (
-        <p className="text-xs font-semibold text-emerald-700 rounded-lg border border-emerald-200/60 bg-emerald-50 px-3 py-2">
+        <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 rounded-lg border border-emerald-200/60 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2">
           Password updated. Sign in with your new password.
         </p>
       ) : null}
@@ -68,7 +68,7 @@ export function LoginForm({ passwordResetSuccess = false }: { passwordResetSucce
         </div>
       </div>
 
-      {error ? <p className="text-xs font-semibold text-red-600">{error}</p> : null}
+      {error ? <p className="text-xs font-semibold text-red-600 dark:text-red-400">{error}</p> : null}
 
       <AuthSubmitButton disabled={pending}>
         {pending ? "Signing in..." : "Sign in"}

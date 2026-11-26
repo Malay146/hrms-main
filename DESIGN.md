@@ -286,7 +286,7 @@ Title left-aligned. Actions top-right, primary on the right. Do not center in-ap
 - Unread row: `bg-zinc-50/20`, unread title `font-bold`, tiny zinc-950 dot
 - Notification type icons are emoji in a 36px circle (`📅 💼 📊 ⚙️`)
 - Profile popover: 240px, name + email + role chip (`text-[10px] font-bold bg-zinc-100`), Settings, then Logout in error color
-- Avatar image: `/person.jpg`, 32×32 `object-cover`
+- Avatar image: `PersonAvatar` (generated DiceBear avatar), 32×32
 
 ### Landing navbar
 

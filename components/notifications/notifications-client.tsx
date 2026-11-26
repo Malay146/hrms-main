@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useOnChange } from "@/components/hooks/use-on-change";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
@@ -74,11 +75,9 @@ export function NotificationsClient({
   const [announceBody, setAnnounceBody] = useState("");
   const [message, setMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    setItems(initialItems);
-    setAnnouncements(initialAnnouncements);
-    setPreferences(initialPreferences);
-  }, [initialItems, initialAnnouncements, initialPreferences]);
+  useOnChange(initialItems, setItems);
+  useOnChange(initialAnnouncements, setAnnouncements);
+  useOnChange(initialPreferences, setPreferences);
 
   const categories = useMemo(() => {
     const names = [...new Set(items.map((row) => row.category))];

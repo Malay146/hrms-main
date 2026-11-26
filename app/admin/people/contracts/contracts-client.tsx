@@ -1,5 +1,6 @@
 "use client";
 
+import { useOnChange } from "@/components/hooks/use-on-change";
 import React, { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -39,10 +40,10 @@ export function ContractsClient({
   const [editing, setEditing] = useState<ContractListItem | null>(null);
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
+  useOnChange(`${query.q}|${query.status}`, () => {
     setSearch(query.q);
     setStatusFilter(query.status);
-  }, [query.q, query.status]);
+  });
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
