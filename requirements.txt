@@ -1,0 +1,90 @@
+# PeoplePay360 HRMS — requirements
+#
+# NOTE: This is a Node.js / Next.js project, not Python. Do NOT run
+# `pip install -r requirements.txt`. Packages are installed with npm from
+# package.json / package-lock.json. This file lists what you need on your
+# machine and the exact package versions the app currently runs on.
+
+# ---------------------------------------------------------------------------
+# System requirements
+# ---------------------------------------------------------------------------
+node >= 20            # tested on 24.18.0
+npm >= 10             # tested on 11.16.0
+postgresql >= 16      # local install (Homebrew postgresql@16), port 5433 — not Docker
+redis                 # optional: shared rate-limit store (REDIS_URL); in-memory fallback otherwise
+
+# ---------------------------------------------------------------------------
+# Setup
+# ---------------------------------------------------------------------------
+# 1. brew install postgresql@16, set port = 5433, brew services start postgresql@16
+# 2. Create the database "PeoplePay360" and a role matching DATABASE_URL
+# 3. cp .env.example .env   and fill in real values (see "Environment variables")
+# 4. npm install            (also runs `prisma generate`)
+# 5. npx prisma migrate deploy
+# 6. npm run db:seed
+# 7. npm run dev            then open http://localhost:3000
+#
+# Run tests with: npm test
+
+# ---------------------------------------------------------------------------
+# Environment variables (.env)
+# ---------------------------------------------------------------------------
+# Required:  DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL, NEXT_PUBLIC_APP_URL
+# Email:     SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (Gmail App Password), SMTP_FROM
+# Optional:  OPENAI_API_KEY (AI analytics / copilot), REDIS_URL, CRON_SECRET
+
+# ---------------------------------------------------------------------------
+# Runtime dependencies (installed by npm install)
+# ---------------------------------------------------------------------------
+next==16.2.10
+react==19.2.4
+react-dom==19.2.4
+@prisma/client==7.10.0
+@prisma/adapter-pg==7.10.0
+pg==8.23.0
+better-auth==1.7.2
+ai==7.0.93
+@ai-sdk/openai==4.0.59
+redis==6.2.1
+nodemailer==10.0.0
+zod==4.5.4
+zustand==5.0.15
+@tanstack/react-query==5.102.8
+@tanstack/react-query-devtools==5.102.8
+@base-ui/react==1.6.0
+shadcn==4.13.0
+class-variance-authority==0.7.1
+clsx==2.1.1
+cn==0.2.5
+tailwind-merge==3.6.0
+tw-animate-css==1.4.0
+cmdk==1.1.1
+lucide-react==1.25.0
+nucleo-ui-essential-fill-18==1.1.6
+motion==12.42.2
+sonner==2.0.8
+react-day-picker==10.0.1
+recharts==3.8.0
+@dicebear/core==10.7.0
+@dicebear/styles==10.6.0
+xlsx==0.18.5
+swagger-ui-dist==5.32.15
+swagger-ui-react==5.32.15
+@vercel/analytics==2.0.1
+dotenv==17.4.2
+
+# ---------------------------------------------------------------------------
+# Development dependencies
+# ---------------------------------------------------------------------------
+typescript==5.9.3
+prisma==7.10.0
+tsx==4.23.13
+eslint==9.39.5
+eslint-config-next==16.2.10
+tailwindcss==4.3.3
+@tailwindcss/postcss==4.3.3
+@types/node==20.19.43
+@types/react==19.2.17
+@types/react-dom==19.2.3
+@types/pg==8.23.1
+@types/nodemailer==8.0.1

@@ -12,6 +12,7 @@ import {
   planCopilotTurn,
 } from "@/lib/ai/client";
 import { executeAssistantLookup, executeAssistantPlan } from "@/lib/ai/assistant-execute";
+import { answerFromSql } from "@/lib/ai/copilot-sql";
 import {
   chatReply,
   classifyCopilotQuestion,
@@ -544,10 +545,27 @@ export async function askHrCopilot(
     if (plan.kind === "answer") {
       const tool = lookupForCopilotIntent(intent);
       if (tool) {
-        const fromSql = await applyPlan({ kind: "lookup", tool, args: {} });
+        const fromHeuristic = planAssistantTurn(asked, history);
+        const fromSql = await applyPlan(
+          fromHeuristic.kind === "lookup" ? fromHeuristic : { kind: "lookup", tool, args: {} },
+        );
         if (fromSql) return fromSql;
       }
     }
+    // No canned tool fits. Let the model write a guarded, org-scoped SELECT
+    // rather than falling through to a chat reply with no data behind it.
+    async function trySqlAnswer() {
+      if (isSmallTalk(asked) || !user.organizationId) return null;
+      const sql = await answerFromSql({
+        question: asked,
+        organizationId: user.organizationId,
+        history,
+        today: kolkataTodayKey(),
+      });
+      if (!sql) return null;
+      return finish({ answer: sql.answer, source: "HR assistant", acted: false });
+    }
+
     if (plan.kind === "chat" || intent === "chat") {
       const recentCreate = history.some((turn) => /(?:add|create|make).{0,40}departments?/i.test(turn.body));
       const alreadyCreated = history.some(
@@ -561,6 +579,8 @@ export async function askHrCopilot(
           acted: false,
         });
       }
+      const fromSql = await trySqlAnswer();
+      if (fromSql) return fromSql;
       const answer = isAiConfigured()
         ? await phraseAssistantChat({
             question: asked,
@@ -573,9 +593,15 @@ export async function askHrCopilot(
 
     const fallbackLookup = lookupForCopilotIntent(intent);
     if (fallbackLookup) {
-      const fromSql = await applyPlan({ kind: "lookup", tool: fallbackLookup, args: {} });
+      const fromHeuristic = planAssistantTurn(asked, history);
+      const fromSql = await applyPlan(
+        fromHeuristic.kind === "lookup" ? fromHeuristic : { kind: "lookup", tool: fallbackLookup, args: {} },
+      );
       if (fromSql) return fromSql;
     }
+
+    const sqlAnswer = await trySqlAnswer();
+    if (sqlAnswer) return sqlAnswer;
 
     const answer = isAiConfigured()
       ? await phraseAssistantChat({ question: asked, firstName, history })

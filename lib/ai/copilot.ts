@@ -12,6 +12,8 @@ export type CopilotIntent =
   | "pending_leave"
   | "payroll"
   | "performance"
+  | "headcount"
+  | "departments"
   | "general"
   | "chat"
   | "refuse";
@@ -90,6 +92,11 @@ const WAGE_PROBE_RE =
   /(?:salary|wage|ctc|compensation)\s+(?:for|of)\b|(?:'s|’s)\s+(?:salary|wage|ctc|pay)\b|how much (?:does|do)\s+.+\s+(?:make|earn|get paid)|what (?:is|are)\s+.+(?:'s|’s)?\s+(?:salary|wage)/i;
 const RECRUIT_STAGE_RE = /^(applied|screening|screen|interview|offer|hired|rejected|shortlist|sourcing)$/i;
 const LEAVE_TODAY_RE = /on leave today|who(?:'s| is) on leave|leave today/i;
+/** “how many are on leave” — a count question about leave, not about headcount. */
+const LEAVE_COUNT_RE =
+  /(?:how many|number of|count(?: of)?|total)\b[^?.!]{0,40}\bon leave\b/i;
+const ATTENDANCE_COUNT_RE =
+  /(?:how many|number of|count(?: of)?|total)\b[^?.!]{0,40}\b(?:present|absent|late|checked in|checked out|half[\s-]?day)\b/i;
 const ATTENDANCE_RE = /attendance|present rate|checked in|late/i;
 const PENDING_RE = /pending|waiting longest|awaiting (?:review|approval)/i;
 const PAYROLL_RE = /payroll|total net|payrun|payslip|salary cost/i;
@@ -171,7 +178,7 @@ export function isCopilotRefuse(question: string) {
 
 export function isHelp(question: string) {
   const text = question.trim();
-  if (/^(help|who are you)([\s!,.?]+)?$/i.test(text)) return true;
+  if (/^(help|help me|who are you)([\s!,.?]+)?$/i.test(text)) return true;
   return /what (?:are|is) (?:the )?(?:task|tasks|things?)|what can you (?:do|help)|what do you (?:do|handle)|how can you help|your capabilities/i.test(
     text,
   );
@@ -291,7 +298,7 @@ export function lastLookupDepartment(history: ChatTurn[]): string | null {
       const people = extractPeopleDepartment(turn.body);
       if (people) return people;
     } else {
-      const named = turn.body.match(/^(.+?) has \d+ active /i);
+      const named = turn.body.match(/^(.+?) has \d+ (?:active )?employees?/i);
       if (named?.[1]) return cleanDepartmentQuery(named[1]);
     }
   }
@@ -317,15 +324,49 @@ export function historyAwaitingDepartmentName(history: ChatTurn[]): boolean {
 }
 
 function wantsDepartmentList(text: string) {
+  const t = text.trim();
+  if (/(?:add|create|make|open|rename|delete|remove)\s+(?:(?:a|an|the|another|new)\s+)*departments?/i.test(t)) {
+    return false;
+  }
   return (
-    /(?:list|show|what(?:'s| are)|which)\s+(?:all\s+)?(?:the\s+)?departments/i.test(text) ||
-    /departments?\s+(?:do we have|are there|list|we have)/i.test(text)
+    /(?:list|show|what(?:'s| are)|which)\s+(?:all\s+)?(?:the\s+)?departments?/i.test(t) ||
+    /departments?\s+(?:do we have|are there|list|we have)/i.test(t) ||
+    /(?:how many|number of|count(?: of)?|total(?:\s+number\s+of)?)\s+departments?/i.test(t) ||
+    /(?:total\s+)?departments?\s+count/i.test(t) ||
+    /^(?:total\s+)?departments?\s*[?.!]*$/i.test(t)
   );
 }
 
 function wantsOrgHeadcount(text: string) {
-  return /(?:how many|number of|headcount)\s+(?:employees?|people|staff)(?:\s+are there)?(?:\s+in (?:the )?(?:org|organisation|organization|company|total))?/i.test(
-    text,
+  const t = text.trim();
+  if (wantsDepartmentList(t)) return false;
+  // A qualifier like "on leave" or "absent" makes this a leave/attendance
+  // question, even though it opens with "how many employees".
+  if (
+    LEAVE_COUNT_RE.test(t) ||
+    ATTENDANCE_COUNT_RE.test(t) ||
+    /\b(?:on leave|absent|present|late|pending|resigned|inactive|joined|interns?|contractors?)\b/i.test(t)
+  ) {
+    return false;
+  }
+  if (
+    /(?:how many|number of|count(?: of)?)\s+departments?/i.test(t) ||
+    /(?:add|create|make|open|rename|delete|remove)\s+(?:(?:a|an|the|another|new)\s+)*employees?/i.test(t)
+  ) {
+    return false;
+  }
+  return (
+    /^(?:how many|number of|count(?: of)?|what(?:'s| is) the)\s+(?:the\s+)?(?:total\s+)?(?:employees?|people|staff|headcount)\b/i.test(
+      t,
+    ) ||
+    /(?:how many|number of|headcount)\s+(?:employees?|people|staff)(?:\s+are there)?(?:\s+in (?:the )?(?:org|organisation|organization|company|total))?/i.test(
+      t,
+    ) ||
+    /^(?:the\s+)?(?:total\s+)?(?:number\s+of\s+)?(?:employees?|people|staff|headcount)\b/i.test(t) ||
+    /(?:total|overall|org(?:anisation|anization)?|company)\s+(?:employees?|people|staff|headcount)\b/i.test(t) ||
+    /(?:employees?|people|staff)\s+(?:count|total|headcount)\b/i.test(t) ||
+    /(?:employees?|people|staff).{0,40}(?:across|in)\s+all(?:\s+(?:of\s+)?(?:the\s+)?)?departments?/i.test(t) ||
+    /^headcount\s*[?.!]*$/i.test(t)
   );
 }
 
@@ -416,6 +457,8 @@ export function lookupForCopilotIntent(intent: CopilotIntent): AssistantLookupTo
   if (intent === "attendance") return "lookup_attendance_summary";
   if (intent === "payroll") return "lookup_payroll";
   if (intent === "performance") return "lookup_performance";
+  if (intent === "headcount") return "lookup_headcount";
+  if (intent === "departments") return "lookup_departments";
   if (intent === "general") return "lookup_org_overview";
   return null;
 }
@@ -425,15 +468,15 @@ export function classifyCopilotQuestion(question: string): CopilotIntent {
   if (!text) return "refuse";
   if (isCopilotRefuse(text)) return "refuse";
   if (isSmallTalk(text)) return "chat";
-  if (LEAVE_TODAY_RE.test(text)) return "leave_today";
+  if (PENDING_RE.test(text) && /leave|request/i.test(text)) return "pending_leave";
+  if (LEAVE_TODAY_RE.test(text) || LEAVE_COUNT_RE.test(text)) return "leave_today";
   if (PAYROLL_RE.test(text)) return "payroll";
   if (PERFORMANCE_RE.test(text)) return "performance";
   if (PENDING_RE.test(text)) return "pending_leave";
-  if (ATTENDANCE_RE.test(text)) return "attendance";
+  if (ATTENDANCE_COUNT_RE.test(text) || ATTENDANCE_RE.test(text)) return "attendance";
+  if (extractHeadcountDepartment(text) || wantsOrgHeadcount(text)) return "headcount";
+  if (wantsDepartmentList(text)) return "departments";
   if (HEALTH_RE.test(text)) return "general";
-  if (extractHeadcountDepartment(text) || wantsDepartmentList(text) || wantsOrgHeadcount(text)) {
-    return "general";
-  }
   return "chat";
 }
 
@@ -532,6 +575,14 @@ export function planAssistantTurn(question: string, history: ChatTurn[] = []): A
     };
   }
 
+  if (LEAVE_COUNT_RE.test(text)) {
+    return { kind: "lookup", tool: "lookup_leave_today", args: {} };
+  }
+
+  if (ATTENDANCE_COUNT_RE.test(text)) {
+    return { kind: "lookup", tool: "lookup_attendance_summary", args: {} };
+  }
+
   if (wantsDepartmentList(text)) {
     return { kind: "lookup", tool: "lookup_departments", args: {} };
   }
@@ -592,7 +643,7 @@ export function planAssistantTurn(question: string, history: ChatTurn[] = []): A
     };
   }
 
-  if (LEAVE_TODAY_RE.test(text)) {
+  if (LEAVE_TODAY_RE.test(text) || LEAVE_COUNT_RE.test(text)) {
     return { kind: "lookup", tool: "lookup_leave_today", args: {} };
   }
 

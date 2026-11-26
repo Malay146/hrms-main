@@ -149,6 +149,47 @@ describe("planAssistantTurn", () => {
       assert.equal(team.args.department, "engineering");
     }
 
+    for (const q of [
+      "how many employees are there",
+      "total employees",
+      "total Employees in all of the Departments",
+      "employee count",
+      "Total number of employees",
+    ]) {
+      const plan = planAssistantTurn(q);
+      assert.equal(plan.kind, "lookup", q);
+      if (plan.kind === "lookup") assert.equal(plan.tool, "lookup_headcount", q);
+      assert.equal(classifyCopilotQuestion(q), "headcount", q);
+    }
+
+    for (const q of ["how many department", "how many departments", "total department count", "department count"]) {
+      const plan = planAssistantTurn(q);
+      assert.equal(plan.kind, "lookup", q);
+      if (plan.kind === "lookup") assert.equal(plan.tool, "lookup_departments", q);
+      assert.equal(classifyCopilotQuestion(q), "departments", q);
+    }
+
+    // A qualifier after "how many employees" changes the question. These used
+    // to return the org headcount or the department count.
+    for (const q of [
+      "how many are on leave",
+      "how many employees are on leave",
+      "how many people are on leave",
+      "number of staff on leave",
+    ]) {
+      const plan = planAssistantTurn(q);
+      assert.equal(plan.kind, "lookup", q);
+      if (plan.kind === "lookup") assert.equal(plan.tool, "lookup_leave_today", q);
+      assert.equal(classifyCopilotQuestion(q), "leave_today", q);
+    }
+
+    for (const q of ["how many are absent today", "how many are present", "how many were late today"]) {
+      const plan = planAssistantTurn(q);
+      assert.equal(plan.kind, "lookup", q);
+      if (plan.kind === "lookup") assert.equal(plan.tool, "lookup_attendance_summary", q);
+      assert.equal(classifyCopilotQuestion(q), "attendance", q);
+    }
+
     const listed = planAssistantTurn("what departments do we have");
     assert.equal(listed.kind, "lookup");
     if (listed.kind === "lookup") assert.equal(listed.tool, "lookup_departments");

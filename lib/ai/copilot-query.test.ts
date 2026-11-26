@@ -36,13 +36,13 @@ describe("copilot leave and attendance SQL", () => {
     assert.doesNotMatch(sql, /INNER JOIN "user"/);
   });
 
-  it("filters attendance summary by attendance.organizationId and profile employeeId", () => {
+  it("filters attendance summary by attendance.organizationId and includes half-day as present", () => {
     const sql = sqlText(
       sqlAttendanceSummaryQuery("org_1", new Date("2026-09-01"), new Date("2026-09-06")),
     );
     assert.match(sql, /attendance/);
     assert.match(sql, /a\."organizationId"/);
-    assert.match(sql, /p\.id\s*=\s*a\."employeeId"/);
+    assert.match(sql, /'present',\s*'half_day'/);
     assert.doesNotMatch(sql, /INNER JOIN "user"/);
   });
 });

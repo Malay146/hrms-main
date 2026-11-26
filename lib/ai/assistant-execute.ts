@@ -12,7 +12,7 @@ import { applyLeaveForEmployeeAction, decideLeaveAction } from "@/lib/actions/pe
 import { dateFromKey, isLateCheckIn, kolkataTodayKey, toDateKey } from "@/lib/shared/dates";
 import type { LeaveType, Role, SessionUser } from "@/lib/shared/types";
 import { COPILOT_NO_PAYROLL, type AssistantPlan } from "@/lib/ai/copilot";
-import { sqlAttendanceSummary, sqlDepartmentHeadcount, sqlFindPeople, sqlLatestPaidPayrollNet, sqlLeaveToday, sqlOrgHeadcount, sqlPendingLeave, sqlPeopleInDepartment, sqlPerformanceSummary } from "@/lib/ai/copilot-query";
+import { sqlAttendanceSummary, sqlDepartmentHeadcount, sqlFindPeople, sqlLatestPaidPayrollNet, sqlLeaveToday, sqlOrgActiveHeadcount, sqlOrgHeadcount, sqlPendingLeave, sqlPeopleInDepartment, sqlPerformanceSummary } from "@/lib/ai/copilot-query";
 
 export type AssistantExecuteResult = {
   answer: string;
@@ -430,86 +430,116 @@ export async function executeAssistantLookup(
     return { answer: "No organisation is linked to this account.", source: "Permission check" };
   }
 
-  if (plan.tool === "lookup_departments" || (plan.tool === "lookup_headcount" && !arg(plan.args, "department"))) {
+  if (plan.tool === "lookup_departments") {
     const rows = await sqlDepartmentHeadcount(orgId);
-    const total = await sqlOrgHeadcount(orgId);
     if (rows.length === 0) {
-      return { answer: "There are no departments in this organisation yet.", source: "Department query" };
+      return { answer: "There are no departments yet.", source: "HR assistant" };
     }
-    const lines = rows.map((row) => `${row.name} (${row.code}): ${row.headcount}`).join("; ");
+    const lines = rows.map((row) => `• ${row.name} — ${row.headcount} employees`).join("\n");
     return {
-      answer: `There are ${total} active people across ${rows.length} departments. ${lines}.`,
-      source: `Queried ${rows.length} departments`,
+      answer: `There are ${rows.length} departments:\n${lines}`,
+      source: "HR assistant",
     };
   }
 
   if (plan.tool === "lookup_headcount") {
     const department = arg(plan.args, "department");
     const other = arg(plan.args, "other");
+
+    if (!department && !other) {
+      const [total, active] = await Promise.all([
+        sqlOrgHeadcount(orgId),
+        sqlOrgActiveHeadcount(orgId),
+      ]);
+      if (total === active) {
+        return {
+          answer: `There are ${total} employees.`,
+          source: "HR assistant",
+        };
+      }
+      return {
+        answer: `There are ${total} employees (${active} active).`,
+        source: "HR assistant",
+      };
+    }
+
     if (other) {
       const left = await sqlDepartmentHeadcount(orgId, department);
       const right = await sqlDepartmentHeadcount(orgId, other);
-      const leftLine = left[0] ? `${left[0].name}: ${left[0].headcount}` : `No department matching “${department}”.`;
-      const rightLine = right[0] ? `${right[0].name}: ${right[0].headcount}` : `No department matching “${other}”.`;
+      const leftLine = left[0]
+        ? `${left[0].name}: ${left[0].headcount}`
+        : `No department matching “${department}”.`;
+      const rightLine = right[0]
+        ? `${right[0].name}: ${right[0].headcount}`
+        : `No department matching “${other}”.`;
       return {
-        answer: `Headcount comparison — ${leftLine}; ${rightLine}.`,
-        source: "Compared department headcount",
+        answer: `${leftLine}\n${rightLine}`,
+        source: "HR assistant",
       };
     }
+
     const rows = await sqlDepartmentHeadcount(orgId, department);
     if (rows.length === 0) {
       return {
         answer: `I could not find a department matching “${department}”.`,
-        source: "Department query",
+        source: "HR assistant",
       };
     }
     if (rows.length === 1 && rows[0]) {
       const row = rows[0];
+      const noun = row.headcount === 1 ? "employee" : "employees";
       return {
-        answer: `${row.name} has ${row.headcount} active ${row.headcount === 1 ? "employee" : "employees"}.`,
-        source: `Headcount for ${row.name}`,
+        answer: `${row.name} has ${row.headcount} ${noun}.`,
+        source: "HR assistant",
       };
     }
-    const lines = rows.map((row) => `${row.name}: ${row.headcount}`).join("; ");
+    const lines = rows.map((row) => `• ${row.name} — ${row.headcount}`).join("\n");
     return {
-      answer: `Several departments match “${department}”: ${lines}.`,
-      source: "Department query",
+      answer: `Several departments match “${department}”:\n${lines}`,
+      source: "HR assistant",
     };
   }
 
   if (plan.tool === "lookup_person") {
     const query = arg(plan.args, "query") || arg(plan.args, "employee") || arg(plan.args, "name");
-    if (!query) return { answer: "Who should I look up?", source: "Missing fields" };
+    if (!query) return { answer: "Who should I look up?", source: "HR assistant" };
     const people = await sqlFindPeople(orgId, query);
     if (people.length === 0) {
-      return { answer: `I could not find anyone matching “${query}”.`, source: "People query" };
+      return { answer: `I could not find anyone matching “${query}”.`, source: "HR assistant" };
+    }
+    if (people.length === 1 && people[0]) {
+      const row = people[0];
+      return {
+        answer: `${row.fullName} · ${row.employeeId} · ${row.department} · ${row.jobTitle}`,
+        source: "HR assistant",
+      };
     }
     const names = people
-      .map((row) => `${row.fullName} (${row.employeeId}, ${row.department}, ${row.jobTitle})`)
-      .join("; ");
-    return { answer: names, source: `Looked up ${people.length} people` };
+      .map((row) => `• ${row.fullName} (${row.employeeId}, ${row.department})`)
+      .join("\n");
+    return { answer: `Found ${people.length} people:\n${names}`, source: "HR assistant" };
   }
 
   if (plan.tool === "lookup_leave_balance") {
     const lookup = await findEmployee(orgId, arg(plan.args, "employee") || arg(plan.args, "query"));
     if ("error" in lookup || !lookup.employee) {
-      return { answer: lookup.error ?? "Employee not found.", source: "Employee lookup" };
+      return { answer: lookup.error ?? "Employee not found.", source: "HR assistant" };
     }
     const profile = await prisma.employeeProfile.findFirst({
       where: { organizationId: orgId, employeeId: lookup.employee.employeeId },
       select: { fullName: true, employeeId: true, paidLeaveBalance: true },
     });
-    if (!profile) return { answer: "Employee profile is missing.", source: "Employee lookup" };
+    if (!profile) return { answer: "Employee profile is missing.", source: "HR assistant" };
     return {
-      answer: `${profile.fullName} (${profile.employeeId}) has ${profile.paidLeaveBalance} paid leave day(s) remaining on their profile.`,
-      source: `Leave balance for ${profile.employeeId}`,
+      answer: `${profile.fullName} has ${profile.paidLeaveBalance} paid leave day(s) remaining.`,
+      source: "HR assistant",
     };
   }
 
   if (plan.tool === "lookup_reports") {
     const lookup = await findEmployee(orgId, arg(plan.args, "employee") || arg(plan.args, "query"));
     if ("error" in lookup || !lookup.employee) {
-      return { answer: lookup.error ?? "Employee not found.", source: "Employee lookup" };
+      return { answer: lookup.error ?? "Employee not found.", source: "HR assistant" };
     }
     const profile = await prisma.employeeProfile.findFirst({
       where: { organizationId: orgId, employeeId: lookup.employee.employeeId },
@@ -517,33 +547,37 @@ export async function executeAssistantLookup(
         fullName: true,
         employeeId: true,
         manager: { select: { fullName: true, employeeId: true } },
-        reports: { where: { status: { not: "inactive" } }, select: { fullName: true, employeeId: true }, take: 40 },
+        reports: {
+          where: { status: { not: "inactive" } },
+          select: { fullName: true, employeeId: true },
+          take: 40,
+        },
       },
     });
-    if (!profile) return { answer: "Employee profile is missing.", source: "Employee lookup" };
+    if (!profile) return { answer: "Employee profile is missing.", source: "HR assistant" };
     const direction = arg(plan.args, "direction");
     if (direction === "manager") {
       if (!profile.manager) {
         return {
           answer: `${profile.fullName} has no manager on file.`,
-          source: `Manager for ${profile.employeeId}`,
+          source: "HR assistant",
         };
       }
       return {
         answer: `${profile.fullName} reports to ${profile.manager.fullName} (${profile.manager.employeeId}).`,
-        source: `Manager for ${profile.employeeId}`,
+        source: "HR assistant",
       };
     }
     if (profile.reports.length === 0) {
       return {
         answer: `Nobody is listed as reporting to ${profile.fullName}.`,
-        source: `Reports for ${profile.employeeId}`,
+        source: "HR assistant",
       };
     }
-    const names = profile.reports.map((row) => `${row.fullName} (${row.employeeId})`).join("; ");
+    const names = profile.reports.map((row) => `• ${row.fullName} (${row.employeeId})`).join("\n");
     return {
-      answer: `${profile.reports.length} ${profile.reports.length === 1 ? "person reports" : "people report"} to ${profile.fullName}: ${names}.`,
-      source: `Reports for ${profile.employeeId}`,
+      answer: `${profile.reports.length} ${profile.reports.length === 1 ? "person reports" : "people report"} to ${profile.fullName}:\n${names}`,
+      source: "HR assistant",
     };
   }
 
@@ -553,84 +587,89 @@ export async function executeAssistantLookup(
       where: {
         date: dateFromKey(today),
         organizationId: orgId,
-        employee: { status: { not: "inactive" } },
       },
       select: {
         checkIn: true,
         checkOut: true,
         status: true,
-        employee: { select: { fullName: true, employeeId: true } },
+        employee: { select: { fullName: true, employeeId: true, status: true } },
       },
     });
     const kind = arg(plan.args, "kind");
+    const activeRows = rows.filter((row) => row.employee.status !== "inactive");
     const matches =
       kind === "missing_checkout"
-        ? rows.filter((row) => row.checkIn && !row.checkOut && row.status === "present")
-        : rows.filter((row) => row.checkIn && isLateCheckIn(row.checkIn));
+        ? activeRows.filter((row) => row.checkIn && !row.checkOut && row.status === "present")
+        : activeRows.filter((row) => row.checkIn && isLateCheckIn(row.checkIn));
     if (matches.length === 0) {
       return {
         answer:
           kind === "missing_checkout"
             ? "Nobody who checked in today is missing a checkout."
             : "Nobody is flagged late today.",
-        source: "Attendance exceptions",
+        source: "HR assistant",
       };
     }
     const names = matches
+      .slice(0, 20)
       .map((row) => row.employee.fullName ?? row.employee.employeeId ?? "Employee")
       .join("; ");
+    const extra = matches.length > 20 ? ` (and ${matches.length - 20} more)` : "";
     return {
-      answer: `${matches.length} ${kind === "missing_checkout" ? "missing checkout" : "late"}: ${names}.`,
-      source: "Attendance exceptions",
+      answer: `${matches.length} ${kind === "missing_checkout" ? "missing checkout" : "late"}: ${names}${extra}.`,
+      source: "HR assistant",
     };
   }
 
   if (plan.tool === "lookup_leave_today") {
-    const rows = await sqlLeaveToday(orgId);
-    if (rows.length === 0) {
-      return { answer: "Nobody is on approved leave today.", source: "Leave query" };
+    const { total, rows } = await sqlLeaveToday(orgId);
+    if (total === 0) {
+      return { answer: "Nobody is on approved leave today.", source: "HR assistant" };
     }
-    const names = rows.map((row) => `${row.fullName} (${row.employeeId}, ${row.department})`).join("; ");
+    const names = rows.map((row) => `• ${row.fullName} (${row.employeeId}, ${row.department})`).join("\n");
+    const extra = total > rows.length ? `\n…and ${total - rows.length} more` : "";
     return {
-      answer: `${rows.length} on approved leave today: ${names}.`,
-      source: `Queried ${rows.length} leave rows`,
+      answer: `${total} on approved leave today:\n${names}${extra}`,
+      source: "HR assistant",
     };
   }
 
   if (plan.tool === "lookup_pending_leave") {
-    const rows = await sqlPendingLeave(orgId);
-    if (rows.length === 0) {
-      return { answer: "There are no pending leave requests.", source: "Leave query" };
+    const { total, rows } = await sqlPendingLeave(orgId);
+    if (total === 0) {
+      return { answer: "There are no pending leave requests.", source: "HR assistant" };
     }
     const names = rows
-      .map((row) => `${row.fullName} (${row.employeeId}) ${toDateKey(row.startDate)}–${toDateKey(row.endDate)}`)
-      .join("; ");
+      .map((row) => `• ${row.fullName} (${row.employeeId}) ${toDateKey(row.startDate)}–${toDateKey(row.endDate)}`)
+      .join("\n");
+    const extra = total > rows.length ? `\n…and ${total - rows.length} more` : "";
     return {
-      answer: `${rows.length} pending leave request(s): ${names}.`,
-      source: `Queried ${rows.length} pending leaves`,
+      answer: `${total} pending leave request(s):\n${names}${extra}`,
+      source: "HR assistant",
     };
   }
 
   if (plan.tool === "lookup_attendance_summary") {
     const row = await sqlAttendanceSummary(orgId);
+    const leaveToday = await sqlLeaveToday(orgId);
     const pct = row.monthRows > 0 ? Math.round((row.monthPresent / row.monthRows) * 1000) / 10 : 0;
     return {
-      answer: `This month ${row.monthPresent} of ${row.monthRows} attendance records are present or half-day (${pct}%). Today: ${row.todayPresent} present, ${row.todayAbsent} absent, ${row.todayLeave} on leave.`,
-      source: "Attendance query",
+      answer: `Today: ${row.todayPresent} present, ${row.todayAbsent} absent, ${leaveToday.total} on leave. This month ${row.monthPresent}/${row.monthRows} attendance rows are present or half-day (${pct}%).`,
+      source: "HR assistant",
     };
   }
 
   if (plan.tool === "lookup_payroll") {
     if (!hasPermission(user.role, "viewPayrollAll")) {
-      return { answer: COPILOT_NO_PAYROLL, source: "Permission check" };
+      return { answer: COPILOT_NO_PAYROLL, source: "HR assistant" };
     }
     const row = await sqlLatestPaidPayrollNet(orgId);
     if (!row) {
-      return { answer: "There is no paid payrun yet.", source: "Payroll query" };
+      return { answer: "There is no paid payrun yet.", source: "HR assistant" };
     }
     return {
-      answer: `Latest paid payrun “${row.name}” has net total ${row.net} across ${row.slips} payslip(s). Individual wages are not shown.`,
-      source: "Payroll query",
+      answer: `Latest paid payrun “${row.name}”: net ₹${Math.round(row.net).toLocaleString("en-IN")} across ${row.slips} payslip(s).`,
+      source: "HR assistant",
     };
   }
 
@@ -638,49 +677,61 @@ export async function executeAssistantLookup(
     const row = await sqlPerformanceSummary(orgId);
     const avg = row.avgRating == null ? "no submitted ratings yet" : `${Math.round(row.avgRating * 10) / 10} out of 5`;
     return {
-      answer: `Average review rating is ${avg}. ${row.draft} draft, ${row.submitted} submitted, ${row.acknowledged} acknowledged.`,
-      source: "Performance query",
+      answer: `Average review rating: ${avg}. ${row.draft} draft, ${row.submitted} submitted, ${row.acknowledged} acknowledged.`,
+      source: "HR assistant",
     };
   }
 
   if (plan.tool === "lookup_org_overview") {
-    const [headcount, pending, onLeave, attendance] = await Promise.all([
+    const [headcount, active, pending, onLeave, attendance] = await Promise.all([
       sqlOrgHeadcount(orgId),
+      sqlOrgActiveHeadcount(orgId),
       sqlPendingLeave(orgId),
       sqlLeaveToday(orgId),
       sqlAttendanceSummary(orgId),
     ]);
     return {
-      answer: `${headcount} active people. Today ${attendance.todayPresent} present, ${onLeave.length} on leave, ${attendance.todayAbsent} absent. ${pending.length} leave request(s) pending.`,
-      source: "Organisation query",
+      answer: `${headcount} employees (${active} active). Today: ${attendance.todayPresent} present, ${onLeave.total} on leave, ${attendance.todayAbsent} absent. ${pending.total} leave request(s) pending.`,
+      source: "HR assistant",
     };
   }
 
-  const department = arg(plan.args, "department");
-  if (!department) {
-    return { answer: "Which department should I look up?", source: "Missing fields" };
-  }
-  const people = await sqlPeopleInDepartment(orgId, department);
-  if (people.length === 0) {
-    const rows = await sqlDepartmentHeadcount(orgId, department);
-    if (rows.length === 0) {
+  if (plan.tool === "lookup_people") {
+    const department = arg(plan.args, "department");
+    if (!department) {
+      return { answer: "Which department should I look up?", source: "HR assistant" };
+    }
+    const result = await sqlPeopleInDepartment(orgId, department);
+    if (result.matches.length > 1) {
+      const lines = result.matches.map((row) => `• ${row.name} — ${row.headcount}`).join("\n");
       return {
-        answer: `I could not find a department matching “${department}”.`,
-        source: "People query",
+        answer: `Several departments match “${department}”:\n${lines}`,
+        source: "HR assistant",
       };
     }
+    if (!result.department) {
+      return {
+        answer: `I could not find a department matching “${department}”.`,
+        source: "HR assistant",
+      };
+    }
+    if (result.total === 0) {
+      return {
+        answer: `${result.department.name} has no employees yet.`,
+        source: "HR assistant",
+      };
+    }
+    const names = result.people
+      .map((row) => `• ${row.fullName} (${row.employeeId}, ${row.jobTitle})`)
+      .join("\n");
+    const extra = result.total > result.people.length ? `\n…and ${result.total - result.people.length} more` : "";
     return {
-      answer: `${rows[0]?.name ?? department} has no active employees yet.`,
-      source: "People query",
+      answer: `${result.total} employees in ${result.department.name}:\n${names}${extra}`,
+      source: "HR assistant",
     };
   }
-  const names = people
-    .map((row) => `${row.fullName} (${row.employeeId}, ${row.jobTitle})`)
-    .join("; ");
-  return {
-    answer: `${people.length} active ${people.length === 1 ? "person" : "people"} in ${department}: ${names}.`,
-    source: `People in ${department}`,
-  };
+
+  return { answer: "I could not look that up.", source: "HR assistant" };
 }
 
 export async function executeAssistantPlan(
