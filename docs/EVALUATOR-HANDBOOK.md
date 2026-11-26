@@ -4,7 +4,7 @@
 
 **Product names:** The UI wordmark is **HRMS**. The demo tenant is **Company** (`organization.slug = COMPANY`). Internal docs often say **PeoplePay360**. Same app.
 
-**Scale lock:** One organization, ~5,000 employees target, one PostgreSQL primary. **Not** multi-tenant SaaS. **Not** a separate Express/FastAPI server.
+**Scale lock:** ~5,000 employees per organization target, one PostgreSQL primary. Several companies can register (`/sign-up`); each sees only its own data through app-level organization scoping (`requireOrgPermission`). **Not** a separate Express/FastAPI server.
 
 **Timezone for all “today / late / calendar” logic:** `Asia/Kolkata` (`lib/shared/dates.ts`). Late cutoff if no schedule line: **09:15 IST**.
 
@@ -241,7 +241,7 @@ Permission names: `viewAdminDashboard`, `managePeople`, `approveLeave`, `manageT
 
 ### 5.2 Four gates (say this if asked “how are routes protected?”)
 
-1. `proxy.ts` — Better Auth `getSession` from cookie. Unauthenticated `/admin` or `/employee` → `/login?next=…`. Employees hitting `/admin` → `/employee`. Staff hitting an admin URL they cannot use → `firstAllowedAdminPath`. `mustChangePassword` → `/change-password`. Matcher **excludes** `/api/`**.
+1. `proxy.ts` — Better Auth `getSession` from cookie. Unauthenticated `/admin` or `/employee` → `/login?next=…`. Employees hitting `/admin` → `/employee`. Staff hitting an admin URL they cannot use → `firstAllowedAdminPath`. `mustChangePassword` → `/change-password`. Matcher **excludes** `/api/`**. Server Action POSTs pass through untouched (a redirect would break them); every action enforces auth itself, and `requireUser()` also refuses accounts still on a temporary password.
 2. **Layouts** — `app/admin/layout.tsx` → `requireStaffPage()`. `app/employee/layout.tsx` → `requirePageUser()`. Role is **re-read from Postgres**, not only the cookie (cookie cache is 5 minutes).
 3. **Path ACL** — `canAccessAdminPath(role, pathname)` maps URL prefixes to permissions. Same function hides sidebar + command-palette items.
 4. **Server Actions** — `requireUser()` / `requirePermission("…")` in `lib/auth/session.ts`. This is the **real** ACL. A hidden nav link does not grant writes.
@@ -479,7 +479,7 @@ Operations cover me/profile, dashboards, departments, employees, schedules, cont
 
 After Task 4, `attendance` and `leave_request` also store `organizationId` + `employeeId` (**profile PK**, not the badge). Triggers require them to match the profile. Copilot SQL can filter by org without joining `user`.
 
-**Tenant:** one `organization` row (Company). App scopes queries by `organizationId`. **No Postgres RLS.**
+**Tenant:** the demo has one `organization` row (Company); more can register. Every list filters by the caller's `organizationId` and every by-id lookup matches id **and** organization (verified by a second-company probe across all `/api/v1` reads and writes). **No Postgres RLS.**
 
 ### 10.1 Model groups
 
@@ -806,7 +806,7 @@ Say these out loud if asked “is everything done?”
 | Copilot write surface                      | People/leave/attendance only                                                        |
 | LLM-authored SQL                           | Explicitly forbidden                                                                |
 | Postgres RLS                               | App-level org filter + triggers                                                     |
-| Multi-tenant SaaS                          | One org                                                                             |
+| Multi-tenant SaaS                          | Self-serve companies, app-level isolation (no RLS)                                  |
 | Redis                                      | Optional rate-limit store only — **not** sessions, queues, or cache                 |
 | Websockets                                 | No                                                                                  |
 | TanStack list cache / Zustand              | Installed unused                                                                    |

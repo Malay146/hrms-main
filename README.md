@@ -38,12 +38,13 @@ npx prisma migrate deploy
 npm run db:seed               # base company, ~300 staff, payroll, recruitment
 npm run db:seed-more          # optional: +300 more employees
 npm run db:seed-employee-extras
+npm run db:demo-ready         # attendance up to today, approvals waiting, demo logins free to clock in
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-The seed builds attendance and leave relative to **today**, so dashboards always have live data. Re-run `npm run db:seed` to reset the demo (it wipes the database).
+The seed builds attendance and leave relative to **today**, so dashboards always have live data. Run `npm run db:demo-ready` on later days to bring it up to date, or re-run `npm run db:seed` to reset everything (it wipes the database).
 
 ## Environment variables
 
@@ -71,6 +72,8 @@ Never commit `.env`.
 | Payroll Manager | `kimi.nowa@company.com` | `Employee@1234` | `/admin`, payroll incl. mark paid (no AI) |
 | Payroll User | `priya.shah@company.com` | `Employee@1234` | `/admin`, payroll edit/compute/send (cannot mark paid) |
 | Employee | `john.cena@company.com` | `Employee@1234` | `/employee` |
+
+More employees, all with password `Employee@1234`: `aarav.mehta@`, `bruce.banner@`, `mark.lou@`, `sarah.mills@`, and about 600 generated staff such as `ayaan.jain.008@company.com`.
 
 New companies register at `/sign-up`; the founder becomes that company's admin. Inside a company, admins add people from **Employees → Add User**.
 
@@ -109,19 +112,27 @@ Demo staff use `@company.com`, so the app never emails them. Payslip and credent
 All of these read and write PostgreSQL:
 
 - **People:** employees, departments, working schedules, contracts, Excel import
-- **Attendance:** clock in/out, manual corrections, daily rollups
+- **Attendance:** clock in/out, manual corrections, daily rollups. Worked hours are clock-out minus the scheduled break; under 5 hours is a half day; time beyond the schedule is overtime
 - **Leave:** time-off types, allocations, requests, approvals, balances
 - **Payroll:** salary structures and rules, payruns (compute, validate, mark paid), payslips with print view and email
-- **Performance:** review cycles, goals, self and manager reviews
-- **Recruitment:** job openings, adding applicants (with duplicate checks), and a candidate pipeline (drag between stages, interviews, reject)
+- **Performance:** review cycles, goals, employee self-assessment and manager reviews (nobody can be their own reviewer)
+- **Recruitment:** job openings, adding applicants (duplicate emails per job and applications after the deadline are refused), and a candidate pipeline (drag between stages, interviews, reject)
 - **Notifications:** in-app plus optional email, per-user preferences, announcements
 - **AI Analytics** (admin and HR manager): live health metrics, AI insight cards, and an HR copilot that answers from the database and can take actions
 - **Settings:** organization name and email (admin only), password change, and signed-in sessions with remote sign-out
 - **REST API:** `/api/v1/*` with Swagger UI at `/swagger-ui`. It uses the same session cookie and permissions as the app
 
+## Security model
+
+- **Companies are isolated.** Every company-owned query is filtered by the signed-in user's organization (`requireOrgPermission` in `lib/auth/session.ts`). Lookups and edits by ID also check the organization, so an ID from another company returns "not found". There is no Postgres row-level security; isolation lives in the app layer.
+- **Roles:** what each role can open and do is defined in `lib/auth/permissions.ts`, and the same rules apply to pages, server actions, and `/api/v1`.
+- **Temporary passwords:** accounts created by an admin must change their password before any page, action, or API call works.
+- **AI copilot:** answers come from fixed lookups or from a read-only SQL query. Every query runs against copies of the tables that hold only the asker's company and never include wages, bank details, addresses, or passwords (`lib/ai/sql-scope.ts`).
+- **Email:** demo domains in `MAIL_SKIP_DOMAINS` never receive mail.
+
 ## Scheduled jobs
 
-`/api/cron/payslips` emails validated payslips for the closing month (once per payslip, so daily runs are safe). `/api/cron/jobs` drains queued background jobs. Both need `Authorization: Bearer $CRON_SECRET`.
+`/api/cron/payslips` emails validated payslips for the closing month (once per payslip, so daily runs are safe). `/api/cron/jobs` drains queued background jobs. `/api/cron/demo` keeps the demo company current (only when `DEMO_MODE=true`; see Running a demo). All need `Authorization: Bearer $CRON_SECRET`.
 
 ```bash
 npm run cron:payslips          # this month (or the last one, before month end)
@@ -129,7 +140,7 @@ node scripts/run-cron.mjs payslips 2026-10   # a specific month
 npm run cron:jobs
 ```
 
-- **Vercel:** `vercel.json` schedules both daily. Set `CRON_SECRET` in the project's environment.
+- **Vercel:** `vercel.json` schedules all three daily. Set `CRON_SECRET` in the project's environment.
 - **Local machine:** add a crontab entry while the app is running, e.g. `30 0 * * * cd /path/to/HRMS-main && npm run cron:payslips`.
 
 ## Deployment (Vercel + Neon)
@@ -142,6 +153,12 @@ Production runs on Vercel (region `sin1`, Singapore) with a Neon Postgres databa
   ```bash
   DATABASE_URL="<DATABASE_URL_UNPOOLED from Vercel>" npx prisma migrate deploy
   ```
+- **Data upkeep:** run the data scripts against the live database with the unpooled URL, for example:
+  ```bash
+  DATABASE_URL="<DATABASE_URL_UNPOOLED from Vercel>" npm run db:repair
+  DATABASE_URL="<DATABASE_URL_UNPOOLED from Vercel>" npm run db:demo-ready -- --keep-today
+  ```
+  Don't put the production URL in `.env.local`: Next.js reads it ahead of `.env`, so local dev would write to production.
 - **Cron:** Vercel calls `/api/cron/*` daily (see `vercel.json`) with `CRON_SECRET`.
 - **Rate limits:** without `REDIS_URL` they are per serverless instance. Add an Upstash Redis URL for shared limits.
 
@@ -157,6 +174,8 @@ npm test                   # unit tests
 npm run build              # production build
 npm run db:migrate         # create a migration from schema changes
 npm run db:seed            # reset demo data
-npm run db:repair          # fix demo data drift without reseeding
+npm run db:repair          # fix data drift without reseeding (hours, wages, dates, reviewers)
+npm run db:demo-ready      # prepare the demo (add -- --keep-today to keep today's clock-ins)
 npm run db:studio          # browse the database
+npm run cron:payslips      # trigger the month-end payslip email job locally
 ```
