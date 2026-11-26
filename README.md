@@ -38,6 +38,7 @@ npx prisma migrate deploy
 npm run db:seed               # base company, ~300 staff, payroll, recruitment
 npm run db:seed-more          # optional: +300 more employees
 npm run db:seed-employee-extras
+npm run db:seed-skills        # Workforce AI: role skill requirements + employee skill profiles
 npm run db:demo-ready         # attendance up to today, approvals waiting, demo logins free to clock in
 npm run dev
 ```
@@ -119,6 +120,7 @@ All of these read and write PostgreSQL:
 - **Recruitment:** job openings, adding applicants (duplicate emails per job and applications after the deadline are refused), and a candidate pipeline (drag between stages, interviews, reject)
 - **Notifications:** in-app plus optional email, per-user preferences, announcements
 - **AI Analytics** (admin and HR manager): live health metrics, AI insight cards, and an HR copilot that answers from the database and can take actions
+- **Workforce AI** (`/admin/analytics/workforce` for admin and HR manager, `/employee/insights` for employees): HR sets the skills each job title needs; employees keep their own skill profile. It shows skill gaps, an Employee 360 view (attendance, leave and reviews against the previous period and department peers), AI learning suggestions, and department reports asked in plain English (attendance, leave, performance, skill gaps). Employees see only themselves, managers their direct reports, HR everyone. Reports return department totals only, and the AI picks one of four fixed queries and never writes SQL. Metrics work without an AI key; the written parts need one
 - **Settings:** organization name and email (admin only), password change, and signed-in sessions with remote sign-out
 - **REST API:** `/api/v1/*` with Swagger UI at `/swagger-ui`. It uses the same session cookie and permissions as the app
 
@@ -175,6 +177,7 @@ npm run build              # production build
 npm run db:migrate         # create a migration from schema changes
 npm run db:seed            # reset demo data
 npm run db:repair          # fix data drift without reseeding (hours, wages, dates, reviewers)
+npm run db:seed-skills     # add Workforce AI demo skills (safe to re-run, keeps existing skills)
 npm run db:demo-ready      # prepare the demo (add -- --keep-today to keep today's clock-ins)
 npm run db:studio          # browse the database
 npm run cron:payslips      # trigger the month-end payslip email job locally

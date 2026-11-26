@@ -238,6 +238,7 @@ model Organization {
   updatedAt             DateTime            @updatedAt
   profiles              EmployeeProfile[]
   departments           Department[]
+  roleSkillRequirements RoleSkillRequirement[]
   schedules             WorkingSchedule[]
   timeOffTypes          TimeOffType[]
   salaryStructures      SalaryStructure[]
@@ -401,6 +402,7 @@ model EmployeeProfile {
   payslips         Payslip[]
   reviews          PerformanceReview[] @relation("ReviewEmployee")
   reviewsGiven     PerformanceReview[] @relation("ReviewReviewer")
+  skills           EmployeeSkill[]
   attendances      Attendance[]
   leaveRequests    LeaveRequest[]
   createdAt        DateTime            @default(now())
@@ -714,6 +716,35 @@ model PerformanceGoal {
 
   @@index([reviewId])
   @@map("performance_goal")
+}
+
+model EmployeeSkill {
+  id          String          @id @default(cuid())
+  employeeId  String
+  employee    EmployeeProfile @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  name        String
+  proficiency Int
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([employeeId, name])
+  @@index([employeeId])
+  @@map("employee_skill")
+}
+
+model RoleSkillRequirement {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  jobTitle       String
+  skillName      String
+  targetLevel    Int          @default(3)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, jobTitle, skillName])
+  @@index([organizationId, jobTitle])
+  @@map("role_skill_requirement")
 }
 
 model AiInsight {

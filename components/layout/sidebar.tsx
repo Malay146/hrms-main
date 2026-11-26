@@ -124,6 +124,7 @@ const adminNavItems: SidebarItemType[] = [
     children: [
       { label: "Recruitment", href: "/admin/hr/recruitment" },
       { label: "Performance", href: "/admin/hr/performance" },
+      { label: "Workforce AI", href: "/admin/analytics/workforce" },
     ],
   },
   {
@@ -178,6 +179,11 @@ const employeeNavItems: SidebarItemType[] = [
     label: "My Performance",
     icon: HRIcon,
     href: "/employee/performance",
+  },
+  {
+    label: "Career & Insights",
+    icon: AiIcon,
+    href: "/employee/insights",
   },
   {
     label: "divider",
